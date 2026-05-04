@@ -156,6 +156,49 @@ async function waitWithCountdown(
   }
 }
 
+function isDetectionMockMode(): boolean {
+  return String(import.meta.env.VITE_USE_MOCK ?? '').trim() === '1'
+}
+
+/** 单张/批量共用：v3 异步提交 → 等待 → 拉取结果（与多张单步逻辑一致） */
+async function runV3AsyncOne(
+  file: File,
+  bbox: BboxXYXY | null,
+  progressPrefix: string,
+  signal: AbortSignal,
+): Promise<{ taskId: string; payload: V3ViewPayload }> {
+  pollStatus.value = `${progressPrefix}：提交任务…`
+  const submit = await submitV3Detect(file, bbox, { signal })
+  const taskId = submit.task_id?.trim()
+  if (!taskId) throw new Error(`${progressPrefix}：未返回任务 ID`)
+  await waitWithCountdown(
+    90,
+    (remain) => {
+      const mm = Math.floor(remain / 60)
+      const ss = remain % 60
+      pollStatus.value = `${progressPrefix}：预计等待 ${mm}:${String(ss).padStart(2, '0')} 后查询结果`
+    },
+    signal,
+  )
+  pollStatus.value = `${progressPrefix}：查询结果中…`
+  const data = await getV3Result(taskId, { signal })
+  if (data.error_msg?.trim() && !data.result && !(data.multi_results?.length)) {
+    throw new Error(data.error_msg)
+  }
+  if ((data.status || '').toUpperCase() !== 'COMPLETED') {
+    throw new Error(`任务未完成（状态 ${data.status || 'unknown'}）`)
+  }
+  if (!data.result && !(data.multi_results?.length)) {
+    throw new Error('未返回检测结果')
+  }
+  const payload: V3ViewPayload = {
+    result: data.result ?? null,
+    multi: data.multi_results,
+    error_msg: data.error_msg ?? null,
+  }
+  return { taskId, payload }
+}
+
 function onImgLoad() {
   const el = imgRef.value
   imageNatural.value = el
@@ -592,6 +635,72 @@ async function runV3() {
     await runV3Batch(picked)
     return
   }
+
+  const one = picked[0]!
+
+  /** Mock 模式仍走同步 v1（本地假数据），与真实服务异步路径分离 */
+  if (isDetectionMockMode()) {
+    const bbox: BboxXYXY | null = v3SpecifyBbox.value ? (userBbox.value ?? fullImageBbox()) : fullImageBbox()
+    if (!bbox) {
+      errorMsg.value = v3SpecifyBbox.value
+        ? '请框选区域或等待图片在预览区加载完成'
+        : '请等待图片在预览区加载完成后再分析（需读取尺寸以提交整图区域）'
+      return
+    }
+    busy.value = true
+    errorMsg.value = null
+    viewingHistoryId.value = null
+    v3Payload.value = null
+    v3TaskId.value = null
+    if (vizObjectUrl.value) {
+      URL.revokeObjectURL(vizObjectUrl.value)
+      vizObjectUrl.value = null
+    }
+    detectAbort.value?.abort()
+    const ac = new AbortController()
+    detectAbort.value = ac
+    pollStatus.value = ''
+    try {
+      pollStatus.value = '正在提交检测…'
+      const data = await submitV1ImageDetectSync(one, bbox, { signal: ac.signal })
+      if (data.error_msg?.trim() && !data.result && !(data.multi?.length)) {
+        throw new Error(data.error_msg)
+      }
+      if (!data.result && !(data.multi?.length)) {
+        throw new Error(data.error_msg || '未返回检测结果')
+      }
+      v3Payload.value = {
+        result: data.result ?? null,
+        multi: data.multi,
+        error_msg: data.error_msg ?? null,
+      }
+      const taskId = data.task_id?.trim()
+      v3TaskId.value = taskId || null
+      pollStatus.value = '分析完成'
+      viewingHistoryId.value = null
+      void refreshHistoryList()
+      if (taskId) void loadViz(taskId)
+    } catch (e) {
+      if (e instanceof DOMException && e.name === 'AbortError') {
+        pollStatus.value = '已取消'
+        return
+      }
+      errorMsg.value = e instanceof Error ? e.message : String(e)
+      pollStatus.value = ''
+    } finally {
+      detectAbort.value = null
+      busy.value = false
+    }
+    return
+  }
+
+  /** 单张与多张一致：v3 异步任务 + 倒计时等待 + 查询结果 */
+  const bbox: BboxXYXY | null = v3SpecifyBbox.value ? (userBbox.value ?? fullImageBbox()) : null
+  if (v3SpecifyBbox.value && !bbox) {
+    errorMsg.value = '请框选区域或等待图片在预览区加载完成'
+    return
+  }
+
   busy.value = true
   errorMsg.value = null
   viewingHistoryId.value = null
@@ -606,34 +715,15 @@ async function runV3() {
   detectAbort.value = ac
   pollStatus.value = ''
   try {
-    const one = picked[0]!
-    /** 单图按原同步接口：bbox 必传；不开启框选时传整图 */
-    const bbox: BboxXYXY | null = v3SpecifyBbox.value ? (userBbox.value ?? fullImageBbox()) : fullImageBbox()
-    if (!bbox) {
-      errorMsg.value = v3SpecifyBbox.value
-        ? '请框选区域或等待图片在预览区加载完成'
-        : '请等待图片在预览区加载完成后再分析（需读取尺寸以提交整图区域）'
-      return
-    }
-    pollStatus.value = '正在提交检测…'
-    const data = await submitV1ImageDetectSync(one, bbox, { signal: ac.signal })
-    if (data.error_msg?.trim() && !data.result && !(data.multi?.length)) {
-      throw new Error(data.error_msg)
-    }
-    if (!data.result && !(data.multi?.length)) {
-      throw new Error(data.error_msg || '未返回检测结果')
-    }
-    v3Payload.value = {
-      result: data.result ?? null,
-      multi: data.multi,
-      error_msg: data.error_msg ?? null,
-    }
-    const taskId = data.task_id?.trim()
-    v3TaskId.value = taskId || null
+    pollStatus.value = '预计等待约 1 分钟（按每张约 1 分钟估算）'
+    await waitMs(300)
+    const { taskId, payload } = await runV3AsyncOne(one, bbox, '检测', ac.signal)
+    v3TaskId.value = taskId
+    v3Payload.value = payload
     pollStatus.value = '分析完成'
     viewingHistoryId.value = null
     void refreshHistoryList()
-    if (taskId) void loadViz(taskId)
+    void loadViz(taskId)
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') {
       pollStatus.value = '已取消'
@@ -674,42 +764,17 @@ async function runV3Batch(files: File[]) {
     await waitMs(300)
     for (let i = 0; i < files.length; i++) {
       const f = files[i]!
-      pollStatus.value = `批量检测 ${i + 1}/${files.length}：提交任务…`
-      const submit = await submitV3Detect(f, null, { signal: ac.signal })
-      const taskId = submit.task_id?.trim()
-      if (!taskId) throw new Error(`第 ${i + 1} 张未返回任务 ID`)
-      await waitWithCountdown(
-        90,
-        (remain) => {
-          const mm = Math.floor(remain / 60)
-          const ss = remain % 60
-          pollStatus.value = `批量检测 ${i + 1}/${files.length}：预计等待 ${mm}:${String(ss).padStart(2, '0')} 后查询结果`
-        },
-        ac.signal,
-      )
-      pollStatus.value = `批量检测 ${i + 1}/${files.length}：查询结果中…`
-      const data = await getV3Result(taskId, { signal: ac.signal })
-      if (data.error_msg?.trim() && !data.result && !(data.multi_results?.length)) {
-        failed.push(`${f.name}: ${data.error_msg}`)
-        continue
+      const prefix = `批量检测 ${i + 1}/${files.length}`
+      try {
+        const { taskId, payload } = await runV3AsyncOne(f, null, prefix, ac.signal)
+        success += 1
+        lastTaskId = taskId
+        lastPayload = payload
+        void refreshHistoryList()
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e
+        failed.push(`${f.name}: ${e instanceof Error ? e.message : String(e)}`)
       }
-      if ((data.status || '').toUpperCase() !== 'COMPLETED') {
-        failed.push(`${f.name}: 任务未完成（状态 ${data.status || 'unknown'}）`)
-        continue
-      }
-      if (!data.result && !(data.multi_results?.length)) {
-        failed.push(`${f.name}: 未返回检测结果`)
-        continue
-      }
-      success += 1
-      lastTaskId = taskId
-      lastPayload = {
-        result: data.result ?? null,
-        multi: data.multi_results,
-        error_msg: data.error_msg ?? null,
-      }
-      // 每张成功后立即刷新历史，便于检测过程中随时查看
-      void refreshHistoryList()
     }
     v3TaskId.value = lastTaskId
     if (lastPayload) v3Payload.value = lastPayload

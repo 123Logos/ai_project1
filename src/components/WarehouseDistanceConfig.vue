@@ -3,8 +3,7 @@
     <div class="wdc-head">
       <h2>库房距离监测配置</h2>
       <p>
-        单向绑定：源库房 → 目标库房。相同源库房合并展示；修改、删除时在弹窗中选择绑定的库房后确认。库房距离按两端库房经纬度调用
-        GET /tl/calculate_distance（Haversine 球面直线距离，非驾车里程）。
+        单向绑定：源库房 → 目标库房。相同源库房合并展示；修改、删除时在弹窗中选择绑定的库房后确认。
       </p>
     </div>
 
@@ -30,11 +29,11 @@
             </select>
           </div>
           <button type="button" class="btn btn-outline-secondary" :disabled="busy" @click="applyFilters">
-            应用筛选
+            筛选
           </button>
         </div>
         <div class="wdc-actions">
-          <button type="button" class="btn btn-primary" :disabled="busy" @click="openAddDialog">新增绑定</button>
+          <button type="button" class="btn btn-outline-primary" :disabled="busy" @click="openAddDialog">新增绑定</button>
           <button type="button" class="btn btn-outline-secondary" :disabled="busy" @click="refreshList">
             刷新列表
           </button>

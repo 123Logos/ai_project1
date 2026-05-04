@@ -199,20 +199,55 @@ export async function fetchTlWarehouseTypes(includeInactive = false): Promise<Re
   return unwrapList(raw)
 }
 
-/** POST /tl/get_comparison，请求体字段为英文 snake_case（与后端约定一致） */
-export async function fetchTlComparison(
-  body: Record<string, unknown>,
-): Promise<Record<string, unknown>[]> {
-  const raw = await tlPostJson('/tl/get_comparison', body)
-  return unwrapList(unwrapData(raw))
+/** `不含循融宝` / `含循融宝`：与明细顶层价税块同构；运费与顶层一致 */
+export type TlXunRongBaoPriceBranch = {
+  单价: number | null
+  总价: number | null
+  运费单价: number
+  运费: number
+  总运费: number
+  报价: number | null
+  报价金额: number | null
+  报价来源: string
+  基准价: number | null
+  '含1%税价': number | null
+  '含3%税价': number | null
+  利润: number
+  利润_基准: number | null
+  '利润_含3%': number | null
+  最优价各口径利润: Record<string, number | null>
 }
 
 /**
- * 智能比价完整响应（含 `冶炼厂利润排行`、`最优价排序口径` 等），与嵌入页 `price_system` 一致校验 `code===200`。
+ * 智能比价 `data[]` 单行（仓库×冶炼厂×品类）。
+ * 顶层价税利润仍为含循融宝口径；对比含/不含时读 `不含循融宝` / `含循融宝`（仅当 `冶炼厂循融宝发货 === 1`）。
  */
-export async function postTlGetComparison(
-  body: Record<string, unknown>,
-): Promise<Record<string, unknown>> {
+export type TlComparisonDetailRow = Record<string, unknown> & {
+  冶炼厂循融宝发货?: 0 | 1
+  循融宝加价元每吨?: number | null
+  不含循融宝?: TlXunRongBaoPriceBranch | null
+  含循融宝?: TlXunRongBaoPriceBranch | null
+}
+
+/** `POST /tl/get_comparison` 成功响应常见形状；无数据时 `data` / `冶炼厂利润排行` 可能为 `[]` */
+export type TlGetComparisonResponse = Record<string, unknown> & {
+  code?: number
+  message?: string
+  data?: TlComparisonDetailRow[]
+  冶炼厂利润排行?: unknown[]
+  最优价排序口径?: string
+}
+
+/** POST /tl/get_comparison，请求体字段为英文 snake_case（与后端约定一致） */
+export async function fetchTlComparison(body: Record<string, unknown>): Promise<TlComparisonDetailRow[]> {
+  const raw = await tlPostJson('/tl/get_comparison', body)
+  return unwrapList(unwrapData(raw)) as TlComparisonDetailRow[]
+}
+
+/**
+ * 智能比价完整响应（含 `冶炼厂利润排行`、`最优价排序口径`、明细循融宝字段等），与嵌入页 `price_system` 一致校验 `code===200`。
+ */
+export async function postTlGetComparison(body: Record<string, unknown>): Promise<TlGetComparisonResponse> {
   const raw = await tlPostJson('/tl/get_comparison', body)
   if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) {
     const o = raw as { code?: number; message?: string }
@@ -220,14 +255,14 @@ export async function postTlGetComparison(
       const msg = o.message ? String(o.message) : `业务码 ${o.code}`
       throw new Error(`比价失败：${msg}`)
     }
-    return raw as Record<string, unknown>
+    return raw as TlGetComparisonResponse
   }
-  return { data: raw }
+  return { data: raw } as TlGetComparisonResponse
 }
 
 /** 从比价响应中取出明细行（`data` / `list` 等，与 unwrapList 一致） */
-export function tlUnwrapComparisonDetails(raw: Record<string, unknown>): Record<string, unknown>[] {
-  return unwrapList(unwrapData(raw))
+export function tlUnwrapComparisonDetails(raw: Record<string, unknown>): TlComparisonDetailRow[] {
+  return unwrapList(unwrapData(raw)) as TlComparisonDetailRow[]
 }
 
 /** 品类列表（GET /tl/get_categories）；兼容后端英文字段与历史中文字段 */

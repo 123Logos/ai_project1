@@ -6,6 +6,7 @@
     <title>废铅蓄电池供应链成本优化服务系统</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <script src="./assets/tl-comparison-ranking.js"></script>
   <script type="module" crossorigin src="./assets/index-e7CRb-gt.js"></script>
   <link rel="stylesheet" crossorigin href="./assets/index-FWNO-FnP.css">
   <style>
@@ -19,6 +20,26 @@
       background-color: #0d63d6 !important;
       border-color: #0d63d6 !important;
       color: #fff !important;
+    }
+
+    /* 智能比价表：循融宝角标（与电子地图语义一致） */
+    .ps-cmp-rank-wrap {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .ps-cmp-xrb {
+      display: inline-block;
+      min-width: 1.1em;
+      padding: 0 3px;
+      border-radius: 3px;
+      font-size: 11px;
+      font-weight: 700;
+      line-height: 1.2;
+      color: #0f766e;
+      background: #ccfbf1;
+      border: 1px solid #5eead4;
+      cursor: default;
     }
 
     /* 企业正式风：首页以“智能比价”为主业务 */
@@ -864,19 +885,53 @@
                 </div>
                 <div class="card-body">
                   <p id="abnormal-edit-meta" class="text-muted" style="font-size:13px;margin-bottom:10px;"></p>
-                  <div class="form-group">
+                  <div class="form-group" id="abnormal-row-prov">
                     <label for="abnormal-in-prov">省</label>
                     <input type="text" id="abnormal-in-prov" class="form-control abnormal-pcd-input" placeholder="省" autocomplete="address-level1">
                   </div>
-                  <div class="form-group">
+                  <div class="form-group" id="abnormal-row-city">
                     <label for="abnormal-in-city">市</label>
                     <input type="text" id="abnormal-in-city" class="form-control abnormal-pcd-input" placeholder="市" autocomplete="address-level2">
                   </div>
-                  <div class="form-group">
+                  <div class="form-group" id="abnormal-row-dist">
                     <label for="abnormal-in-dist">区/县</label>
                     <input type="text" id="abnormal-in-dist" class="form-control abnormal-pcd-input" placeholder="区/县" autocomplete="address-level3">
                   </div>
-                  <p class="text-muted" style="font-size:12px;">已有项已填好且不可改；只需补全空项。经纬度不在此处理。</p>
+                  <div class="form-group" id="abnormal-row-wh-name" style="display:none">
+                    <label for="abnormal-in-wh-name">仓库名</label>
+                    <input type="text" id="abnormal-in-wh-name" class="form-control" placeholder="库房名称" autocomplete="organization">
+                  </div>
+                  <div class="form-group" id="abnormal-row-wh-addr" style="display:none">
+                    <label for="abnormal-in-wh-addr">地址</label>
+                    <input type="text" id="abnormal-in-wh-addr" class="form-control" placeholder="详细地址">
+                  </div>
+                  <div class="form-group" id="abnormal-row-wh-type" style="display:none">
+                    <label for="abnormal-in-wh-type">库房类型</label>
+                    <select id="abnormal-in-wh-type" class="form-control">
+                      <option value="">请选择库房类型</option>
+                    </select>
+                  </div>
+                  <div class="form-group" id="abnormal-row-sm-name" style="display:none">
+                    <label for="abnormal-in-sm-name">冶炼厂名</label>
+                    <input type="text" id="abnormal-in-sm-name" class="form-control" placeholder="冶炼厂名称" autocomplete="organization">
+                  </div>
+                  <div class="form-group" id="abnormal-row-sm-addr" style="display:none">
+                    <label for="abnormal-in-sm-addr">地址</label>
+                    <input type="text" id="abnormal-in-sm-addr" class="form-control" placeholder="详细地址">
+                  </div>
+                  <div class="form-group" id="abnormal-row-sm-xrb" style="display:none">
+                    <div class="form-check" style="margin:0;">
+                      <input type="checkbox" class="form-check-input" id="abnormal-in-sm-xrb" />
+                      <label class="form-check-label" for="abnormal-in-sm-xrb">循融宝发货</label>
+                    </div>
+                  </div>
+                  <div class="form-group" id="abnormal-row-sm-active" style="display:none">
+                    <div class="form-check" style="margin:0;">
+                      <input type="checkbox" class="form-check-input" id="abnormal-in-sm-active" checked />
+                      <label class="form-check-label" for="abnormal-in-sm-active">启用（is_active）</label>
+                    </div>
+                  </div>
+                  <p class="text-muted" style="font-size:12px;">仅展示待补全项（省/市/区、名称、地址、库房类型等）；已有数据不在此展示。经纬度不在此编辑，保存时从记录中自动带上。</p>
                   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
                     <button type="button" class="btn" id="abnormal-edit-cancel">取消</button>
                     <button type="button" class="btn btn-primary" id="abnormal-edit-save">保存</button>
@@ -892,6 +947,8 @@
         const abnormalSmCache = new Map()
         let abnormalEdit = { kind: null, idKey: null }
         let abnormalModalBound = false
+        /** 库房类型下拉缓存（/tl/get_warehouse_types） */
+        let abnormalWarehouseTypesCache = null
 
         function pick(obj, keys) {
           if (!obj || typeof obj !== 'object') return ''
@@ -1071,25 +1128,44 @@
           }
         }
 
-        /** 仅用户可改 省/市/区，其余从完整记录带过去（有则带、无则不带）；经纬度只透传。 */
-        function buildWarehouseUpdatePayload(full, prov, city, dist) {
+        /** 仅用户可改弹窗里展示的项；其余从完整记录带过去；经纬度只透传。 */
+        function buildWarehouseUpdatePayload(full, prov, city, dist, extra) {
+          extra = extra || {}
           const wid = pickNum(full, ['仓库id', 'id', 'warehouse_id'])
           if (!wid) throw new Error('记录缺少 仓库id')
-          const typeId = pickNum(full, ['仓库类型id', '类型id', 'warehouse_type_id', 'type_id'])
-          const typeName = pick(full, ['类型', '库房类型名', '类型名', 'type_name', '仓库类型名'])
+          const typeIdFromFull = pickNum(full, ['仓库类型id', '类型id', 'warehouse_type_id', 'type_id'])
+          let typeId = typeIdFromFull
+          let typeName = (pick(full, ['类型', '库房类型名', '类型名', 'type_name', '仓库类型名']) || '').trim()
+          if (Object.prototype.hasOwnProperty.call(extra, '仓库类型id')) {
+            const tid = Number(extra['仓库类型id'])
+            if (Number.isFinite(tid) && tid > 0) typeId = tid
+          }
+          if (Object.prototype.hasOwnProperty.call(extra, '库房类型名')) {
+            const tn = String(extra['库房类型名'] ?? '').trim()
+            if (tn) typeName = tn
+          }
+          const namePick = (pick(full, ['仓库名', '仓库', 'warehouse_name', 'name']) || '').trim()
+          const addrPick = (pick(full, ['地址', 'address', '详细地址']) || '').trim()
+          const name = Object.prototype.hasOwnProperty.call(extra, '仓库名')
+            ? String(extra['仓库名'] ?? '').trim()
+            : namePick
+          const addr = Object.prototype.hasOwnProperty.call(extra, '地址')
+            ? String(extra['地址'] ?? '').trim()
+            : addrPick
           const payload = {
             仓库id: wid,
-            仓库名: pick(full, ['仓库名', '仓库', 'warehouse_name', 'name']) || '',
-            地址: pick(full, ['地址', 'address', '详细地址']) || '',
+            仓库名: name,
+            地址: addr,
             省: prov,
             市: city,
             区: dist,
           }
-          if (typeId) payload['仓库类型id'] = typeId
+          if (typeId && typeId > 0) payload['仓库类型id'] = typeId
           if (typeName) {
             payload['类型'] = typeName
             payload['库房类型名'] = typeName
           }
+          if (!payload['仓库类型id']) throw new Error('缺少库房类型，请选择库房类型')
           copyNumberIfPresent(payload, full, '经度', ['经度', 'lon', 'longitude', 'lng'])
           copyNumberIfPresent(payload, full, '纬度', ['纬度', 'lat', 'latitude'])
           copyOptionalStringFieldsFromFull(payload, full, [
@@ -1105,20 +1181,59 @@
           return payload
         }
 
-        function buildSmelterUpdatePayload(full, prov, city, dist) {
+        function copyXunrongbaoShipIfPresent(payload, full) {
+          if (!full || typeof full !== 'object') return
+          const keys = ['循融宝发货', 'xunrongbao_ship', 'xrb_ship']
+          for (const k of keys) {
+            if (!(k in full)) continue
+            const v = full[k]
+            if (v === null || v === '') continue
+            if (typeof v === 'boolean') {
+              payload['循融宝发货'] = v
+              return
+            }
+            const s = String(v).trim().toLowerCase()
+            if (v === 1 || v === true || s === '1' || s === 'true' || s === 'yes') {
+              payload['循融宝发货'] = true
+              return
+            }
+            if (v === 0 || v === false || s === '0' || s === 'false' || s === 'no') {
+              payload['循融宝发货'] = false
+              return
+            }
+          }
+        }
+
+        function buildSmelterUpdatePayload(full, prov, city, dist, extra) {
+          extra = extra || {}
           const sid = pickNum(full, ['冶炼厂id', 'id', 'factory_id'])
           if (!sid) throw new Error('记录缺少 冶炼厂id')
+          const namePick = (pick(full, ['冶炼厂', '冶炼厂名', 'factory_name', 'name']) || '').trim()
+          const addrPick = (pick(full, ['地址', 'address', '详细地址']) || '').trim()
+          const name = Object.prototype.hasOwnProperty.call(extra, '冶炼厂名')
+            ? String(extra['冶炼厂名'] ?? '').trim()
+            : namePick
+          const addr = Object.prototype.hasOwnProperty.call(extra, '地址')
+            ? String(extra['地址'] ?? '').trim()
+            : addrPick
           const payload = {
             冶炼厂id: sid,
-            冶炼厂名: pick(full, ['冶炼厂', '冶炼厂名', 'factory_name', 'name']) || '',
-            地址: pick(full, ['地址', 'address', '详细地址']) || '',
+            冶炼厂名: name,
+            地址: addr,
             省: prov,
             市: city,
             区: dist,
           }
           copyNumberIfPresent(payload, full, '经度', ['经度', 'lon', 'longitude', 'lng'])
           copyNumberIfPresent(payload, full, '纬度', ['纬度', 'lat', 'latitude'])
-          if (typeof full['is_active'] === 'boolean') {
+          if (Object.prototype.hasOwnProperty.call(extra, '循融宝发货')) {
+            payload['循融宝发货'] = !!extra['循融宝发货']
+          } else {
+            copyXunrongbaoShipIfPresent(payload, full)
+          }
+          if (Object.prototype.hasOwnProperty.call(extra, 'is_active')) {
+            payload['is_active'] = !!extra['is_active']
+          } else if (typeof full['is_active'] === 'boolean') {
             payload['is_active'] = full['is_active']
           } else {
             payload['is_active'] = true
@@ -1150,7 +1265,142 @@
           abnormalEdit = { kind: null, idKey: null }
         }
 
-        function openAbnormalEdit(kind, idKey) {
+        function setAbnormalRowDisplay(id, show) {
+          const el = document.getElementById(id)
+          if (el) el.style.display = show ? '' : 'none'
+        }
+
+        function abnormalRowVisible(id) {
+          const el = document.getElementById(id)
+          return !!(el && el.style.display !== 'none')
+        }
+
+        function hideAllAbnormalKindSpecificRows() {
+          ;[
+            'abnormal-row-wh-name',
+            'abnormal-row-wh-addr',
+            'abnormal-row-wh-type',
+            'abnormal-row-sm-name',
+            'abnormal-row-sm-addr',
+            'abnormal-row-sm-xrb',
+            'abnormal-row-sm-active',
+          ].forEach((rid) => setAbnormalRowDisplay(rid, false))
+        }
+
+        /** 仅展示省/市/区中尚未填写的项；已有的在 DOM 中保留值供保存时合并，但不展示 */
+        function syncAbnormalPcdRowVisibility(pcd) {
+          setAbnormalRowDisplay('abnormal-row-prov', !(pcd.prov || '').trim())
+          setAbnormalRowDisplay('abnormal-row-city', !(pcd.city || '').trim())
+          setAbnormalRowDisplay('abnormal-row-dist', !(pcd.dist || '').trim())
+        }
+
+        function unwrapWarehouseTypesJson(json) {
+          if (!json || typeof json !== 'object') return []
+          if (Array.isArray(json)) return json
+          const d = json.data
+          if (Array.isArray(d)) return d
+          if (d && Array.isArray(d.list)) return d.list
+          if (Array.isArray(json.list)) return json.list
+          return []
+        }
+
+        async function ensureAbnormalWarehouseTypeOptions() {
+          const sel = document.getElementById('abnormal-in-wh-type')
+          if (!sel) return
+          if (!abnormalWarehouseTypesCache) {
+            const res = await fetch('/tl/get_warehouse_types?include_inactive=false', {
+              credentials: 'same-origin',
+            })
+            if (!res.ok) throw new Error(`加载库房类型失败：HTTP ${res.status}`)
+            const j = await res.json()
+            abnormalWarehouseTypesCache = unwrapWarehouseTypesJson(j)
+          }
+          const opts = ['<option value="">请选择库房类型</option>']
+          for (const t of abnormalWarehouseTypesCache) {
+            const id = pickNum(t, ['类型id', 'id', 'type_id', 'warehouse_type_id'])
+            if (!id) continue
+            const nm = pick(t, ['类型名', 'name', '类型名称', 'type_name']) || '—'
+            opts.push(`<option value="${esc(String(id))}">${esc(nm)}</option>`)
+          }
+          sel.innerHTML = opts.join('')
+        }
+
+        function syncAbnormalWhExtraRows(row) {
+          const namePick = pick(row, ['仓库名', '仓库', 'warehouse_name', 'name'])
+          const addrPick = pick(row, ['地址', 'address', '详细地址'])
+          const typeIdPick = pickNum(row, ['仓库类型id', '类型id', 'warehouse_type_id', 'type_id'])
+          const showName = !namePick.trim()
+          const showAddr = !addrPick.trim()
+          const showType = !typeIdPick
+          setAbnormalRowDisplay('abnormal-row-wh-name', showName)
+          setAbnormalRowDisplay('abnormal-row-wh-addr', showAddr)
+          setAbnormalRowDisplay('abnormal-row-wh-type', showType)
+          const inN = document.getElementById('abnormal-in-wh-name')
+          const inA = document.getElementById('abnormal-in-wh-addr')
+          const sel = document.getElementById('abnormal-in-wh-type')
+          if (inN) inN.value = showName ? '' : namePick
+          if (inA) inA.value = showAddr ? '' : addrPick
+          if (sel) sel.value = ''
+        }
+
+        function smelterHasDefiniteXunrongbao(row) {
+          if (!row || typeof row !== 'object') return false
+          const keys = ['循融宝发货', 'xunrongbao_ship', 'xrb_ship']
+          for (const k of keys) {
+            if (!(k in row)) continue
+            const v = row[k]
+            if (v === null || v === '') continue
+            if (typeof v === 'boolean') return true
+            const s = String(v).trim().toLowerCase()
+            if (v === 1 || v === 0 || s === '1' || s === '0' || s === 'true' || s === 'false' || s === 'yes' || s === 'no') return true
+          }
+          return false
+        }
+
+        function syncAbnormalSmExtraRows(row) {
+          const namePick = pick(row, ['冶炼厂', '冶炼厂名', 'factory_name', 'name'])
+          const addrPick = pick(row, ['地址', 'address', '详细地址'])
+          const showName = !namePick.trim()
+          const showAddr = !addrPick.trim()
+          setAbnormalRowDisplay('abnormal-row-sm-name', showName)
+          setAbnormalRowDisplay('abnormal-row-sm-addr', showAddr)
+          const inN = document.getElementById('abnormal-in-sm-name')
+          const inA = document.getElementById('abnormal-in-sm-addr')
+          if (inN) inN.value = showName ? '' : namePick
+          if (inA) inA.value = showAddr ? '' : addrPick
+          const xrbKnown = smelterHasDefiniteXunrongbao(row)
+          setAbnormalRowDisplay('abnormal-row-sm-xrb', !xrbKnown)
+          const xb = document.getElementById('abnormal-in-sm-xrb')
+          if (xb) {
+            if (!xrbKnown) xb.checked = false
+            else {
+              const keys = ['循融宝发货', 'xunrongbao_ship', 'xrb_ship']
+              for (const k of keys) {
+                if (!(k in row)) continue
+                const v = row[k]
+                if (typeof v === 'boolean') {
+                  xb.checked = v
+                  break
+                }
+                const s = String(v).trim().toLowerCase()
+                if (v === 1 || s === '1' || s === 'true' || s === 'yes') {
+                  xb.checked = true
+                  break
+                }
+                if (v === 0 || s === '0' || s === 'false' || s === 'no') {
+                  xb.checked = false
+                  break
+                }
+              }
+            }
+          }
+          const activeKnown = typeof row.is_active === 'boolean'
+          setAbnormalRowDisplay('abnormal-row-sm-active', !activeKnown)
+          const ac = document.getElementById('abnormal-in-sm-active')
+          if (ac) ac.checked = !activeKnown ? true : row.is_active === true
+        }
+
+        async function openAbnormalEdit(kind, idKey) {
           const row = kind === 'wh' ? abnormalWhCache.get(idKey) : abnormalSmCache.get(idKey)
           if (!row) return
           abnormalEdit = { kind, idKey }
@@ -1165,8 +1415,20 @@
               : pick(row, ['冶炼厂', '冶炼厂名', 'factory_name', 'name'])
           const title = document.getElementById('abnormal-edit-title')
           const meta = document.getElementById('abnormal-edit-meta')
-          if (title) title.textContent = kind === 'wh' ? '补全库房省市区' : '补全冶炼厂省市区'
+          if (title) title.textContent = kind === 'wh' ? '补全库房信息' : '补全冶炼厂信息'
           if (meta) meta.textContent = `ID: ${id} ｜ ${name || ''}`
+
+          hideAllAbnormalKindSpecificRows()
+          if (kind === 'wh') {
+            syncAbnormalWhExtraRows(row)
+            if (abnormalRowVisible('abnormal-row-wh-type')) {
+              try {
+                await ensureAbnormalWarehouseTypeOptions()
+              } catch (e) {
+                alert(e instanceof Error ? e.message : String(e))
+              }
+            }
+          } else syncAbnormalSmExtraRows(row)
 
           const setField = (idEl, val) => {
             const el = document.getElementById(idEl)
@@ -1182,6 +1444,7 @@
           setField('abnormal-in-prov', pcd.prov)
           setField('abnormal-in-city', pcd.city)
           setField('abnormal-in-dist', pcd.dist)
+          syncAbnormalPcdRowVisibility(pcd)
           const ov = document.getElementById('abnormal-edit-overlay')
           if (ov) ov.style.display = 'flex'
         }
@@ -1206,7 +1469,7 @@
           const city = read(inC, pcd.city)
           const dist = read(inD, pcd.dist)
           if (!(prov && city && dist)) {
-            alert('请补全缺失的省、市、区/县')
+            alert('请填写页面上展示的空白省/市/区项，保存需省、市、区均有效')
             return
           }
           const saveBtn = document.getElementById('abnormal-edit-save')
@@ -1221,17 +1484,61 @@
               if (!wid) throw new Error('缺少仓库 ID')
               const fetched = await fetchFullWarehouseById(wid)
               const full = fetched ? Object.assign({}, row, fetched) : row
-              if (!pickNum(full, ['仓库类型id', '类型id', 'warehouse_type_id', 'type_id'])) {
-                throw new Error('记录缺少库房类型，请先在库房管理中维护该库房')
+              const extraWh = {}
+              if (abnormalRowVisible('abnormal-row-wh-name')) {
+                const v = document.getElementById('abnormal-in-wh-name')?.value?.trim()
+                if (!v) throw new Error('请填写仓库名')
+                extraWh['仓库名'] = v
               }
-              const payload = buildWarehouseUpdatePayload(full, prov, city, dist)
+              if (abnormalRowVisible('abnormal-row-wh-addr')) {
+                const v = document.getElementById('abnormal-in-wh-addr')?.value?.trim()
+                if (!v) throw new Error('请填写地址')
+                extraWh['地址'] = v
+              }
+              if (abnormalRowVisible('abnormal-row-wh-type')) {
+                const sel = document.getElementById('abnormal-in-wh-type')
+                const tid = Number(sel?.value || '')
+                if (!Number.isFinite(tid) || tid <= 0) throw new Error('请选择库房类型')
+                extraWh['仓库类型id'] = tid
+                const opt = sel?.selectedOptions?.[0]
+                let tn = ((opt?.textContent || '').trim()).replace(/^\[停用\]\s*/, '')
+                if (!tn && abnormalWarehouseTypesCache) {
+                  const hit = abnormalWarehouseTypesCache.find(
+                    (t) => pickNum(t, ['类型id', 'id', 'type_id', 'warehouse_type_id']) === tid,
+                  )
+                  if (hit) tn = pick(hit, ['类型名', 'name', '类型名称', 'type_name']) || ''
+                }
+                if (tn) extraWh['库房类型名'] = tn
+              }
+              const tidAfter = pickNum(full, ['仓库类型id', '类型id', 'warehouse_type_id', 'type_id'])
+              if (!tidAfter && !Object.prototype.hasOwnProperty.call(extraWh, '仓库类型id')) {
+                throw new Error('请选择库房类型')
+              }
+              const payload = buildWarehouseUpdatePayload(full, prov, city, dist, extraWh)
               await postAbnormalJson('/tl/update_warehouse', payload)
             } else {
               const sid = pickNum(row, ['冶炼厂id', 'id', 'factory_id'])
               if (!sid) throw new Error('缺少冶炼厂 ID')
               const fetched = await fetchFullSmelterById(sid)
               const full = fetched ? Object.assign({}, row, fetched) : row
-              const payload = buildSmelterUpdatePayload(full, prov, city, dist)
+              const extraSm = {}
+              if (abnormalRowVisible('abnormal-row-sm-name')) {
+                const v = document.getElementById('abnormal-in-sm-name')?.value?.trim()
+                if (!v) throw new Error('请填写冶炼厂名')
+                extraSm['冶炼厂名'] = v
+              }
+              if (abnormalRowVisible('abnormal-row-sm-addr')) {
+                const v = document.getElementById('abnormal-in-sm-addr')?.value?.trim()
+                if (!v) throw new Error('请填写地址')
+                extraSm['地址'] = v
+              }
+              if (abnormalRowVisible('abnormal-row-sm-xrb')) {
+                extraSm['循融宝发货'] = !!document.getElementById('abnormal-in-sm-xrb')?.checked
+              }
+              if (abnormalRowVisible('abnormal-row-sm-active')) {
+                extraSm['is_active'] = !!document.getElementById('abnormal-in-sm-active')?.checked
+              }
+              const payload = buildSmelterUpdatePayload(full, prov, city, dist, extraSm)
               await postAbnormalJson('/tl/update_smelter', payload)
             }
             closeAbnormalEdit()
@@ -1266,7 +1573,7 @@
             const k = b.getAttribute('data-kind') || ''
             const idk = b.getAttribute('data-id') || ''
             if (!idk) return
-            if (k === 'wh' || k === 'sm') openAbnormalEdit(k, idk)
+            if (k === 'wh' || k === 'sm') void openAbnormalEdit(k, idk)
           })
         }
 

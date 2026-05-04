@@ -17,12 +17,12 @@
         </span>
         <button
           type="button"
-          class="btn btn-sm btn-primary ms-auto"
+          class="btn btn-sm btn-outline-primary ms-auto"
           :disabled="loading"
           title="进入页面时会自动同步；点此立即从服务器拉取库房与冶炼厂并更新缓存"
           @click="onManualRefreshMarkers"
         >
-          <span v-if="loading" class="spinner-border spinner-border-sm me-1" role="status" />
+          <span v-if="loading" class="spinner-border spinner-border-sm me-1 text-light" role="status" />
           {{ loading ? '加载中…' : '刷新数据' }}
         </button>
       </div>
@@ -65,12 +65,12 @@
             </div>
             <button
               type="button"
-              class="btn btn-sm btn-primary"
+              class="btn btn-sm btn-outline-primary"
               :disabled="loading"
               title="进入页面时会自动同步；点此立即从服务器拉取库房与冶炼厂并更新缓存"
               @click="onManualRefreshMarkers"
             >
-              <span v-if="loading" class="spinner-border spinner-border-sm me-1" role="status" />
+              <span v-if="loading" class="spinner-border spinner-border-sm me-1 text-light" role="status" />
               {{ loading ? '加载中…' : '刷新数据' }}
             </button>
           </div>
@@ -102,7 +102,7 @@
               <div class="emap-cat-toolbar-actions">
                 <button
                   type="button"
-                  class="btn btn-sm btn-success"
+                  class="btn btn-sm btn-outline-success"
                   :disabled="categoriesLoading || compareLoading || loading"
                   @click="confirmComparisonConditions"
                 >
@@ -170,6 +170,10 @@
           <label class="emap-tool-check">
             <input v-model="showAllComparisonFlows" type="checkbox" class="form-check-input" />
             <span>展示全部比价线</span>
+          </label>
+          <label class="emap-tool-check">
+            <input v-model="showComparisonSmelterInfo" type="checkbox" class="form-check-input" />
+            <span>比价时展示冶炼厂信息</span>
           </label>
           <button
             type="button"
@@ -269,54 +273,60 @@
         </transition>
       </div>
       <div v-if="selectedWarehouse" class="emap-floating-actions">
-        <p v-if="compareError" class="emap-floating-actions-err small text-danger mb-1 w-100" role="alert">
+        <p v-if="compareError" class="emap-floating-actions-err small text-danger mb-0" role="alert">
           {{ compareError }}
         </p>
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-primary"
-          :disabled="compareLoading"
-          @click="runComparisonForWarehouse(selectedWarehouse, { announceMissingPrereq: true })"
-        >
-          {{ compareLoading ? '比价中…' : '重新比价' }}
-        </button>
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-success"
-          :disabled="forecastLoading"
-          @click="runForecastForWarehouse(selectedWarehouse)"
-        >
-          {{ forecastLoading ? '预测中…' : '重新预测送货量' }}
-        </button>
-        <button
-          v-if="comparisonRanks.length"
-          type="button"
-          class="btn btn-sm btn-outline-dark"
-          @click="openComparisonModal"
-        >
-          查看比价结果
-        </button>
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-info"
-          :disabled="warehouseDistanceLoading"
-          :title="
-            warehouseDistanceMonitorOn
-              ? '关闭库房绑定距离线，可恢复显示比价流向'
-              : '绘制当前库房到各绑定库房的直线并标注球面距离（与比价线互斥）'
-          "
-          @click="onWarehouseDistanceMonitorClick"
-        >
-          {{
-            warehouseDistanceLoading
-              ? '测算中…'
-              : warehouseDistanceMonitorOn
-                ? '关闭距离监测'
-                : '库房距离监测'
-          }}
-        </button>
+        <div class="emap-floating-actions-btns">
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-primary"
+            :disabled="compareLoading"
+            @click="runComparisonForWarehouse(selectedWarehouse, { announceMissingPrereq: true })"
+          >
+            {{ compareLoading ? '比价中…' : '重新比价' }}
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-success"
+            :disabled="forecastLoading"
+            @click="runForecastForWarehouse(selectedWarehouse)"
+          >
+            {{ forecastLoading ? '预测中…' : '重新预测送货量' }}
+          </button>
+          <button
+            v-if="comparisonRanks.length"
+            type="button"
+            class="btn btn-sm btn-outline-dark"
+            @click="openComparisonModal"
+          >
+            查看比价结果
+          </button>
+          <button
+            type="button"
+            class="btn btn-sm btn-outline-info"
+            :disabled="warehouseDistanceLoading"
+            :title="
+              warehouseDistanceMonitorOn
+                ? '关闭库房绑定距离线，可恢复显示比价流向'
+                : '绘制当前库房到各绑定库房的直线并标注球面距离（与比价线互斥）'
+            "
+            @click="onWarehouseDistanceMonitorClick"
+          >
+            {{
+              warehouseDistanceLoading
+                ? '测算中…'
+                : warehouseDistanceMonitorOn
+                  ? '关闭距离监测'
+                  : '库房距离监测'
+            }}
+          </button>
+        </div>
       </div>
-      <div v-if="comparisonModalVisible" class="emap-cmp-panel">
+      <div
+        v-if="comparisonModalVisible"
+        class="emap-cmp-panel"
+        :class="{ 'emap-cmp-panel--compact': comparisonSectionCollapsed && forecastSectionCollapsed }"
+      >
         <div class="emap-cmp-panel-head">
           <h4 class="emap-cmp-panel-title">{{ comparisonModalTitle }}</h4>
           <div class="emap-cmp-panel-head-actions">
@@ -377,8 +387,21 @@
                   暂无比价明细
                 </td>
               </tr>
-              <tr v-for="row in comparisonRanks" :key="`${row.rank}-${row.smelter}`">
-                <td class="emap-cmp-col-rank">{{ row.rank }}</td>
+              <tr
+                v-for="row in comparisonRanks"
+                :key="`${row.rank}-${row.smelter}-${row.xunRongBaoExcludedPricing ? 'ex' : 'in'}`"
+              >
+                <td class="emap-cmp-col-rank">
+                  <span class="emap-cmp-rank-wrap">
+                    <span class="emap-cmp-rank-num">{{ row.rank }}</span>
+                    <span
+                      v-if="row.xunRongBao"
+                      class="emap-cmp-xrb-on-rank"
+                      :title="comparisonXunRongBaoTitle(row)"
+                      aria-label="循融宝"
+                      >循</span>
+                  </span>
+                </td>
                 <td class="emap-cmp-col-smelter">
                   <span
                     class="emap-cmp-cell-truncate"
@@ -694,6 +717,12 @@ type ComparisonRankItem = {
   lineUnitPrice?: number
   /** 明细字段「运费单价」按吨数加权 */
   freightUnitPrice?: number
+  /** 任一明细 `冶炼厂循融宝发货 === 1`；金额与排序仍用顶层含循融宝口径 */
+  xunRongBao?: boolean
+  /** `循融宝加价元每吨`；后端可能只给在对象里，未返回时可为 undefined */
+  xunRongBaoSurchargeYuanPerTon?: number | null
+  /** 与上一行同厂：本行为「不含循融宝」口径，不显示排名角标「循」 */
+  xunRongBaoExcludedPricing?: boolean
 }
 
 /** 与「送货量预测」折线图弹窗下方展示一致 */
@@ -819,7 +848,7 @@ const EMAP_FILTER_TO_ADCODE: Record<string, string> = {
   香港: '810000',
   澳门: '820000',
 }
-const EMAP_LOCAL_PROVINCE_GEOJSON_PATH = '/geo/province'
+const EMAP_LOCAL_PROVINCE_GEOJSON_PATH = '/province'
 
 function emapProvinceFilterToAdcode(sel: string): string | null {
   const t = sel.trim().replace(/\s+/g, '')
@@ -865,6 +894,10 @@ const provinceOutlineLayerRef = shallowRef<L.GeoJSON | null>(null)
 const flowPathSvgRendererRef = shallowRef<L.SVG | null>(null)
 const distanceLinePaneName = 'emap-distance-line-pane'
 const distanceLabelPaneName = 'emap-distance-label-pane'
+/** 高于 Leaflet 默认 popupPane(~700)，使比价冶炼厂常驻卡片盖在库房弹窗之上 */
+const emapRankComparisonTipPaneName = 'emap-rank-comparison-tip-pane'
+/** 高于 markerPane(~600)，使比价流向线画在库房/冶炼厂打点之上 */
+const emapComparisonFlowPaneName = 'emap-comparison-flow-pane'
 const loading = ref(false)
 /** 有本地缓存时的静默全量同步：不打断操作，仅地图角标提示 */
 const markersSyncing = ref(false)
@@ -925,7 +958,9 @@ const forecastTrendCanvasRef = ref<HTMLCanvasElement | null>(null)
 const enableCoordPick = ref(false)
 const enableAutoZoomOnPointClick = ref(false)
 /** false: 仅前3条；true: 展示全部（第4条起细灰线） */
-const showAllComparisonFlows = ref(true)
+const showAllComparisonFlows = ref(false)
+/** 比价连线时是否在冶炼厂点位旁展示排名与利润等常驻提示 */
+const showComparisonSmelterInfo = ref(true)
 const lastClickedCoordText = ref('')
 const mapToolsCollapsed = ref(true)
 
@@ -1420,6 +1455,27 @@ function onEmapPointSearchKeyArrow(dir: 'up' | 'down') {
   void nextTick(() => scrollEmapPointSearchActiveIntoView())
 }
 
+/**
+ * 勾选「点击点位是否放大」并点库房时：不把库房放在视口正中央，而是略靠右，
+ * 给左侧比价结果面板留出可视区域（用 project/unproject 平移地图中心）。
+ */
+function setMapViewWithWarehouseLeftPanelBias(
+  map: L.Map,
+  latlng: L.LatLngExpression,
+  zoom: number,
+  options?: { animate?: boolean },
+): void {
+  const z = zoom
+  const ll = L.latLng(latlng)
+  const animate = options?.animate !== false
+  const wpx = Math.max(160, map.getSize().x)
+  const biasPx = Math.round(Math.min(320, Math.max(96, wpx * 0.22)))
+  const whPx = map.project(ll, z)
+  const centerPx = whPx.subtract(L.point(biasPx, 0))
+  const centerLL = map.unproject(centerPx, z)
+  map.setView(centerLL, z, { animate })
+}
+
 function focusMapPointFromSearch(p: MapPoint) {
   const map = mapRef.value
   if (!map) {
@@ -1428,7 +1484,11 @@ function focusMapPointFromSearch(p: MapPoint) {
   }
   const nMatch = emapPointSearchCandidates.value.length
   const zoom = Math.max(map.getZoom(), 11)
-  map.setView([p.lat, p.lng], zoom, { animate: true })
+  if (p.kind === 'warehouse' && enableAutoZoomOnPointClick.value) {
+    setMapViewWithWarehouseLeftPanelBias(map, [p.lat, p.lng], zoom, { animate: true })
+  } else {
+    map.setView([p.lat, p.lng], zoom, { animate: true })
+  }
   openMarkerPopupNear(p.lat, p.lng)
   if (p.kind === 'warehouse') {
     selectedWarehouse.value = p
@@ -1585,6 +1645,16 @@ function initMap() {
     p.style.zIndex = '2010'
     p.style.pointerEvents = 'none'
   }
+  if (!map.getPane(emapRankComparisonTipPaneName)) {
+    const p = map.createPane(emapRankComparisonTipPaneName)
+    p.style.zIndex = '2200'
+    p.style.pointerEvents = 'none'
+  }
+  if (!map.getPane(emapComparisonFlowPaneName)) {
+    const p = map.createPane(emapComparisonFlowPaneName)
+    p.style.zIndex = '620'
+    p.style.pointerEvents = 'none'
+  }
 
   const markerLayer = L.layerGroup().addTo(map)
   const flowLayer = L.layerGroup().addTo(map)
@@ -1593,7 +1663,7 @@ function initMap() {
   markerLayerRef.value = markerLayer
   flowLayerRef.value = flowLayer
   topTipLayerRef.value = topTipLayer
-  flowPathSvgRendererRef.value = L.svg({ padding: 0.5 })
+  flowPathSvgRendererRef.value = L.svg({ padding: 0.5, pane: emapComparisonFlowPaneName })
 
   if (mapWrapRef.value) {
     resizeObs = new ResizeObserver(() => {
@@ -1614,6 +1684,16 @@ function initMap() {
       selectedWarehouse.value = null
       clearComparisonOverlays()
     }
+  })
+
+  map.on('popupopen', (e: L.LeafletEvent) => {
+    const pop = (e as unknown as { popup?: L.Popup }).popup
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        nudgeOpenLeafletPopupAwayFromEmapRankTips(map, pop)
+        runEmapRankTipOverlapLayoutNow()
+      })
+    })
   })
 }
 
@@ -1747,9 +1827,9 @@ function warehouseIcon(cssColor: string, dimmed = false): L.DivIcon {
   return L.divIcon({
     className: 'emap-marker emap-marker--warehouse',
     html: `<div class="emap-pin-inner${dimClass}" style="background:${bg};"></div>`,
-    iconSize: [22, 22],
-    iconAnchor: [11, 22],
-    popupAnchor: [0, -20],
+    iconSize: [20, 20],
+    iconAnchor: [10, 20],
+    popupAnchor: [0, -18],
   })
 }
 
@@ -1791,7 +1871,7 @@ function refreshAllMarkerVisualState() {
     else if (filterOn) {
       dimmed = !provincesRoughlyEqual(provinceFromRow(p.raw), emapProvinceFilter.value)
     }
-    m.setIcon(smelterIcon(dimmed))
+    m.setIcon(smelterIcon(dimmed, smelterComparisonTriLargeOn()))
   }
 }
 
@@ -1800,6 +1880,10 @@ watch(selectedWarehouse, () => {
     warehouseDistanceMonitorOn.value = false
     clearMapComparisonGraphicsOnly()
   }
+  refreshAllMarkerVisualState()
+})
+
+watch([comparisonRanks, warehouseDistanceMonitorOn, compareLoading], () => {
   refreshAllMarkerVisualState()
 })
 
@@ -1831,7 +1915,7 @@ async function refreshProvinceOutlineLayer() {
     provinceOutlineLayerRef.value = layer
   } catch (e) {
     console.warn(
-      `[emap] 本地省界轮廓加载失败：${url}。请在 public/geo/province 下放置 ${adcode}.json`,
+      `[emap] 本地省界轮廓加载失败：${url}。请在 public/province 下放置 ${adcode}.json`,
       pr,
       e,
     )
@@ -1871,14 +1955,18 @@ watch(emapProvinceFilter, () => {
   })()
 })
 
-function smelterIcon(dimmed = false): L.DivIcon {
-  const cls = dimmed ? 'emap-smelter-tri emap-smelter-tri--dimmed' : 'emap-smelter-tri'
+function smelterIcon(dimmed = false, large = false): L.DivIcon {
+  const baseTri = dimmed ? 'emap-smelter-tri emap-smelter-tri--dimmed' : 'emap-smelter-tri'
+  const triCls = large ? `${baseTri} emap-smelter-tri--large` : baseTri
+  const markerCls = large ? 'emap-marker emap-marker--smelter emap-marker--smelter-lg' : 'emap-marker emap-marker--smelter'
+  const h = large ? 28 : 14
+  const ax = large ? 16 : 8
   return L.divIcon({
-    className: 'emap-marker emap-marker--smelter',
-    html: `<div class="${cls}" aria-hidden="true"></div>`,
-    iconSize: [18, 16],
-    iconAnchor: [9, 16],
-    popupAnchor: [0, -16],
+    className: markerCls,
+    html: `<div class="${triCls}" aria-hidden="true"></div>`,
+    iconSize: large ? [32, 28] : [16, 14],
+    iconAnchor: [ax, h],
+    popupAnchor: [0, -h],
   })
 }
 
@@ -1923,7 +2011,7 @@ function renderMarkers(points: MapPoint[]) {
         forecastError.value = ''
         if (enableAutoZoomOnPointClick.value) {
           const zoom = Math.max(map.getZoom(), 9)
-          map.setView([p.lat, p.lng], zoom, { animate: true })
+          setMapViewWithWarehouseLeftPanelBias(map, [p.lat, p.lng], zoom, { animate: true })
         }
         void runComparisonAndForecastForWarehouse(p)
       })
@@ -1957,6 +2045,367 @@ function escapeHtml(s: string): string {
     .replace(/"/g, '&quot;')
 }
 
+/** 比价请求中或已有比价连线且未切到「库房距离监测」时，冶炼厂三角放大 */
+function smelterComparisonTriLargeOn(): boolean {
+  return (
+    compareLoading.value ||
+    (comparisonRanks.value.length > 0 && !warehouseDistanceMonitorOn.value)
+  )
+}
+
+/** 大三角时略抬高常驻排名提示，避免压住标记 */
+function comparisonRankTipYOffset(): number {
+  return smelterComparisonTriLargeOn() ? -24 : -8
+}
+
+function comparisonRankBadgeClass(rank: number): string {
+  if (rank === 1) return 'emap-rank-tip-badge emap-rank-tip-badge--r1'
+  if (rank === 2) return 'emap-rank-tip-badge emap-rank-tip-badge--r2'
+  if (rank === 3) return 'emap-rank-tip-badge emap-rank-tip-badge--r3'
+  return 'emap-rank-tip-badge emap-rank-tip-badge--muted'
+}
+
+function comparisonRankTipHtml(row: ComparisonRankItem): string {
+  const rk = escapeHtml(String(row.rank))
+  const name = escapeHtml(row.smelter)
+  const badgeCls = comparisonRankBadgeClass(row.rank)
+  return `<div class="emap-rank-tip-inner"><span class="${badgeCls}">${rk}</span><div class="emap-rank-tip-body"><div class="emap-rank-tip-name">${name}</div><div>利润: ${formatNum(row.netProfit)}</div><div>总价: ${formatNum(row.totalRecovery)}</div><div>总运费: ${formatNum(row.totalFreight)}</div></div></div>`
+}
+
+/** 比价常驻 tip：方向轮询 + 像素防重叠 */
+type EmapRankTipDir = 'top' | 'right' | 'left' | 'bottom'
+
+const EMAP_RANK_TIP_DIRECTIONS: readonly EmapRankTipDir[] = ['top', 'right', 'left', 'bottom']
+
+/** 防重叠时依次叠加的像素位移（相对上一位置累加） */
+const EMAP_RANK_TIP_SPIRAL_DELTAS: readonly [number, number][] = [
+  [9, 0],
+  [-9, 0],
+  [0, 9],
+  [0, -9],
+  [14, 0],
+  [-14, 0],
+  [0, 14],
+  [0, -14],
+  [11, 11],
+  [-11, 11],
+  [11, -11],
+  [-11, -11],
+  [18, 8],
+  [-18, 8],
+  [18, -8],
+  [-18, -8],
+  [8, 16],
+  [-8, 16],
+  [8, -16],
+  [-8, -16],
+]
+
+type EmapRankTipLayoutMeta = {
+  base: L.Point
+  rank: number
+  listIdx: number
+  bump: L.Point
+  spiral: number
+}
+
+const emapRankTipLayoutMeta = new WeakMap<L.Tooltip, EmapRankTipLayoutMeta>()
+
+let emapRankTipLayoutOff: (() => void) | null = null
+let emapRankTipLayoutDebounceTimer: ReturnType<typeof setTimeout> | null = null
+/** 左侧比价面板 / 浮层尺寸变化时重算避让 */
+let emapRankTipUiLayoutTimer: ReturnType<typeof setTimeout> | null = null
+
+function emapRankTipDirectionForIdx(listIdx: number): EmapRankTipDir {
+  return EMAP_RANK_TIP_DIRECTIONS[listIdx % EMAP_RANK_TIP_DIRECTIONS.length]!
+}
+
+function emapRankTipBasePixelOffset(direction: EmapRankTipDir, liftY: number): L.Point {
+  switch (direction) {
+    case 'top':
+      return L.point(0, liftY)
+    case 'bottom':
+      return L.point(0, 12 + Math.round(Math.abs(liftY) * 0.35))
+    case 'right':
+      return L.point(12, Math.round(liftY * 0.42))
+    case 'left':
+      return L.point(-12, Math.round(liftY * 0.42))
+    default:
+      return L.point(0, liftY)
+  }
+}
+
+function stopEmapRankTipLayoutHandlers(): void {
+  emapRankTipLayoutOff?.()
+  emapRankTipLayoutOff = null
+  if (emapRankTipLayoutDebounceTimer != null) {
+    clearTimeout(emapRankTipLayoutDebounceTimer)
+    emapRankTipLayoutDebounceTimer = null
+  }
+  if (emapRankTipUiLayoutTimer != null) {
+    clearTimeout(emapRankTipUiLayoutTimer)
+    emapRankTipUiLayoutTimer = null
+  }
+}
+
+function emapRankTipRectInMapFrame(map: L.Map, el: HTMLElement) {
+  const mc = map.getContainer().getBoundingClientRect()
+  const r = el.getBoundingClientRect()
+  if (r.width < 2 || r.height < 2) return null
+  return {
+    left: r.left - mc.left,
+    top: r.top - mc.top,
+    right: r.right - mc.left,
+    bottom: r.bottom - mc.top,
+  }
+}
+
+type EmapRankTipRect = NonNullable<ReturnType<typeof emapRankTipRectInMapFrame>>
+
+function emapRankTipRectsOverlap(a: EmapRankTipRect, b: EmapRankTipRect, pad: number): boolean {
+  return !(
+    a.right + pad <= b.left ||
+    b.right + pad <= a.left ||
+    a.bottom + pad <= b.top ||
+    b.bottom + pad <= a.top
+  )
+}
+
+/** 将任意 DOM 与地图容器的相交区域转为地图容器内坐标（用于与 tooltip 同坐标系比相交） */
+function emapElementClippedToMapFrame(map: L.Map, el: HTMLElement | null): EmapRankTipRect | null {
+  if (!el) return null
+  if (!el.getClientRects().length) return null
+  const mc = map.getContainer().getBoundingClientRect()
+  const r = el.getBoundingClientRect()
+  const il = Math.max(mc.left, r.left)
+  const ir = Math.min(mc.right, r.right)
+  const it = Math.max(mc.top, r.top)
+  const ib = Math.min(mc.bottom, r.bottom)
+  if (ir - il < 6 || ib - it < 6) return null
+  return {
+    left: il - mc.left,
+    top: it - mc.top,
+    right: ir - mc.left,
+    bottom: ib - mc.top,
+  }
+}
+
+/** 仓库相关 UI：点击弹窗、左侧比价面板、左下角操作条（与冶炼厂比价 tooltip 不同层，需参与避让） */
+function emapWarehouseObstacleRectsForRankTips(map: L.Map): EmapRankTipRect[] {
+  const out: EmapRankTipRect[] = []
+  const pane = map.getPane('popupPane')
+  if (pane) {
+    const r = emapElementClippedToMapFrame(map, pane.querySelector('.leaflet-popup') as HTMLElement | null)
+    if (r) out.push(r)
+  }
+  const wrap = mapWrapRef.value
+  if (wrap) {
+    const panel = emapElementClippedToMapFrame(map, wrap.querySelector('.emap-cmp-panel') as HTMLElement | null)
+    if (panel) out.push(panel)
+    const fl = emapElementClippedToMapFrame(map, wrap.querySelector('.emap-floating-actions') as HTMLElement | null)
+    if (fl) out.push(fl)
+  }
+  return out
+}
+
+function bumpEmapRankTooltip(tip: L.Tooltip): boolean {
+  const meta = emapRankTipLayoutMeta.get(tip)
+  if (!meta) return false
+  const [dx, dy] = EMAP_RANK_TIP_SPIRAL_DELTAS[meta.spiral % EMAP_RANK_TIP_SPIRAL_DELTAS.length]!
+  meta.spiral += 1
+  meta.bump = L.point(meta.bump.x + dx, meta.bump.y + dy)
+  tip.options.offset = L.point(meta.base.x + meta.bump.x, meta.base.y + meta.bump.y)
+  tip.update()
+  return true
+}
+
+/** 将 Leaflet 打开的点位弹窗整体挪开，避免盖住比价冶炼厂常驻 tip（仅挪弹窗，不依赖 tip 避让） */
+const EMAP_POPUP_NUDGE_SPIRAL: readonly [number, number][] = [
+  [16, -12],
+  [-16, -12],
+  [16, 12],
+  [-16, 12],
+  [24, 0],
+  [-24, 0],
+  [0, -20],
+  [0, 20],
+  [32, -14],
+  [-32, -14],
+  [28, 18],
+  [-28, 18],
+  [0, -28],
+  [36, 0],
+  [-36, 0],
+]
+
+function emapPopupOffsetAsPoint(pop: L.Popup): L.Point {
+  const o = pop.options.offset
+  if (o == null) return L.point(0, 0)
+  if (Array.isArray(o)) return L.point(Number(o[0]), Number(o[1]))
+  const pt = o as L.Point
+  return L.point(pt.x, pt.y)
+}
+
+function nudgeOpenLeafletPopupAwayFromEmapRankTips(map: L.Map, popup?: L.Popup): void {
+  const pop =
+    popup ?? ((map as unknown as { _popup?: L.Popup })._popup as L.Popup | undefined)
+  if (!pop || typeof pop.update !== 'function') return
+
+  const pad = 10
+  for (let iter = 0; iter < 30; iter++) {
+    const el = pop.getElement() as HTMLElement | null
+    if (!el || !el.getClientRects().length) return
+    const pr = emapElementClippedToMapFrame(map, el)
+    if (!pr) return
+
+    const tipEls: HTMLElement[] = []
+    for (const paneName of [emapRankComparisonTipPaneName, 'tooltipPane']) {
+      const root = map.getPane(paneName)
+      if (!root) continue
+      root.querySelectorAll('.leaflet-tooltip.emap-rank-tip').forEach((n) => tipEls.push(n as HTMLElement))
+    }
+    let overlapping = false
+    for (const te of tipEls) {
+      const tr = emapElementClippedToMapFrame(map, te as HTMLElement)
+      if (tr && emapRankTipRectsOverlap(pr, tr, pad)) {
+        overlapping = true
+        break
+      }
+    }
+    if (!overlapping) return
+
+    const [dx, dy] = EMAP_POPUP_NUDGE_SPIRAL[iter % EMAP_POPUP_NUDGE_SPIRAL.length]!
+    const o = emapPopupOffsetAsPoint(pop)
+    pop.options.offset = L.point(o.x + dx, o.y + dy)
+    pop.update()
+  }
+}
+
+function resolveEmapRankTipOverlaps(map: L.Map, tipLayer: L.LayerGroup): void {
+  const tips: L.Tooltip[] = []
+  tipLayer.eachLayer((ly) => {
+    if (ly instanceof L.Tooltip) tips.push(ly)
+  })
+  if (!tips.length) return
+
+  const obstacles0 = emapWarehouseObstacleRectsForRankTips(map)
+  if (tips.length < 2 && !obstacles0.length) return
+
+  const padObstacle = 7
+  const padTip = 5
+  const maxPass = 56
+
+  for (let pass = 0; pass < maxPass; pass++) {
+    const obstacles = emapWarehouseObstacleRectsForRankTips(map)
+    const rects = tips.map((tip) => {
+      const el = tip.getElement() as HTMLElement | null
+      if (!el) return null
+      return emapRankTipRectInMapFrame(map, el)
+    })
+
+    let bumped = false
+
+    obstaclePass: for (const obs of obstacles) {
+      for (let i = 0; i < tips.length; i++) {
+        const ri = rects[i]
+        if (!ri) continue
+        if (!emapRankTipRectsOverlap(ri, obs, padObstacle)) continue
+        if (bumpEmapRankTooltip(tips[i]!)) {
+          bumped = true
+          break obstaclePass
+        }
+      }
+    }
+
+    if (!bumped) {
+      for (let i = 0; i < tips.length; i++) {
+        for (let j = 0; j < i; j++) {
+          const ri = rects[i]
+          const rj = rects[j]
+          if (!ri || !rj) continue
+          if (!emapRankTipRectsOverlap(ri, rj, padTip)) continue
+
+          const mi = emapRankTipLayoutMeta.get(tips[i]!)
+          const mj = emapRankTipLayoutMeta.get(tips[j]!)
+          if (!mi || !mj) continue
+
+          const moveI = mi.rank > mj.rank || (mi.rank === mj.rank && mi.listIdx > mj.listIdx)
+          const targetTip = moveI ? tips[i]! : tips[j]!
+          if (bumpEmapRankTooltip(targetTip)) {
+            bumped = true
+            break
+          }
+        }
+        if (bumped) break
+      }
+    }
+
+    if (!bumped) break
+  }
+}
+
+function startEmapRankTipLayoutHandlers(map: L.Map, tipLayer: L.LayerGroup): void {
+  stopEmapRankTipLayoutHandlers()
+  const run = () => {
+    if (!mapRef.value || !topTipLayerRef.value) return
+    resolveEmapRankTipOverlaps(mapRef.value, topTipLayerRef.value)
+  }
+  const schedule = () => {
+    if (emapRankTipLayoutDebounceTimer != null) clearTimeout(emapRankTipLayoutDebounceTimer)
+    emapRankTipLayoutDebounceTimer = setTimeout(() => {
+      emapRankTipLayoutDebounceTimer = null
+      run()
+    }, 85)
+  }
+  const onPopupOpen = () => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(run)
+    })
+  }
+  map.on('zoomend', schedule)
+  map.on('moveend', schedule)
+  map.on('popupopen', onPopupOpen)
+  emapRankTipLayoutOff = () => {
+    map.off('zoomend', schedule)
+    map.off('moveend', schedule)
+    map.off('popupopen', onPopupOpen)
+    if (emapRankTipLayoutDebounceTimer != null) {
+      clearTimeout(emapRankTipLayoutDebounceTimer)
+      emapRankTipLayoutDebounceTimer = null
+    }
+  }
+  requestAnimationFrame(() => {
+    resolveEmapRankTipOverlaps(map, tipLayer)
+  })
+}
+
+function runEmapRankTipOverlapLayoutNow(): void {
+  const map = mapRef.value
+  const tipLayer = topTipLayerRef.value
+  if (!map || !tipLayer) return
+  let n = 0
+  tipLayer.eachLayer((ly) => {
+    if (ly instanceof L.Tooltip) n += 1
+  })
+  if (!n) return
+  resolveEmapRankTipOverlaps(map, tipLayer)
+}
+
+function scheduleEmapRankTipOverlapFromUi(): void {
+  if (emapRankTipUiLayoutTimer != null) clearTimeout(emapRankTipUiLayoutTimer)
+  emapRankTipUiLayoutTimer = setTimeout(() => {
+    emapRankTipUiLayoutTimer = null
+    runEmapRankTipOverlapLayoutNow()
+  }, 75)
+}
+
+watch(
+  [comparisonModalVisible, comparisonSectionCollapsed, forecastSectionCollapsed, selectedWarehouse],
+  () => {
+    void nextTick(() => scheduleEmapRankTipOverlapFromUi())
+  },
+)
+
 function activeRow(row: Record<string, unknown>): boolean {
   const st = row.status ?? row['状态']
   if (st === 0 || st === '0') return false
@@ -1974,10 +2423,52 @@ function formatNum(n: number): string {
   return toDisplayNum(n).toLocaleString('zh-CN', { maximumFractionDigits: 2 })
 }
 
-/** 与嵌入页 Ut() 一致：明细行取价口径 */
+/** 明细行 `冶炼厂循融宝发货`：1 表示该厂在库里开了循融宝 */
+function detailRowXunRongBaoOn(row: Record<string, unknown>): boolean {
+  const v = row['冶炼厂循融宝发货']
+  return v === 1 || v === '1'
+}
+
+function detailRowXunRongBaoSurcharge(row: Record<string, unknown>): number | null {
+  return pickNumber(row, ['循融宝加价元每吨'])
+}
+
+/**
+ * 循融宝厂：金额类字段优先读 `含循融宝` 子对象（与接口「含循融宝」口径一致）；子对象缺字段时再回退顶层。
+ * 品类名、吨数等仍用外层 `row`。
+ */
+function comparisonDetailValueSource(row: Record<string, unknown>): Record<string, unknown> {
+  if (!detailRowXunRongBaoOn(row)) return row
+  const branch = row['含循融宝']
+  if (branch != null && typeof branch === 'object' && !Array.isArray(branch)) {
+    return branch as Record<string, unknown>
+  }
+  return row
+}
+
+/** 循融宝明细行上 `不含循融宝` 子对象；非循融宝或无对象时为 `null` */
+function comparisonDetailExcludedValueSource(row: Record<string, unknown>): Record<string, unknown> | null {
+  if (!detailRowXunRongBaoOn(row)) return null
+  const branch = row['不含循融宝']
+  if (branch != null && typeof branch === 'object' && !Array.isArray(branch)) {
+    return branch as Record<string, unknown>
+  }
+  return null
+}
+
+/** 从明细行取数：`含循融宝` 优先，否则顶层（见 comparisonDetailValueSource） */
+function pickNumberComparisonDetail(row: Record<string, unknown>, keys: string[]): number | null {
+  const src = comparisonDetailValueSource(row)
+  const a = pickNumber(src, keys)
+  if (a != null && Number.isFinite(a)) return a
+  if (src !== row) return pickNumber(row, keys)
+  return null
+}
+
+/** 与嵌入页 Ut() 一致：明细行取价口径（循融宝厂优先 `含循融宝`） */
 function pickDetailUnitPrice(row: Record<string, unknown>, priceMode: 'base' | 'tax3'): number | null {
   if (priceMode === 'tax3') {
-    return pickNumber(row, [
+    return pickNumberComparisonDetail(row, [
       '含3%税价',
       '3%含税价',
       '含税价',
@@ -1989,7 +2480,35 @@ function pickDetailUnitPrice(row: Record<string, unknown>, priceMode: 'base' | '
       '3pct_price',
     ])
   }
-  return pickNumber(row, [
+  return pickNumberComparisonDetail(row, [
+    '单价',
+    '基准价',
+    '报价',
+    'unit_price',
+    '最优价',
+    '不含税价',
+    'base_price',
+  ])
+}
+
+/** 仅读 `不含循融宝` 子对象（循融宝厂拆行用） */
+function pickDetailUnitPriceExcluded(row: Record<string, unknown>, priceMode: 'base' | 'tax3'): number | null {
+  const ex = comparisonDetailExcludedValueSource(row)
+  if (!ex) return null
+  if (priceMode === 'tax3') {
+    return pickNumber(ex, [
+      '含3%税价',
+      '3%含税价',
+      '含税价',
+      '单价',
+      '基准价',
+      '报价',
+      'unit_price',
+      '最优价',
+      '3pct_price',
+    ])
+  }
+  return pickNumber(ex, [
     '单价',
     '基准价',
     '报价',
@@ -2067,6 +2586,167 @@ function formatComparisonNetProfitCell(row: ComparisonRankItem): string {
   return `¥ ${toDisplayNum(row.netProfit).toLocaleString('zh-CN')}`
 }
 
+function comparisonXunRongBaoTitle(row: ComparisonRankItem): string {
+  if (row.xunRongBaoExcludedPricing) {
+    return '本行为不含循融宝口径（来自接口「不含循融宝」对象）；运费与含循融宝行一致。'
+  }
+  const n = row.xunRongBaoSurchargeYuanPerTon
+  const suffix = '列表金额与排序为含循融宝口径（与接口顶层字段一致）。'
+  if (n != null && Number.isFinite(n)) {
+    return `${n} 元/吨（在不含税基准上加价后重算含税列）；${suffix}`
+  }
+  return `该冶炼厂已开循融宝。${suffix}`
+}
+
+function detailRowsForSmelterName(
+  smelter: string,
+  detailRows: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  const s = smelter.trim()
+  if (!s) return []
+  return detailRows.filter((row) => {
+    const name = pickStr(row, [
+      '冶炼厂',
+      'smelter',
+      'smelter_name',
+      '冶炼厂名',
+      'factory_name',
+      'name',
+    ])
+    if (!name) return false
+    return name === s || name.includes(s) || s.includes(name)
+  })
+}
+
+/** 循融宝厂：在「含循融宝」行后追加一行「不含循融宝」聚合；最后统一按利润重排 */
+function buildExcludedComparisonRankFromDetails(
+  base: ComparisonRankItem,
+  detailRows: Record<string, unknown>[],
+  priceMode: 'base' | 'tax3',
+): ComparisonRankItem | null {
+  const rows = detailRowsForSmelterName(base.smelter, detailRows)
+  if (!rows.length) return null
+  if (!rows.some(detailRowXunRongBaoOn)) return null
+  if (!rows.some((row) => comparisonDetailExcludedValueSource(row))) return null
+
+  const categoryPrices: Record<string, number | null> = {}
+  let totalRecovery = 0
+  let totalFreight = 0
+  let qtySum = 0
+  let unitNum = 0
+  let unitDen = 0
+  let strictLineNum = 0
+  let strictLineDen = 0
+  let strictFpuNum = 0
+  let strictFpuDen = 0
+
+  for (const row of rows) {
+    if (!detailRowXunRongBaoOn(row)) continue
+    const ex = comparisonDetailExcludedValueSource(row)
+    if (!ex) continue
+    const cat = pickStr(row, ['品类', 'category', '品种', '产品品种', 'category_name']) || '—'
+    const upDetail = pickDetailUnitPriceExcluded(row, priceMode)
+    categoryPrices[cat] = upDetail != null && Number.isFinite(upDetail) ? upDetail : null
+    const qty = pickNumber(row, ['吨数', 'quantity', 'qty', '需求吨数', 'weight']) ?? 0
+    const qtyEff = Math.max(0, qty)
+    const up = pickNumber(ex, ['单价', '基准价', '含3%税价', '报价', 'unit_price', '最优价'])
+    const tot = pickNumber(ex, ['总价', '报价金额', '物料总价', 'total_recovery', 'material_sum'])
+    const tf = pickNumber(ex, ['总运费', '运费合计'])
+    if (tot != null && Number.isFinite(tot)) totalRecovery += tot
+    else if (up != null && qty > 0) totalRecovery += up * qty
+    if (tf != null && Number.isFinite(tf)) totalFreight += tf
+    qtySum += qtyEff
+    if (up != null && qty > 0) {
+      unitNum += up * qty
+      unitDen += qty
+    }
+    const strictLine = pickNumber(ex, ['单价'])
+    if (strictLine != null && Number.isFinite(strictLine) && qtyEff > 0) {
+      strictLineNum += strictLine * qtyEff
+      strictLineDen += qtyEff
+    }
+    const strictFpu = pickNumber(ex, ['运费单价', 'freight_per_ton'])
+    if (strictFpu != null && Number.isFinite(strictFpu) && qtyEff > 0) {
+      strictFpuNum += strictFpu * qtyEff
+      strictFpuDen += qtyEff
+    }
+  }
+
+  if (qtySum <= 0 && totalRecovery <= 0 && strictLineDen <= 0) return null
+
+  const firstExRow = rows.find((r) => detailRowXunRongBaoOn(r) && comparisonDetailExcludedValueSource(r))
+  let netProfit = totalRecovery - totalFreight
+  if (firstExRow) {
+    const ex0 = comparisonDetailExcludedValueSource(firstExRow)
+    if (ex0) {
+      const p =
+        priceMode === 'tax3'
+          ? pickNumber(ex0, ['利润_含3%', '利润'])
+          : pickNumber(ex0, ['利润_基准', '利润'])
+      if (p != null && Number.isFinite(p)) netProfit = p
+    }
+  }
+
+  const unitPrice =
+    unitDen > 0
+      ? unitNum / unitDen
+      : (() => {
+          const r0 = rows.find((r) => detailRowXunRongBaoOn(r) && comparisonDetailExcludedValueSource(r))
+          const ex = r0 ? comparisonDetailExcludedValueSource(r0) : null
+          return ex ? pickNumber(ex, ['单价', '基准价', '报价']) ?? 0 : 0
+        })()
+
+  return {
+    rank: base.rank,
+    smelter: base.smelter,
+    unitPrice: toDisplayNum(unitPrice),
+    netProfit: toDisplayNum(netProfit),
+    totalRecovery: toDisplayNum(totalRecovery),
+    totalFreight: toDisplayNum(totalFreight),
+    qtySum: toDisplayNum(qtySum),
+    categoryPrices,
+    lineUnitPrice: strictLineDen > 0 ? toDisplayNum(strictLineNum / strictLineDen) : undefined,
+    freightUnitPrice: strictFpuDen > 0 ? toDisplayNum(strictFpuNum / strictFpuDen) : undefined,
+    xunRongBao: false,
+    xunRongBaoExcludedPricing: true,
+  }
+}
+
+function expandComparisonRanksWithXunRongBaoExcludedRows(
+  ranks: ComparisonRankItem[],
+  detailRows: Record<string, unknown>[],
+  priceMode: 'base' | 'tax3',
+): ComparisonRankItem[] {
+  if (!detailRows.length) return ranks
+  const out: ComparisonRankItem[] = []
+  for (const r of ranks) {
+    if (r.xunRongBaoExcludedPricing) {
+      out.push(r)
+      continue
+    }
+    const exRow = buildExcludedComparisonRankFromDetails(r, detailRows, priceMode)
+    if (exRow) {
+      out.push(r.xunRongBao ? r : { ...r, xunRongBao: true })
+      out.push(exRow)
+      continue
+    }
+    out.push(r)
+  }
+  return out
+}
+
+/** 比价表：按利润降序重编排名（含/不含循融宝拆行参与同一排序） */
+function rerankComparisonByProfitDesc(items: ComparisonRankItem[]): ComparisonRankItem[] {
+  const sorted = [...items].sort((a, b) => {
+    if (b.netProfit !== a.netProfit) return b.netProfit - a.netProfit
+    const aw = a.xunRongBao ? 1 : 0
+    const bw = b.xunRongBao ? 1 : 0
+    if (bw !== aw) return bw - aw
+    return a.rank - b.rank
+  })
+  return sorted.map((x, i) => ({ ...x, rank: i + 1 }))
+}
+
 function openComparisonCellDetail(label: string, text: string) {
   const t = String(text ?? '').trim()
   if (!t) return
@@ -2078,6 +2758,7 @@ function closeComparisonCellDetail() {
 }
 
 function clearMapComparisonGraphicsOnly() {
+  stopEmapRankTipLayoutHandlers()
   cancelFlowOverlayAnimations()
   stopFlowAnimations()
   flowLayerRef.value?.clearLayers()
@@ -2307,6 +2988,7 @@ function attachFlowMoverAlongCurve(
       iconAnchor: [18, 10],
     }),
     interactive: false,
+    pane: emapComparisonFlowPaneName,
   }).addTo(flowLayer)
   let start = performance.now()
   const step = () => {
@@ -2453,15 +3135,30 @@ function mergeComparisonRanksWithDetailRows(
     let strictLineDen = 0
     let strictFpuNum = 0
     let strictFpuDen = 0
+    let xunRongBao = false
+    let xunRongBaoSurchargeYuanPerTon: number | null = null
     for (const row of rows) {
       const cat = pickStr(row, ['品类', 'category', '品种', '产品品种', 'category_name']) || '—'
       const upDetail = pickDetailUnitPrice(row, priceMode)
       categoryPrices[cat] = upDetail != null && Number.isFinite(upDetail) ? upDetail : null
       const qty = pickNumber(row, ['吨数', 'quantity', 'qty', '需求吨数', 'weight']) ?? 0
       const qtyEff = Math.max(0, qty)
-      const up = pickNumber(row, ['单价', '基准价', '含3%税价', '报价', 'unit_price', '最优价'])
-      const tot = pickNumber(row, ['总价', '报价金额', '物料总价', 'total_recovery', 'material_sum'])
-      const tf = pickNumber(row, ['总运费', '运费合计'])
+      const up = pickNumberComparisonDetail(row, [
+        '单价',
+        '基准价',
+        '含3%税价',
+        '报价',
+        'unit_price',
+        '最优价',
+      ])
+      const tot = pickNumberComparisonDetail(row, [
+        '总价',
+        '报价金额',
+        '物料总价',
+        'total_recovery',
+        'material_sum',
+      ])
+      const tf = pickNumberComparisonDetail(row, ['总运费', '运费合计'])
       if (tot != null && Number.isFinite(tot)) totalRecovery += tot
       else if (up != null && qty > 0) totalRecovery += up * qty
       if (tf != null && Number.isFinite(tf)) totalFreight += tf
@@ -2470,19 +3167,28 @@ function mergeComparisonRanksWithDetailRows(
         unitNum += up * qty
         unitDen += qty
       }
-      const strictLine = pickNumber(row, ['单价'])
+      const strictLine = pickNumberComparisonDetail(row, ['单价'])
       if (strictLine != null && Number.isFinite(strictLine) && qtyEff > 0) {
         strictLineNum += strictLine * qtyEff
         strictLineDen += qtyEff
       }
-      const strictFpu = pickNumber(row, ['运费单价', 'freight_per_ton'])
+      const strictFpu = pickNumberComparisonDetail(row, ['运费单价', 'freight_per_ton'])
       if (strictFpu != null && Number.isFinite(strictFpu) && qtyEff > 0) {
         strictFpuNum += strictFpu * qtyEff
         strictFpuDen += qtyEff
       }
+      if (detailRowXunRongBaoOn(row)) {
+        xunRongBao = true
+        const s = detailRowXunRongBaoSurcharge(row)
+        if (xunRongBaoSurchargeYuanPerTon == null && s != null && Number.isFinite(s)) {
+          xunRongBaoSurchargeYuanPerTon = s
+        }
+      }
     }
     const unitPrice =
-      unitDen > 0 ? unitNum / unitDen : (pickNumber(rows[0]!, ['单价', '基准价', '报价']) ?? 0)
+      unitDen > 0
+        ? unitNum / unitDen
+        : (pickNumberComparisonDetail(rows[0] as Record<string, unknown>, ['单价', '基准价', '报价']) ?? 0)
     return {
       ...r,
       categoryPrices,
@@ -2492,6 +3198,7 @@ function mergeComparisonRanksWithDetailRows(
       qtySum: toDisplayNum(qtySum),
       lineUnitPrice: strictLineDen > 0 ? toDisplayNum(strictLineNum / strictLineDen) : undefined,
       freightUnitPrice: strictFpuDen > 0 ? toDisplayNum(strictFpuNum / strictFpuDen) : undefined,
+      ...(xunRongBao ? { xunRongBao: true, xunRongBaoSurchargeYuanPerTon } : {}),
     }
   })
 }
@@ -2543,26 +3250,35 @@ function parseRankRowsLoose(
     ])
     const netProfitRaw =
       priceMode === 'tax3'
-        ? (pickNumber(row, ['利润_含3%', '利润']) ?? 0)
-        : (pickNumber(row, ['利润_基准', '利润']) ?? 0)
-    const hasProfitLike = pickNumber(row, [
-      '利润',
-      '利润_基准',
-      '利润_含3%',
-      '净收益',
-      'profit',
-    ]) != null
+        ? (pickNumberComparisonDetail(row, ['利润_含3%', '利润']) ?? 0)
+        : (pickNumberComparisonDetail(row, ['利润_基准', '利润']) ?? 0)
+    const hasProfitLike =
+      pickNumberComparisonDetail(row, ['利润', '利润_基准', '利润_含3%', '净收益', 'profit']) != null
     if (!smelter || !hasProfitLike) continue
     fallback += 1
     const rank = pickNumber(row, ['排名', '排行', '排序', 'rank', '名次']) ?? fallback
     const netProfit = netProfitRaw
     const totalRecovery =
-      pickNumber(row, ['总价', '总回收价', '回收额', '物料总价', 'total_recovery', 'material_sum']) ?? 0
+      pickNumberComparisonDetail(row, [
+        '总价',
+        '总回收价',
+        '回收额',
+        '物料总价',
+        'total_recovery',
+        'material_sum',
+      ]) ?? 0
     const totalFreight =
-      pickNumber(row, ['总运费', '运费合计', '估算运费', '运费单价', '运费/吨', 'freight_per_ton', 'freight']) ??
-      0
+      pickNumberComparisonDetail(row, [
+        '总运费',
+        '运费合计',
+        '估算运费',
+        '运费单价',
+        '运费/吨',
+        'freight_per_ton',
+        'freight',
+      ]) ?? 0
     const qtySum = pickNumber(row, ['吨数', 'quantity', 'qty', '需求吨数']) ?? 0
-    const unitPriceRaw = pickNumber(row, [
+    const unitPriceRaw = pickNumberComparisonDetail(row, [
       '单价',
       '回收单价',
       'unit_price',
@@ -2572,8 +3288,8 @@ function parseRankRowsLoose(
       '3%含税价',
     ])
     const unitPrice = unitPriceRaw != null ? unitPriceRaw : qtySum > 0 ? totalRecovery / qtySum : 0
-    const strictLineUp = pickNumber(row, ['单价'])
-    const strictFpu = pickNumber(row, ['运费单价', 'freight_per_ton'])
+    const strictLineUp = pickNumberComparisonDetail(row, ['单价'])
+    const strictFpu = pickNumberComparisonDetail(row, ['运费单价', 'freight_per_ton'])
     out.push({
       rank,
       smelter,
@@ -2603,26 +3319,32 @@ function rankingsFromComparisonResponse(
   )
   if (fromApi.length) {
     const mergedTop = mergeComparisonRanksWithDetailRows(fromApi, detailRows, priceMode)
-    if (!detailRows.length) return rerankSequentially(mergedTop)
+    if (!detailRows.length) return rerankComparisonByProfitDesc(mergedTop)
     // 有些接口只返回前几名排行；其余冶炼厂从明细聚合补齐，便于“展示全部比价线”绘制全量流向
     const allFromDetail = aggregateComparisonRows(detailRows, priceMode)
     const existed = new Set(mergedTop.map((x) => x.smelter.trim()))
     const extras = allFromDetail.filter((x) => !existed.has(x.smelter.trim()))
-    return rerankSequentially([...mergedTop, ...extras])
+    const combined = [...mergedTop, ...extras]
+    return rerankComparisonByProfitDesc(
+      expandComparisonRanksWithXunRongBaoExcludedRows(combined, detailRows, priceMode),
+    )
   }
   for (const rows of walkObjectArraysDeep(payload ?? raw)) {
     const parsed = parseRankRowsLoose(rows, priceMode)
     if (parsed.length) {
-      return rerankSequentially(mergeComparisonRanksWithDetailRows(parsed, detailRows, priceMode))
+      const merged = mergeComparisonRanksWithDetailRows(parsed, detailRows, priceMode)
+      return rerankComparisonByProfitDesc(
+        expandComparisonRanksWithXunRongBaoExcludedRows(merged, detailRows, priceMode),
+      )
     }
   }
-  return aggregateComparisonRows(detailRows, priceMode)
-}
-
-/** 后端若已带 rank，仍按排序重编号，避免间断 */
-function rerankSequentially(items: ComparisonRankItem[]): ComparisonRankItem[] {
-  const sorted = [...items].sort((a, b) => a.rank - b.rank || b.netProfit - a.netProfit)
-  return sorted.map((x, i) => ({ ...x, rank: i + 1 }))
+  return rerankComparisonByProfitDesc(
+    expandComparisonRanksWithXunRongBaoExcludedRows(
+      aggregateComparisonRows(detailRows, priceMode),
+      detailRows,
+      priceMode,
+    ),
+  )
 }
 
 function aggregateComparisonRows(
@@ -2643,17 +3365,26 @@ function aggregateComparisonRows(
       strictLineDen: number
       strictFpuNum: number
       strictFpuDen: number
+      xunRongBao: boolean
+      xunRongBaoSurchargeYuanPerTon: number | null
     }
   >()
   for (const row of rows) {
     const smelter =
       pickStr(row, ['smelter_name', '冶炼厂', '冶炼厂名', 'smelter', 'factory_name']) || '未知冶炼厂'
     const unitPrice =
-      pickNumber(row, ['unit_price', '单价', '最优价', '价格', 'price', 'base_price', '不含税价', '3pct_price']) ??
-      0
-    const freight =
-      pickNumber(row, ['freight_per_ton', '运费单价', 'freight', '运费每吨']) ?? 0
-    const lineTotalFreight = pickNumber(row, ['总运费', '运费合计'])
+      pickNumberComparisonDetail(row, [
+        'unit_price',
+        '单价',
+        '最优价',
+        '价格',
+        'price',
+        'base_price',
+        '不含税价',
+        '3pct_price',
+      ]) ?? 0
+    const freight = pickNumberComparisonDetail(row, ['freight_per_ton', '运费单价', 'freight', '运费每吨']) ?? 0
+    const lineTotalFreight = pickNumberComparisonDetail(row, ['总运费', '运费合计'])
     const qty = pickNumber(row, ['quantity', '吨数', '数量', 'qty', 'weight', '需求吨数']) ?? 1
     const key = smelter
     if (!grouped.has(key)) {
@@ -2669,6 +3400,8 @@ function aggregateComparisonRows(
         strictLineDen: 0,
         strictFpuNum: 0,
         strictFpuDen: 0,
+        xunRongBao: false,
+        xunRongBaoSurchargeYuanPerTon: null,
       })
     }
     const g = grouped.get(key)!
@@ -2681,15 +3414,22 @@ function aggregateComparisonRows(
     g.freightCount += 1
     if (lineTotalFreight != null && Number.isFinite(lineTotalFreight)) g.totalFreightSum += lineTotalFreight
     g.qtySum += qtyEff
-    const strictLine = pickNumber(row, ['单价'])
+    const strictLine = pickNumberComparisonDetail(row, ['单价'])
     if (strictLine != null && Number.isFinite(strictLine) && qtyEff > 0) {
       g.strictLineNum += strictLine * qtyEff
       g.strictLineDen += qtyEff
     }
-    const strictFpuOnly = pickNumber(row, ['运费单价', 'freight_per_ton'])
+    const strictFpuOnly = pickNumberComparisonDetail(row, ['运费单价', 'freight_per_ton'])
     if (strictFpuOnly != null && Number.isFinite(strictFpuOnly) && qtyEff > 0) {
       g.strictFpuNum += strictFpuOnly * qtyEff
       g.strictFpuDen += qtyEff
+    }
+    if (detailRowXunRongBaoOn(row)) {
+      g.xunRongBao = true
+      const s = detailRowXunRongBaoSurcharge(row)
+      if (g.xunRongBaoSurchargeYuanPerTon == null && s != null && Number.isFinite(s)) {
+        g.xunRongBaoSurchargeYuanPerTon = s
+      }
     }
   }
   return [...grouped.values()]
@@ -2706,8 +3446,8 @@ function aggregateComparisonRows(
       if (sample) {
         const backendProfit =
           priceMode === 'tax3'
-            ? pickNumber(sample, ['利润_含3%', '利润'])
-            : pickNumber(sample, ['利润_基准', '利润'])
+            ? pickNumberComparisonDetail(sample, ['利润_含3%', '利润'])
+            : pickNumberComparisonDetail(sample, ['利润_基准', '利润'])
         if (backendProfit != null && Number.isFinite(backendProfit)) netProfit = backendProfit
       }
       const unitPrice = g.qtySum > 0 ? g.materialSum / g.qtySum : 0
@@ -2721,6 +3461,9 @@ function aggregateComparisonRows(
         categoryPrices: g.categoryPrices,
         lineUnitPrice: g.strictLineDen > 0 ? toDisplayNum(g.strictLineNum / g.strictLineDen) : undefined,
         freightUnitPrice: g.strictFpuDen > 0 ? toDisplayNum(g.strictFpuNum / g.strictFpuDen) : undefined,
+        ...(g.xunRongBao
+          ? { xunRongBao: true as const, xunRongBaoSurchargeYuanPerTon: g.xunRongBaoSurchargeYuanPerTon }
+          : {}),
       }
     })
     .sort((a, b) => b.netProfit - a.netProfit)
@@ -2773,9 +3516,46 @@ function linkOutboundTargetId(row: Record<string, unknown>): number | null {
   return null
 }
 
+/** 距离监测中点标签：浏览器原生 title（完整地址等） */
+function warehouseBindTargetPlainSummary(tgt: MapPoint): string {
+  const row = tgt.raw
+  const lines: string[] = [tgt.title]
+  const typeName = pickStr(row, ['类型', 'type', 'warehouse_type_name', '类型名']).trim()
+  if (typeName) lines.push(`类型：${typeName}`)
+  const pv = provinceFromRow(row).trim()
+  if (pv) lines.push(`省份：${pv}`)
+  const addr = addressText(row).trim()
+  if (addr) lines.push(`地址：${addr}`)
+  return lines.join('\n')
+}
+
+/** 距离监测常驻 tip 内容（与比价冶炼厂 tip 相同：锚在目标点 + Leaflet 箭头指向该点） */
+function warehouseBindMidpointLabelHtml(kmStr: string, tgt: MapPoint): string {
+  const row = tgt.raw
+  const metaBits: string[] = []
+  const typeName = pickStr(row, ['类型', 'type', 'warehouse_type_name', '类型名']).trim()
+  if (typeName) metaBits.push(`类型：${escapeHtml(typeName)}`)
+  const pv = provinceFromRow(row).trim()
+  if (pv) metaBits.push(`省份：${escapeHtml(pv)}`)
+  const addr = addressText(row).trim()
+  if (addr) {
+    const short = addr.length > 56 ? `${addr.slice(0, 55)}…` : addr
+    metaBits.push(`地址：${escapeHtml(short)}`)
+  }
+  const meta =
+    metaBits.length > 0
+      ? `<div class="emap-wh-bind-dist-meta">${metaBits.join('<br/>')}</div>`
+      : ''
+  const titleAttr = escapeHtml(warehouseBindTargetPlainSummary(tgt).replace(/\n/g, ' — '))
+  return `<div class="emap-wh-bind-dist-tip-inner" title="${titleAttr}"><div class="emap-wh-bind-dist-km">${escapeHtml(
+    kmStr,
+  )}</div><div class="emap-wh-bind-dist-target">→ ${escapeHtml(tgt.title)}</div>${meta}</div>`
+}
+
 async function drawWarehouseBindingDistanceLines(warehouse: MapPoint) {
   const flowLayer = flowLayerRef.value
-  if (!flowLayer) throw new Error('地图流向图层未初始化，请刷新页面后重试')
+  const tipLayer = topTipLayerRef.value
+  if (!flowLayer || !tipLayer) throw new Error('地图流向图层未初始化，请刷新页面后重试')
   const distanceRenderer = L.svg({ padding: 0.5, pane: distanceLinePaneName })
   const whId = warehouseNumericIdFromRow(warehouse.raw)
   if (whId == null) throw new Error('该库房缺少仓库 id，无法查询绑定')
@@ -2821,18 +3601,19 @@ async function drawWarehouseBindingDistanceLines(warehouse: MapPoint) {
       const m = greatCircleDistanceMeters(warehouse.lat, warehouse.lng, tgt.lat, tgt.lng)
       kmStr = `${(m / 1000).toFixed(2)} km`
     }
-    const midLat = (warehouse.lat + tgt.lat) / 2
-    const midLng = (warehouse.lng + tgt.lng) / 2
-    L.marker([midLat, midLng], {
-      icon: L.divIcon({
-        className: 'emap-wh-bind-dist-marker',
-        html: `<div class="emap-wh-bind-dist-label">${escapeHtml(kmStr)}</div>`,
-        iconSize: [72, 26],
-        iconAnchor: [36, 13],
-      }),
-      interactive: false,
-      pane: distanceLabelPaneName,
-    }).addTo(flowLayer)
+    const dir = emapRankTipDirectionForIdx(drawn)
+    const base = emapRankTipBasePixelOffset(dir, comparisonRankTipYOffset())
+    L.tooltip({
+      permanent: true,
+      direction: dir,
+      offset: base,
+      className: 'emap-wh-bind-dist-tip',
+      pane: emapRankComparisonTipPaneName,
+      opacity: 1,
+    })
+      .setLatLng([tgt.lat, tgt.lng])
+      .setContent(warehouseBindMidpointLabelHtml(kmStr, tgt))
+      .addTo(tipLayer)
     drawn++
   }
   if (!drawn) {
@@ -2866,23 +3647,29 @@ async function onWarehouseDistanceMonitorClick() {
 }
 
 function renderComparisonOverlay(warehouse: MapPoint, ranks: ComparisonRankItem[]) {
+  stopEmapRankTipLayoutHandlers()
   warehouseDistanceMonitorOn.value = false
   cancelFlowOverlayAnimations()
   stopFlowAnimations()
   const flowLayer = flowLayerRef.value
   const tipLayer = topTipLayerRef.value
   const flowRenderer = flowPathSvgRendererRef.value
+  const map = mapRef.value
   if (!flowLayer || !tipLayer) return
   flowLayer.clearLayers()
   tipLayer.clearLayers()
   const list = ranks.slice(0, MAX_MAP_FLOW_TARGETS)
   type FlowEntry = { row: ComparisonRankItem; listIdx: number; smelter: MapPoint }
   const entries: FlowEntry[] = []
+  const seenSmelterKey = new Set<string>()
   for (let i = 0; i < list.length; i++) {
     const row = list[i]!
+    const sk = row.smelter.trim()
+    if (seenSmelterKey.has(sk)) continue
+    seenSmelterKey.add(sk)
     const smelter = findSmelterPoint(row.smelter)
     if (!smelter) continue
-    entries.push({ row, listIdx: i, smelter })
+    entries.push({ row, listIdx: entries.length, smelter })
   }
   const visibleEntries = showAllComparisonFlows.value
     ? entries
@@ -2891,6 +3678,8 @@ function renderComparisonOverlay(warehouse: MapPoint, ranks: ComparisonRankItem[
   const back = visibleEntries.filter((e) => e.row.rank > 3)
   const front = visibleEntries.filter((e) => e.row.rank <= 3)
   const totalFlows = visibleEntries.length
+  const rankTipY = comparisonRankTipYOffset()
+  let rankTipsAdded = 0
   const drawOne = (e: FlowEntry) => {
     const { row, listIdx, smelter } = e
     const bend = comparisonFlowBend(listIdx, totalFlows)
@@ -2913,6 +3702,7 @@ function renderComparisonOverlay(warehouse: MapPoint, ranks: ComparisonRankItem[
       lineJoin: 'round' as const,
       className: palette.baseClass,
       interactive: false,
+      pane: emapComparisonFlowPaneName,
       ...rendererOpt,
     }
     const dashOpts = {
@@ -2924,6 +3714,7 @@ function renderComparisonOverlay(warehouse: MapPoint, ranks: ComparisonRankItem[
       dashArray: palette.dashArray,
       className: [palette.lineClass, staggerClass].filter(Boolean).join(' '),
       interactive: false,
+      pane: emapComparisonFlowPaneName,
       ...rendererOpt,
     }
     L.polyline(curve, baseOpts).addTo(flowLayer)
@@ -2931,25 +3722,45 @@ function renderComparisonOverlay(warehouse: MapPoint, ranks: ComparisonRankItem[
     if (palette.showMover) {
       attachFlowMoverAlongCurve(flowLayer, curve, 2200 + (listIdx % 4) * 280, palette.moverInnerClass)
     }
-    const tipClass =
-      row.rank <= 3 ? 'emap-rank-tip emap-rank-tip--top3' : 'emap-rank-tip emap-rank-tip--dim'
-    L.tooltip({
-      permanent: true,
-      direction: 'top',
-      offset: [0, -8],
-      className: tipClass,
-    })
-      .setLatLng([smelter.lat, smelter.lng])
-      .setContent(
-        `#${row.rank} ${escapeHtml(row.smelter)}<br/>利润: ${formatNum(row.netProfit)}<br/>总价: ${formatNum(row.totalRecovery)}<br/>总运费: ${formatNum(row.totalFreight)}`,
-      )
-      .addTo(tipLayer)
+    if (showComparisonSmelterInfo.value) {
+      const tipClass =
+        row.rank <= 3 ? 'emap-rank-tip emap-rank-tip--top3' : 'emap-rank-tip emap-rank-tip--dim'
+      const dir = emapRankTipDirectionForIdx(listIdx)
+      const base = emapRankTipBasePixelOffset(dir, rankTipY)
+      const tip = L.tooltip({
+        permanent: true,
+        direction: dir,
+        offset: base,
+        className: tipClass,
+        pane: emapRankComparisonTipPaneName,
+      })
+        .setLatLng([smelter.lat, smelter.lng])
+        .setContent(comparisonRankTipHtml(row))
+        .addTo(tipLayer)
+      emapRankTipLayoutMeta.set(tip, {
+        base,
+        rank: row.rank,
+        listIdx,
+        bump: L.point(0, 0),
+        spiral: 0,
+      })
+      rankTipsAdded += 1
+    }
   }
   for (const e of back) drawOne(e)
   for (const e of front) drawOne(e)
+  if (map && rankTipsAdded > 0) {
+    startEmapRankTipLayoutHandlers(map, tipLayer)
+  }
 }
 
 watch(showAllComparisonFlows, () => {
+  const wh = selectedWarehouse.value
+  if (!wh || !comparisonRanks.value.length || warehouseDistanceMonitorOn.value) return
+  renderComparisonOverlay(wh, comparisonRanks.value)
+})
+
+watch(showComparisonSmelterInfo, () => {
   const wh = selectedWarehouse.value
   if (!wh || !comparisonRanks.value.length || warehouseDistanceMonitorOn.value) return
   renderComparisonOverlay(wh, comparisonRanks.value)
@@ -3319,6 +4130,17 @@ async function runComparisonAndForecastForWarehouse(
   ])
 }
 
+/** 地图弹层/副标题展示：仅地址等，不含 id（兼容旧缓存「地址 · id: n」） */
+function mapPointSubtitleForDisplay(raw: Record<string, unknown>, legacySubtitle: string): string {
+  const addr = addressText(raw).trim()
+  if (addr) return addr
+  return legacySubtitle
+    .split(' · ')
+    .map((s) => s.trim())
+    .filter((part) => part && !/^id:\s*/i.test(part))
+    .join(' · ')
+}
+
 function reviveMapPointFromCache(p: unknown): MapPoint | null {
   if (!p || typeof p !== 'object') return null
   const o = p as Record<string, unknown>
@@ -3332,7 +4154,8 @@ function reviveMapPointFromCache(p: unknown): MapPoint | null {
       ? (o.raw as Record<string, unknown>)
       : {}
   const title = typeof o.title === 'string' ? o.title : String(o.title ?? '')
-  const subtitle = typeof o.subtitle === 'string' ? o.subtitle : String(o.subtitle ?? '')
+  const cachedSubtitle = typeof o.subtitle === 'string' ? o.subtitle : String(o.subtitle ?? '')
+  const subtitle = mapPointSubtitleForDisplay(raw, cachedSubtitle)
   if (o.kind === 'warehouse') {
     const pinColor = typeof o.pinColor === 'string' && o.pinColor.trim() ? o.pinColor : undefined
     return { kind: 'warehouse', id: o.id, title, subtitle, lat, lng, pinColor, raw }
@@ -3436,7 +4259,7 @@ async function loadAndPlot(ui: MarkersLoadUi = 'full') {
       if (!activeRow(row)) continue
       const title = warehouseLabel(row) || '库房'
       const id = warehouseId(row)
-      const subtitle = [addressText(row), `id: ${id}`].filter(Boolean).join(' · ')
+      const subtitle = addressText(row).trim()
       const pinColor = resolveWarehousePinColor(row, typeColorById)
       const coord = pickLatLng(row)
 
@@ -3458,7 +4281,7 @@ async function loadAndPlot(ui: MarkersLoadUi = 'full') {
       if (!activeRow(row)) continue
       const title = smelterLabel(row) || '冶炼厂'
       const id = smelterId(row)
-      const subtitle = [addressText(row), `id: ${id}`].filter(Boolean).join(' · ')
+      const subtitle = addressText(row).trim()
       const coord = pickLatLng(row)
 
       if (coord) {
@@ -3511,6 +4334,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('webkitfullscreenchange', onEmapFullscreenChange)
   dismissGeoNearestToast()
   dismissComparisonPrereqToast()
+  stopEmapRankTipLayoutHandlers()
   cancelFlowOverlayAnimations()
   stopFlowAnimations()
   if (forecastTrendResizeHandler) {
@@ -3813,14 +4637,29 @@ onBeforeUnmount(() => {
   bottom: 12px;
   z-index: 1000;
   display: flex;
+  flex-direction: column;
+  align-items: flex-start;
   gap: 8px;
-  flex-wrap: wrap;
+  max-width: min(520px, calc(100% - 24px));
+  box-sizing: border-box;
   background: rgba(6, 18, 40, 0.88);
   border: 1px solid rgba(34, 211, 238, 0.28);
   backdrop-filter: blur(12px);
   border-radius: 12px;
   padding: 9px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+}
+
+.emap-floating-actions-btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.emap-floating-actions-err {
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 .emap-map-tools-float {
@@ -4246,6 +5085,22 @@ onBeforeUnmount(() => {
   color: #e2e8f0;
 }
 
+/* 仅保留标题栏时收窄宽度，避免仍占满 720px */
+.emap-cmp-panel.emap-cmp-panel--compact {
+  width: fit-content;
+  max-width: min(420px, calc(100% - 24px));
+  overflow: hidden;
+}
+
+.emap-cmp-panel.emap-cmp-panel--compact .emap-cmp-panel-head {
+  margin-bottom: 0;
+}
+
+.emap-cmp-panel.emap-cmp-panel--compact .emap-cmp-panel-title {
+  flex: 0 1 auto;
+  max-width: min(220px, calc(100vw - 200px));
+}
+
 .emap-cmp-panel-head {
   display: flex;
   align-items: center;
@@ -4383,8 +5238,40 @@ onBeforeUnmount(() => {
 }
 
 .emap-cmp-table .emap-cmp-col-rank {
-  width: 2.75rem;
+  width: 3rem;
   white-space: nowrap;
+  vertical-align: middle;
+}
+
+/** 排名数字 + 循融宝时右上角圈「循」 */
+.emap-cmp-rank-wrap {
+  position: relative;
+  display: inline-block;
+  padding: 2px 10px 0 0;
+  min-height: 1.1em;
+}
+
+.emap-cmp-rank-num {
+  display: inline-block;
+}
+
+.emap-cmp-xrb-on-rank {
+  position: absolute;
+  top: -5px;
+  right: -2px;
+  width: 15px;
+  height: 15px;
+  box-sizing: border-box;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 13px;
+  text-align: center;
+  border-radius: 50%;
+  color: #e0f2fe;
+  background: rgba(14, 165, 233, 0.35);
+  border: 1px solid rgba(56, 189, 248, 0.75);
+  cursor: default;
+  user-select: none;
 }
 
 .emap-cmp-table .emap-cmp-col-smelter {
@@ -4979,26 +5866,90 @@ onBeforeUnmount(() => {
   border: none;
 }
 
-.emap-wh-bind-dist-marker {
-  background: transparent !important;
-  border: none !important;
+/* 与比价冶炼厂常驻 tip 相同：setLatLng 在目标库房 + direction/offset 轮询；紫色卡片 + Leaflet 三角指向锚点 */
+.leaflet-tooltip.emap-wh-bind-dist-tip {
+  padding: 0;
+  background: rgba(88, 28, 135, 0.92);
+  border: 1px solid rgba(216, 180, 254, 0.55);
+  color: #fae8ff;
+  border-radius: 10px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.38);
+  white-space: normal;
+  box-sizing: border-box;
+  /* 避免 content 上 min-width:0 等把盒宽压成极窄竖条 */
+  min-width: 232px;
+  max-width: min(288px, 92vw);
 }
 
-.emap-wh-bind-dist-label {
-  padding: 2px 8px;
-  border-radius: 8px;
+.leaflet-tooltip.emap-wh-bind-dist-tip .leaflet-tooltip-content-wrapper {
+  padding: 0;
+  background: transparent;
+  border-radius: 10px;
+  min-width: 232px;
+  max-width: min(288px, 92vw);
+  box-sizing: border-box;
+}
+
+.leaflet-tooltip.emap-wh-bind-dist-tip .leaflet-tooltip-content {
+  margin: 0;
+  padding: 6px 10px 8px;
+  box-sizing: border-box;
+  min-width: 232px;
+  max-width: min(288px, 92vw);
+}
+
+.leaflet-tooltip.emap-wh-bind-dist-tip.leaflet-tooltip-top:before {
+  border-top-color: rgba(88, 28, 135, 0.92);
+}
+
+.leaflet-tooltip.emap-wh-bind-dist-tip.leaflet-tooltip-bottom:before {
+  border-bottom-color: rgba(88, 28, 135, 0.92);
+}
+
+.leaflet-tooltip.emap-wh-bind-dist-tip.leaflet-tooltip-left:before {
+  border-left-color: rgba(88, 28, 135, 0.92);
+}
+
+.leaflet-tooltip.emap-wh-bind-dist-tip.leaflet-tooltip-right:before {
+  border-right-color: rgba(88, 28, 135, 0.92);
+}
+
+.emap-wh-bind-dist-tip-inner {
+  font-size: 10px;
+  font-weight: 500;
+  text-align: left;
+  line-height: 1.35;
+  overflow-wrap: break-word;
+  word-break: break-word;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.emap-wh-bind-dist-tip-inner .emap-wh-bind-dist-km {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  color: #fdf4ff;
+}
+
+.emap-wh-bind-dist-tip-inner .emap-wh-bind-dist-target {
   font-size: 11px;
-  font-weight: 600;
-  white-space: nowrap;
-  color: #fae8ff;
-  background: rgba(88, 28, 135, 0.9);
-  border: 1px solid rgba(216, 180, 254, 0.55);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+  font-weight: 700;
+  margin-bottom: 2px;
+  color: #ede9fe;
+}
+
+.emap-wh-bind-dist-tip-inner .emap-wh-bind-dist-meta {
+  font-size: 10px;
+  font-weight: 400;
+  opacity: 0.96;
+  margin-top: 2px;
+  color: #e9d5ff;
 }
 
 .emap-marker--warehouse .emap-pin-inner {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
   border: 1.5px solid #fff;
@@ -5007,24 +5958,31 @@ onBeforeUnmount(() => {
 }
 
 .emap-marker--warehouse .emap-pin-inner--dimmed {
-  opacity: 0.3;
-  filter: saturate(0.4) brightness(1.26);
-  border-color: rgba(255, 255, 255, 0.72);
+  opacity: 0.7;
+  filter: saturate(0.55) brightness(1.35);
+  border-color: rgba(255, 255, 255, 0.84);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
 }
 .emap-marker--smelter .emap-smelter-tri {
   width: 0;
   height: 0;
   margin: 0 auto;
-  border-left: 9px solid transparent;
-  border-right: 9px solid transparent;
-  border-bottom: 16px solid #c2410c;
+  border-left: 8px solid transparent;
+  border-right: 8px solid transparent;
+  border-bottom: 14px solid #c2410c;
   filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.28));
 }
 
+.emap-marker--smelter .emap-smelter-tri--large {
+  border-left-width: 16px;
+  border-right-width: 16px;
+  border-bottom-width: 28px;
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.32));
+}
+
 .emap-marker--smelter .emap-smelter-tri--dimmed {
-  opacity: 0.25;
-  filter: saturate(0.36) brightness(1.26) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.12));
+  opacity: 0.42;
+  filter: saturate(0.5) brightness(1.35) drop-shadow(0 1px 3px rgba(0, 0, 0, 0.12));
 }
 
 .emap-popup {
@@ -5226,6 +6184,81 @@ onBeforeUnmount(() => {
   line-height: 1.35;
   padding: 6px 8px;
   pointer-events: none !important;
+  overflow: visible;
+}
+
+.leaflet-tooltip.emap-rank-tip .leaflet-tooltip-content {
+  margin: 0;
+}
+
+.emap-rank-tip-inner {
+  position: relative;
+  padding: 2px 28px 0 2px;
+  min-width: 0;
+}
+
+.emap-rank-tip-badge {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 11px;
+  line-height: 1;
+  border: 2px solid rgba(15, 23, 42, 0.45);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+/* 与比价流向线 comparisonFlowPalette 主色一致：1 绿、2 橙、3 红；其余同 muted 灰白线 */
+.emap-rank-tip-badge--r1 {
+  background: linear-gradient(160deg, #6ee7b7 0%, #10b981 100%);
+  border-color: rgba(6, 95, 70, 0.55);
+  color: #064e3b;
+}
+
+.emap-rank-tip-badge--r2 {
+  background: linear-gradient(160deg, #fdba74 0%, #f97316 100%);
+  border-color: rgba(180, 83, 9, 0.55);
+  color: #7c2d12;
+}
+
+.emap-rank-tip-badge--r3 {
+  background: linear-gradient(160deg, #fca5a5 0%, #ef4444 100%);
+  border-color: rgba(153, 27, 27, 0.5);
+  color: #7f1d1d;
+}
+
+.emap-rank-tip-badge--muted {
+  background: linear-gradient(165deg, rgba(248, 250, 252, 0.96) 0%, rgba(203, 213, 225, 0.92) 100%);
+  border-color: rgba(100, 116, 139, 0.55);
+  color: #334155;
+}
+
+.emap-rank-tip-body {
+  min-width: 0;
+}
+
+.emap-rank-tip-name {
+  font-weight: 600;
+  margin-bottom: 3px;
+  padding-right: 2px;
+  word-break: break-word;
+}
+
+.leaflet-tooltip.emap-rank-tip--dim .emap-rank-tip-inner {
+  padding-right: 22px;
+}
+
+.leaflet-tooltip.emap-rank-tip--dim .emap-rank-tip-badge {
+  width: 18px;
+  height: 18px;
+  font-size: 9px;
+  opacity: 0.92;
 }
 
 .leaflet-tooltip.emap-rank-tip--top3 {
@@ -5289,7 +6322,8 @@ onBeforeUnmount(() => {
   word-break: normal;
 }
 
-.leaflet-tooltip.emap-marker-hover-tip .emap-popup--warehouse .emap-popup-type {
+/* 冶炼厂也用 .emap-popup-type，需与仓库同样 nowrap，否则 tooltip 按内容收缩会极窄 */
+.leaflet-tooltip.emap-marker-hover-tip .emap-popup .emap-popup-type {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
