@@ -1,7 +1,40 @@
 <template>
   <div class="user-manage-page">
-    <div class="card shadow-sm">
-      <div class="card-body">
+    <div class="card shadow-sm user-manage-card">
+      <div class="card-body pb-2">
+        <h5 class="um-page-title mb-3">
+          <i class="bi bi-shield-lock me-2" aria-hidden="true"></i>
+          用户管理
+        </h5>
+        <ul class="nav nav-tabs um-tabs" role="tablist">
+          <li class="nav-item" role="presentation">
+            <button
+              type="button"
+              class="nav-link"
+              :class="{ active: umTab === 'account' }"
+              role="tab"
+              :aria-selected="umTab === 'account'"
+              @click="umTab = 'account'"
+            >
+              账号管理
+            </button>
+          </li>
+          <li v-if="!isRegularUser" class="nav-item" role="presentation">
+            <button
+              type="button"
+              class="nav-link"
+              :class="{ active: umTab === 'roles' }"
+              role="tab"
+              :aria-selected="umTab === 'roles'"
+              @click="umTab = 'roles'"
+            >
+              角色管理
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <div v-show="umTab === 'account'" class="card-body border-top pt-3">
         <div class="toolbar">
           <div v-if="!isRegularUser" class="left-tools">
             <input v-model.trim="keyword" class="form-control form-control-sm" placeholder="用户名/姓名关键字" />
@@ -86,6 +119,10 @@
             下一页
           </button>
         </div>
+      </div>
+
+      <div v-show="umTab === 'roles' && !isRegularUser" class="card-body border-top pt-3">
+        <RoleManagePanel />
       </div>
     </div>
 
@@ -193,7 +230,8 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import RoleManagePanel from '../components/RoleManagePanel.vue'
 import {
   changeUserPassword,
   createUser,
@@ -240,6 +278,13 @@ const pwdForm = ref({
 })
 
 const isRegularUser = computed(() => isRegularUserSession())
+
+type UmTab = 'account' | 'roles'
+const umTab = ref<UmTab>('account')
+
+watch(isRegularUser, (v) => {
+  if (v) umTab.value = 'account'
+})
 
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
@@ -438,6 +483,36 @@ function roleText(role: string | undefined) {
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
+}
+
+.um-page-title {
+  font-weight: 600;
+  font-size: 17px;
+  color: #0f172a;
+}
+
+.um-tabs .nav-link {
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+}
+
+.um-tabs .nav-link:hover {
+  color: #0f172a;
+}
+
+.um-tabs .nav-link.active {
+  color: #0d9488;
+  border-bottom: 2px solid #0d9488;
+  margin-bottom: -1px;
+  background: transparent;
+}
+
+.user-manage-card .nav-tabs {
+  border-bottom: 1px solid #e5e7eb;
 }
 
 .toolbar {

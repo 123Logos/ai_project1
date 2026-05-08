@@ -7,7 +7,7 @@
         </div>
         <div class="module-tabs">
           <button
-            v-for="item in primaryTabs"
+            v-for="item in visiblePrimaryTabs"
             :key="item.key"
             class="tab-btn tab-btn-primary"
             :class="{ active: isLoggedIn && activeSection === item.key, 'tab-btn--need-login': !isLoggedIn }"
@@ -24,7 +24,12 @@
             登录
           </button>
           <template v-else>
-            <button class="auth-btn auth-btn-user" type="button" @click="openUserManage">
+            <button
+              v-if="showUserManageBtn"
+              class="auth-btn auth-btn-user"
+              type="button"
+              @click="openUserManage"
+            >
               <i class="bi bi-people"></i>
               用户管理
             </button>
@@ -37,10 +42,14 @@
       </div>
     </header>
 
-    <nav v-if="isLoggedIn && activeSection === 'prediction'" class="sub-nav" aria-label="AI 预测子模块">
+    <nav
+      v-if="isLoggedIn && navPermissionsReady && activeSection === 'prediction' && visiblePredictionSubTabs.length"
+      class="sub-nav"
+      aria-label="AI 预测子模块"
+    >
       <div class="sub-nav-inner">
         <button
-          v-for="item in predictionSubTabs"
+          v-for="item in visiblePredictionSubTabs"
           :key="item.key"
           class="sub-tab-btn"
           :class="{ active: predictionSubTab === item.key }"
@@ -69,9 +78,33 @@
       </div>
     </main>
     <main
+      v-else-if="isLoggedIn && !navPermissionsReady"
+      class="page-main page-main--gate"
+    >
+      <div class="login-gate">
+        <p class="login-gate-text mb-0">正在加载权限…</p>
+      </div>
+    </main>
+    <main
+      v-else-if="isLoggedIn && navPermissionsReady && visiblePrimaryTabs.length === 0 && !showUserManageBtn"
+      class="page-main page-main--gate"
+    >
+      <div class="login-gate">
+        <h2 class="login-gate-title">暂无可用的功能模块</h2>
+        <p class="login-gate-text">
+          当前账号在系统中没有任何为「已开启」的导航权限，请联系管理员在「角色管理」中为您分配权限。
+        </p>
+        <p v-if="mePermLoadError" class="text-danger small mb-3">{{ mePermLoadError }}</p>
+        <button type="button" class="btn login-gate-btn" @click="retryLoadPermissions">重新加载权限</button>
+      </div>
+    </main>
+    <main
       v-else
       class="page-main"
-      :class="{ 'has-sub-nav': activeSection === 'prediction' }"
+      :class="{
+        'has-sub-nav':
+          activeSection === 'prediction' && visiblePredictionSubTabs.length > 0,
+      }"
     >
       <section v-if="activeSection === 'prediction' && predictionSubTab === 'historyManage'" class="panel inner-page">
         <HistoryManage />
@@ -140,7 +173,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import HistoryManage from './pages/HistoryManage.vue'
 import HistoryQuery from './pages/HistoryQuery.vue'
 import PurchaseQuantity from './pages/PurchaseQuantity.vue'
@@ -149,9 +182,21 @@ import UserManage from './pages/UserManage.vue'
 import WarehouseDistanceConfig from './components/WarehouseDistanceConfig.vue'
 import DetectApp from '../PD_max_fronted/src/App.vue'
 import { clearToken, getToken, login } from './api/authApi'
+import {
+  canOpenUserManage,
+  canSeePrimaryNav,
+  PREDICTION_SUB_TO_FIELD,
+  type PrimaryNavKey,
+  type PredictionSubKey,
+} from './constants/navTabPermissionMap'
+import {
+  clearMePermissions,
+  hasNavPermission,
+  loadMePermissions,
+  useMePermissionsState,
+} from './composables/useMePermissions'
 
 type SectionKey = 'prediction' | 'map' | 'detect' | 'price' | 'warehouseDistance' | 'users'
-type PredictionSubKey = 'historyManage' | 'historyQuery' | 'forecast'
 
 const primaryTabs: Array<{ key: SectionKey; label: string }> = [
   { key: 'map', label: '电子地图' },
@@ -172,10 +217,71 @@ const predictionSubTab = ref<PredictionSubKey>('historyManage')
 const baseUrl = import.meta.env.BASE_URL
 const embeddedCacheVersion = `${Date.now()}`
 const isLoggedIn = ref(!!getToken())
+/** 有 token 时先拉 /auth/permissions/me，再展示受控导航，避免闪错页 */
+const navPermissionsReady = ref(!getToken())
 const showLogin = ref(false)
 const loginLoading = ref(false)
 const loginError = ref('')
 const loginForm = ref({ username: '', password: '' })
+
+const mePermState = useMePermissionsState()
+const mePermLoadError = mePermState.loadError
+
+const visiblePrimaryTabs = computed(() =>
+  primaryTabs.filter((item) => canSeePrimaryNav(item.key as PrimaryNavKey, hasNavPermission)),
+)
+
+const visiblePredictionSubTabs = computed(() =>
+  predictionSubTabs.filter((item) => hasNavPermission(PREDICTION_SUB_TO_FIELD[item.key])),
+)
+
+const showUserManageBtn = computed(() => canOpenUserManage(hasNavPermission))
+
+function firstVisiblePrimarySection(): SectionKey {
+  const t = visiblePrimaryTabs.value[0]
+  if (t) return t.key
+  if (canOpenUserManage(hasNavPermission)) return 'users'
+  return 'map'
+}
+
+watch(
+  [navPermissionsReady, isLoggedIn, visiblePrimaryTabs, visiblePredictionSubTabs],
+  () => {
+    if (!navPermissionsReady.value || !isLoggedIn.value) return
+    const tabs = visiblePrimaryTabs.value
+    const keys = tabs.map((t) => t.key)
+    const allowed = new Set<SectionKey>(keys)
+    if (canOpenUserManage(hasNavPermission)) allowed.add('users')
+
+    if (!tabs.length) {
+      if (canOpenUserManage(hasNavPermission)) {
+        if (activeSection.value !== 'users') activeSection.value = 'users'
+      }
+      return
+    }
+
+    if (!allowed.has(activeSection.value)) {
+      activeSection.value = keys[0]!
+    }
+    if (activeSection.value === 'prediction' && visiblePredictionSubTabs.value.length) {
+      const subs = visiblePredictionSubTabs.value.map((t) => t.key)
+      if (!subs.includes(predictionSubTab.value)) {
+        predictionSubTab.value = subs[0]!
+      }
+    }
+  },
+  { flush: 'post', immediate: true },
+)
+
+onMounted(async () => {
+  if (!getToken()) return
+  await loadMePermissions()
+  navPermissionsReady.value = true
+})
+
+async function retryLoadPermissions() {
+  await loadMePermissions()
+}
 
 watch(showLogin, (v) => {
   if (!v) return
@@ -188,6 +294,12 @@ function onSelectSection(key: SectionKey) {
     showLogin.value = true
     return
   }
+  if (key === 'users') {
+    if (!canOpenUserManage(hasNavPermission)) return
+    activeSection.value = 'users'
+    return
+  }
+  if (!canSeePrimaryNav(key as PrimaryNavKey, hasNavPermission)) return
   activeSection.value = key
 }
 
@@ -211,13 +323,17 @@ const activeFrameTitle = computed(() => {
 })
 
 function openUserManage() {
+  if (!canOpenUserManage(hasNavPermission)) return
   activeSection.value = 'users'
 }
 
 function logoutNow() {
   clearToken()
+  clearMePermissions()
+  navPermissionsReady.value = true
   isLoggedIn.value = false
-  if (activeSection.value === 'users' || activeSection.value === 'warehouseDistance') activeSection.value = 'map'
+  activeSection.value = 'map'
+  predictionSubTab.value = 'historyManage'
 }
 
 async function submitLogin() {
@@ -229,9 +345,14 @@ async function submitLogin() {
   loginError.value = ''
   try {
     await login(loginForm.value.username, loginForm.value.password)
+    navPermissionsReady.value = false
+    await loadMePermissions()
+    navPermissionsReady.value = true
     isLoggedIn.value = true
     showLogin.value = false
-    activeSection.value = 'map'
+    activeSection.value = firstVisiblePrimarySection()
+    predictionSubTab.value =
+      (visiblePredictionSubTabs.value[0]?.key as PredictionSubKey | undefined) ?? 'historyManage'
   } catch (e) {
     loginError.value = e instanceof Error ? e.message : String(e)
   } finally {
