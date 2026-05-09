@@ -20,7 +20,7 @@
             </select>
           </div>
           <div class="wdc-filter-field">
-            <label for="wdc-filter-to">目标库房</label>
+            <label for="wdc-filter-to">对标库房</label>
             <select id="wdc-filter-to" v-model.number="filterToId" class="wdc-select">
               <option :value="0">全部</option>
               <option v-for="w in warehouseOptions" :key="`ft-${w.id}`" :value="w.id">
@@ -48,7 +48,7 @@
           <thead>
             <tr>
               <th>源库房</th>
-              <th>绑定的库房</th>
+              <th>对标库房</th>
               <th>库房距离</th>
               <th class="wdc-col-actions">操作</th>
             </tr>

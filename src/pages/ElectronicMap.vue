@@ -5948,8 +5948,8 @@ onBeforeUnmount(() => {
 }
 
 .emap-marker--warehouse .emap-pin-inner {
-  width: 16px;
-  height: 16px;
+  width: 13px;
+  height: 13px;
   border-radius: 50% 50% 50% 0;
   transform: rotate(-45deg);
   border: 1.5px solid #fff;
