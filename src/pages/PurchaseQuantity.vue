@@ -1257,7 +1257,7 @@ function drawRowTrendChart() {
   canvas.width = width
   canvas.height = height
 
-  const margin = { t: 20, r: 16, b: 44, l: 52 }
+  const margin = { t: 20, r: 16, b: 44, l: 64 }
   const W = width - margin.l - margin.r
   const H = height - margin.t - margin.b
   const n = dates.length
@@ -1312,6 +1312,29 @@ function drawRowTrendChart() {
     ctx.fill()
   })
 
+  // 每个趋势点常显具体数值（与电子地图页送货量预测图一致）
+  ctx.font = '11px system-ui, sans-serif'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'bottom'
+  values.forEach((v, i) => {
+    const x = margin.l + i * xStep
+    const y = margin.t + H - (v / maxY) * H
+    const label = Number.isFinite(v) ? v.toFixed(2) : '0.00'
+    const boxW = Math.max(28, label.length * 7 + 6)
+    const boxH = 16
+    const by = Math.max(margin.t + 2, y - 8 - boxH)
+    const bx = Math.max(margin.l, Math.min(margin.l + W - boxW, x - boxW / 2))
+    ctx.fillStyle = 'rgba(248, 250, 252, 0.96)'
+    ctx.fillRect(bx, by, boxW, boxH)
+    ctx.strokeStyle = 'rgba(148, 163, 184, 0.75)'
+    ctx.lineWidth = 1
+    ctx.strokeRect(bx + 0.5, by + 0.5, boxW - 1, boxH - 1)
+    ctx.fillStyle = '#334155'
+    ctx.fillText(label, x, by + boxH - 3)
+  })
+  ctx.textAlign = 'start'
+  ctx.textBaseline = 'alphabetic'
+
   const maxLabs = Math.max(2, Math.floor(W / 56))
   const labStep = Math.max(1, Math.ceil(n / maxLabs))
   ctx.fillStyle = '#64748b'
@@ -1322,13 +1345,10 @@ function drawRowTrendChart() {
     ctx.fillText(label, x - 16, margin.t + H + 28)
   })
 
-  ctx.save()
-  ctx.translate(14, margin.t + H / 2)
-  ctx.rotate(-Math.PI / 2)
+  // 左上角横排显示纵轴含义（与电子地图页一致，避免竖排遮挡）
   ctx.fillStyle = '#475569'
   ctx.font = '12px system-ui, sans-serif'
-  ctx.fillText('预测重量(吨)', -36, 0)
-  ctx.restore()
+  ctx.fillText('预测重量（吨）', margin.l, margin.t - 6)
 
   ctx.fillStyle = '#475569'
   ctx.font = '12px system-ui, sans-serif'
