@@ -3,7 +3,7 @@
     <div class="wdc-head">
       <h2>库房距离监测配置</h2>
       <p>
-        单向绑定：源库房 → 目标库房。相同源库房合并展示；修改、删除时在弹窗中选择绑定的库房后确认。
+        单向绑定：源库房 → 对标库房。相同源库房合并展示；修改、删除时在弹窗中选择对标库房后确认。
       </p>
     </div>
 
@@ -73,7 +73,7 @@
                         :disabled="busy"
                         @click="openAddDialogFromRow(grp.rows[0])"
                       >
-                        新增绑定
+                        新增对标库房
                       </button>
                       <button
                         type="button"
@@ -128,7 +128,7 @@
             </select>
           </div>
           <div class="wdc-row">
-            <label>绑定的库房（目标，可多选）</label>
+            <label>对标库房（目标，可多选）</label>
             <div class="wdc-modal-chips">
               <label v-for="w in dialogTargetOptions" :key="`add-b-${w.id}`" class="wdc-chip">
                 <input v-model="dialogAddTargetIds" type="checkbox" :value="w.id" />
@@ -140,7 +140,7 @@
         </div>
         <div v-else-if="dialogMode === 'edit'" class="wdc-modal-body">
           <div v-if="dialogEditGroup?.rows.length" class="wdc-row">
-            <label for="wdc-dlg-pick-target">选择绑定的库房</label>
+            <label for="wdc-dlg-pick-target">选择你要修改的对标库房</label>
             <select
               id="wdc-dlg-pick-target"
               class="wdc-select"
@@ -156,10 +156,10 @@
             <span class="wdc-muted">源库房：</span>{{ editingRow?.fromName }}（{{ editingRow?.fromId }}）
           </p>
           <p class="wdc-modal-readonly">
-            <span class="wdc-muted">当前绑定：</span>{{ editingRow?.toName }}（{{ editingRow?.toId }}）
+            <span class="wdc-muted">当前对标库房：</span>{{ editingRow?.toName }}（{{ editingRow?.toId }}）
           </p>
           <div class="wdc-row">
-            <label for="wdc-dlg-edit-to">修改为绑定库房</label>
+            <label for="wdc-dlg-edit-to">修改为对标库房</label>
             <select id="wdc-dlg-edit-to" v-model.number="dialogToId" class="wdc-select">
               <option v-for="w in dialogEditTargetOptions" :key="`de-${w.id}`" :value="w.id">{{ w.name }}（{{ w.id }}）</option>
             </select>
@@ -170,7 +170,7 @@
             <span class="wdc-muted">源库房：</span>{{ editingRow?.fromName }}（{{ editingRow?.fromId }}）
           </p>
           <div v-if="dialogEditGroup?.rows.length" class="wdc-row">
-            <label for="wdc-dlg-pick-del">选择绑定的库房</label>
+            <label for="wdc-dlg-pick-del">选择你要删除的对标库房</label>
             <select
               id="wdc-dlg-pick-del"
               class="wdc-select"
@@ -182,7 +182,7 @@
               </option>
             </select>
           </div>
-          <p class="wdc-hint">将删除从上述源库房到所选目标库房的绑定关系。</p>
+          <p class="wdc-hint">将删除从上述源库房到所选对标库房的绑定关系。</p>
         </div>
         <div class="wdc-modal-footer">
           <button type="button" class="btn btn-outline-secondary" :disabled="busy" @click="closeDialog">取消</button>
