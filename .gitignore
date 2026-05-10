@@ -7,6 +7,17 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# 环境变量与部署脚本（含服务器 IP、域名或密钥，勿提交）
+.env*
+!.env.example
+!.env.production.example
+PD_max_fronted/.env*
+!PD_max_fronted/.env.example
+upload_frontend.cmd
+deploy.ps1
+deploy-redspiderbc.ps1
+PD_max_fronted/deploy.ps1
+
 .cursor
 .cursor\skills
 .cursor\skills\pragmatic-coding\examples.md
