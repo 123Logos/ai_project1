@@ -369,6 +369,9 @@
           smelterShipPatchQueued: false,
         }
 
+        /** 由「确认」拦截逻辑设置，用于可靠关闭当前弹层（避免 getElementById 命中 template 内重复 id） */
+        let lastInterceptedModalConfirmBtn = null
+
         function pick(obj, keys) {
           if (!obj || typeof obj !== 'object') return ''
           for (const k of keys) {
@@ -432,7 +435,7 @@
               <label for="${prefix}-district">区</label>
               <input type="text" id="${prefix}-district" class="form-control" placeholder="手动补录区/县（缺区时必填）">
             </div>
-            <small class="form-text" style="color:#dc2626;">如列表标红提示缺省市区，请手动补齐后保存。</small>
+            
           `
           form.appendChild(block)
         }
@@ -444,6 +447,104 @@
           if (p) p.value = region?.province || ''
           if (c) c.value = region?.city || ''
           if (d) d.value = region?.district || ''
+        }
+
+        function extractWarehouseRows(json) {
+          const root = json && typeof json === 'object' ? json : {}
+          const data = root.data && typeof root.data === 'object' ? root.data : root
+          if (Array.isArray(data)) return data
+          if (Array.isArray(data.list)) return data.list
+          if (Array.isArray(data.rows)) return data.rows
+          if (Array.isArray(data.warehouses)) return data.warehouses
+          if (Array.isArray(root.list)) return root.list
+          if (Array.isArray(root.rows)) return root.rows
+          if (Array.isArray(root.warehouses)) return root.warehouses
+          return []
+        }
+
+        function warehouseRowPcd(row) {
+          if (!row || typeof row !== 'object') return { province: '', city: '', district: '' }
+          return {
+            province: pick(row, ['省', '省份', 'province']) || '',
+            city: pick(row, ['市', '城市', 'city']) || '',
+            district: pick(row, ['区', '区县', 'district', '县']) || '',
+          }
+        }
+
+        /** 库房弹窗：优先 warehouseRegionMap；其次 #warehouse-form 上内嵌脚本写入的 data-w-prov 等（dataset + getAttribute 双读） */
+        function buildWarehouseRegionForFill() {
+          const id = state.currentWarehouseEditId
+          const fromMap =
+            id != null && Number.isFinite(id) && state.warehouseRegionMap.has(id)
+              ? state.warehouseRegionMap.get(id)
+              : null
+          if (fromMap && fromMap.province && fromMap.city && fromMap.district) return fromMap
+          const wf = document.getElementById('warehouse-form')
+          if (!wf) return fromMap || { province: '', city: '', district: '' }
+          const pv = String(
+            (wf.dataset && wf.dataset.wProv) || wf.getAttribute('data-w-prov') || '',
+          ).trim()
+          const cy = String(
+            (wf.dataset && wf.dataset.wCity) || wf.getAttribute('data-w-city') || '',
+          ).trim()
+          const ds = String(
+            (wf.dataset && wf.dataset.wDist) || wf.getAttribute('data-w-dist') || '',
+          ).trim()
+          if (pv || cy || ds) return { province: pv, city: cy, district: ds }
+          return fromMap || { province: '', city: '', district: '' }
+        }
+
+        let warehouseRegionHydrateTimer = null
+        let warehouseRegionHydrateSeq = 0
+
+        async function hydrateWarehouseRegionFromApi() {
+          const seq = ++warehouseRegionHydrateSeq
+          const id = state.currentWarehouseEditId
+          const title = (document.getElementById('modal-title')?.textContent || '').trim()
+          if (!Number.isFinite(id) || id <= 0) return
+          if (!document.getElementById('warehouse-name')) return
+          const isAddWarehouse = /新增/.test(title) && /库房/.test(title) && !/类型/.test(title)
+          if (isAddWarehouse) return
+          const paths = ['/tl/get_warehouses?include_inactive=true', '/tl/get_warehouses']
+          for (const path of paths) {
+            try {
+              const json = await getJson(path)
+              if (seq !== warehouseRegionHydrateSeq) return
+              const rows = extractWarehouseRows(json)
+              const row = rows.find((r) => {
+                const wid = Number(pick(r, ['仓库id', 'id', 'warehouse_id']))
+                return Number.isFinite(wid) && wid === id
+              })
+              if (!row) continue
+              const region = warehouseRowPcd(row)
+              if (!(region.province || region.city || region.district)) continue
+              state.warehouseRegionMap.set(id, region)
+              if (seq !== warehouseRegionHydrateSeq) return
+              if (!document.getElementById('warehouse-name')) return
+              ensureRegionInputs('warehouse')
+              fillRegionInputs('warehouse', region)
+              return
+            } catch (_) {}
+          }
+        }
+
+        function scheduleWarehouseRegionFill() {
+          if (warehouseRegionHydrateTimer) clearTimeout(warehouseRegionHydrateTimer)
+          const run = () => {
+            ensureRegionInputs('warehouse')
+            fillRegionInputs('warehouse', buildWarehouseRegionForFill())
+          }
+          run()
+          requestAnimationFrame(() => {
+            run()
+            setTimeout(run, 0)
+            setTimeout(run, 80)
+            setTimeout(run, 250)
+          })
+          warehouseRegionHydrateTimer = setTimeout(() => {
+            warehouseRegionHydrateTimer = null
+            void hydrateWarehouseRegionFromApi()
+          }, 120)
         }
 
         function markMissingRows() {}
@@ -606,30 +707,88 @@
         }
 
         function closeModal() {
-          const closeBtn = document.getElementById('modal-close') || document.getElementById('modal-cancel')
-          if (closeBtn) closeBtn.click()
+          const confirmBtn = lastInterceptedModalConfirmBtn
+          lastInterceptedModalConfirmBtn = null
+          const overlay =
+            confirmBtn && typeof confirmBtn.closest === 'function'
+              ? confirmBtn.closest('.modal-overlay')
+              : null
+          if (overlay && overlay.isConnected) {
+            const closeBtn =
+              overlay.querySelector('#modal-close') || overlay.querySelector('#modal-cancel')
+            if (closeBtn) {
+              closeBtn.click()
+              return
+            }
+            overlay.remove()
+            return
+          }
+          const overlays = document.querySelectorAll('.modal-overlay')
+          const last = overlays[overlays.length - 1]
+          if (last && last.isConnected) {
+            const closeBtn =
+              last.querySelector('#modal-close') || last.querySelector('#modal-cancel')
+            if (closeBtn) closeBtn.click()
+            else last.remove()
+          }
         }
 
         async function handleCustomSave() {
           const title = (document.getElementById('modal-title')?.textContent || '').trim()
           const hasSmelterForm = !!document.getElementById('smelter-name')
           const hasWarehouseForm = !!document.getElementById('warehouse-name')
-          if (!(title || hasSmelterForm || hasWarehouseForm)) return false
+          if (!(title || hasSmelterForm || hasWarehouseForm)) {
+            lastInterceptedModalConfirmBtn = null
+            return false
+          }
 
           if (title.includes('冶炼厂') || hasSmelterForm) {
             const name = (document.getElementById('smelter-name')?.value || '').trim()
             const address = (document.getElementById('smelter-address')?.value || '').trim()
             if (!name) throw new Error('请填写冶炼厂名称')
-            const editing = title.includes('编辑') && Number.isFinite(state.currentSmelterEditId)
+            const isAddSmelterTitle = /新增/.test(title) && /冶炼厂/.test(title)
+            const sfEl = document.getElementById('smelter-form')
+            const sidFromDataset = sfEl?.dataset?.tlSmelterId != null ? Number(sfEl.dataset.tlSmelterId) : NaN
+            const sidFromState =
+              Number.isFinite(state.currentSmelterEditId) && state.currentSmelterEditId > 0
+                ? state.currentSmelterEditId
+                : NaN
+            const sidResolved =
+              !isAddSmelterTitle && Number.isFinite(sidFromState)
+                ? sidFromState
+                : !isAddSmelterTitle && Number.isFinite(sidFromDataset) && sidFromDataset > 0
+                  ? sidFromDataset
+                  : NaN
+            const isEditSmelterTitle =
+              (/编辑|編輯/.test(title) || (hasSmelterForm && !isAddSmelterTitle)) && !isAddSmelterTitle
+            const editing = isEditSmelterTitle && Number.isFinite(sidResolved) && sidResolved > 0
             const payload = { 冶炼厂名: name, 地址: address }
+            if (address) {
+              const o = splitCnAddress(address)
+              if (o.province) payload['省'] = o.province
+              if (o.city) payload['市'] = o.city
+              if (o.district) payload['区'] = o.district
+            }
             if (editing) {
-              payload['冶炼厂id'] = state.currentSmelterEditId
+              payload['冶炼厂id'] = sidResolved
               payload['is_active'] = true
+              const shipRaw = state.smelterShipMap.get(sidResolved)
+              if (shipRaw !== undefined && shipRaw !== null && String(shipRaw).trim() !== '') {
+                const s = String(shipRaw).trim().toLowerCase()
+                if (s === '1' || s === 'true' || s === '是') payload['循融宝发货'] = true
+                else if (s === '0' || s === 'false' || s === '否') payload['循融宝发货'] = false
+              }
             }
             await postJson(editing ? '/tl/update_smelter' : '/tl/add_smelter', payload)
             closeModal()
             markMissingRows()
-            setTimeout(() => window.location.reload(), 120)
+            if (typeof window.__tlRefreshSmeltersList === 'function') {
+              await window.__tlRefreshSmeltersList()
+              await refreshSmelterShipMap().finally(() => schedulePatchSmelterTableShipColumn())
+            } else {
+              const smInp = document.getElementById('smelter-search')
+              if (smInp) setTimeout(() => smInp.dispatchEvent(new Event('input', { bubbles: true })), 0)
+            }
             return true
           }
 
@@ -649,7 +808,40 @@
             if (!address) throw new Error('请填写库房地址')
             if (!(province && city && district)) throw new Error('请手动补齐省/市/区')
             if (!Number.isFinite(typeId) || typeId <= 0) throw new Error('请先选择库房类型')
-            const editing = title.includes('编辑') && Number.isFinite(state.currentWarehouseEditId)
+            const phoneRaw = (document.getElementById('warehouse-phone')?.value || '').trim()
+            let phoneNorm = ''
+            if (phoneRaw) {
+              const phoneDigits = phoneRaw.replace(/\s+/g, '').replace(/-/g, '')
+              if (!/^\d{11}$/.test(phoneDigits)) {
+                throw new Error('电话填写时须为 11 位数字（可含空格或横线，保存时会去掉）')
+              }
+              phoneNorm = phoneDigits
+            }
+            // 拦截确认后内嵌脚本的 tt(id) 不会执行，必须在此区分新增/编辑；id 以 state 为准并回退到表单 data-tl-warehouse-id
+            const isAddWarehouseTitle = /新增/.test(title) && /库房/.test(title) && !/类型/.test(title)
+            const wfEl = document.getElementById('warehouse-form')
+            const widFromDataset = wfEl?.dataset?.tlWarehouseId != null ? Number(wfEl.dataset.tlWarehouseId) : NaN
+            const widFromState =
+              Number.isFinite(state.currentWarehouseEditId) && state.currentWarehouseEditId > 0
+                ? state.currentWarehouseEditId
+                : NaN
+            const widResolved =
+              !isAddWarehouseTitle && Number.isFinite(widFromState)
+                ? widFromState
+                : !isAddWarehouseTitle && Number.isFinite(widFromDataset) && widFromDataset > 0
+                  ? widFromDataset
+                  : NaN
+            const isEditWarehouseTitle =
+              (/编辑|編輯/.test(title) || (hasWarehouseForm && !isAddWarehouseTitle)) &&
+              !isAddWarehouseTitle &&
+              !/库房类型|类型维护/.test(title)
+            const editing = isEditWarehouseTitle && Number.isFinite(widResolved) && widResolved > 0
+            const readWarehouseOptNum = (id) => {
+              const raw = (document.getElementById(id)?.value || '').trim()
+              if (raw === '') return null
+              const n = Number(raw)
+              return Number.isFinite(n) ? n : null
+            }
             const payload = {
               仓库名: name,
               地址: address,
@@ -658,18 +850,25 @@
               省: province,
               市: city,
               区: district,
+              库房联系人: (document.getElementById('warehouse-contact')?.value || '').trim(),
+              电话: phoneNorm,
+              运费: readWarehouseOptNum('warehouse-freight-base'),
+              危废经营许可数量: readWarehouseOptNum('warehouse-hazmat-permit-qty'),
+              月均收货: readWarehouseOptNum('warehouse-monthly-inbound'),
             }
             if (editing) {
-              payload['仓库id'] = state.currentWarehouseEditId
+              payload['仓库id'] = widResolved
               payload['is_active'] = true
             }
             await postJson(editing ? '/tl/update_warehouse' : '/tl/add_warehouse', payload)
             closeModal()
             markMissingRows()
-            setTimeout(() => window.location.reload(), 120)
+            const whBtn = document.getElementById('warehouse-search-btn')
+            if (whBtn) setTimeout(() => whBtn.click(), 0)
             return true
           }
 
+          lastInterceptedModalConfirmBtn = null
           return false
         }
 
@@ -679,12 +878,12 @@
             const smEdit = evt.target.closest('#smelter-table-body .edit-btn')
             if (smEdit) {
               const id = Number(smEdit.getAttribute('data-id'))
-              state.currentSmelterEditId = Number.isFinite(id) ? id : null
+              state.currentSmelterEditId = Number.isFinite(id) && id > 0 ? id : null
             }
             const whEdit = evt.target.closest('#warehouse-table-body .edit-btn')
             if (whEdit) {
               const id = Number(whEdit.getAttribute('data-id'))
-              state.currentWarehouseEditId = Number.isFinite(id) ? id : null
+              state.currentWarehouseEditId = Number.isFinite(id) && id > 0 ? id : null
             }
           },
           true,
@@ -728,6 +927,7 @@
             if (!(hasSmelterForm || hasWarehouseForm)) return
             evt.preventDefault()
             evt.stopImmediatePropagation()
+            lastInterceptedModalConfirmBtn = btn
             try {
               btn.disabled = true
               const old = btn.textContent
@@ -736,6 +936,7 @@
               btn.textContent = old || '确认'
               btn.disabled = false
             } catch (err) {
+              lastInterceptedModalConfirmBtn = null
               btn.disabled = false
               btn.textContent = '确认'
               alert(err instanceof Error ? err.message : String(err))
@@ -748,10 +949,35 @@
           const title = (document.getElementById('modal-title')?.textContent || '').trim()
           const hasSmelterForm = !!document.getElementById('smelter-name')
           const hasWarehouseForm = !!document.getElementById('warehouse-name')
+          const wf = document.getElementById('warehouse-form')
+          const sf = document.getElementById('smelter-form')
+          const isAddWarehouseTitle = /新增/.test(title) && /库房/.test(title) && !/类型/.test(title)
+          const isAddSmelterTitle = /新增/.test(title) && /冶炼厂/.test(title)
+          if (wf && isAddWarehouseTitle) {
+            state.currentWarehouseEditId = null
+            delete wf.dataset.tlWarehouseId
+          } else if (
+            wf &&
+            (/编辑|編輯/.test(title) || (hasWarehouseForm && !isAddWarehouseTitle)) &&
+            Number.isFinite(state.currentWarehouseEditId) &&
+            state.currentWarehouseEditId > 0
+          ) {
+            wf.dataset.tlWarehouseId = String(state.currentWarehouseEditId)
+          }
+          if (sf && isAddSmelterTitle) {
+            state.currentSmelterEditId = null
+            delete sf.dataset.tlSmelterId
+          } else if (
+            sf &&
+            hasSmelterForm &&
+            !isAddSmelterTitle &&
+            Number.isFinite(state.currentSmelterEditId) &&
+            state.currentSmelterEditId > 0
+          ) {
+            sf.dataset.tlSmelterId = String(state.currentSmelterEditId)
+          }
           if (title.includes('库房') || hasWarehouseForm) {
-            ensureRegionInputs('warehouse')
-            const region = state.warehouseRegionMap.get(state.currentWarehouseEditId) || null
-            fillRegionInputs('warehouse', region)
+            scheduleWarehouseRegionFill()
           }
           markMissingRows()
           schedulePatchSmelterTableShipColumn()
@@ -1173,6 +1399,28 @@
             '仓库颜色配置',
             '颜色配置',
           ])
+          payload['库房联系人'] = Object.prototype.hasOwnProperty.call(extra, '库房联系人')
+            ? String(extra['库房联系人'] ?? '').trim()
+            : pick(full, ['库房联系人', '联系人']) || ''
+          payload['电话'] = Object.prototype.hasOwnProperty.call(extra, '电话')
+            ? String(extra['电话'] ?? '').trim()
+            : pick(full, ['电话', '联系电话', '手机']) || ''
+          ;['运费', '危废经营许可数量', '月均收货'].forEach((k) => {
+            if (Object.prototype.hasOwnProperty.call(extra, k)) {
+              const ev = extra[k]
+              payload[k] = ev === '' || ev === undefined ? null : Number(ev)
+              if (payload[k] !== null && !Number.isFinite(payload[k])) payload[k] = null
+              return
+            }
+            if (!full || !Object.prototype.hasOwnProperty.call(full, k)) return
+            const fv = full[k]
+            if (fv === null || fv === '') {
+              payload[k] = null
+              return
+            }
+            const n = Number(fv)
+            payload[k] = Number.isFinite(n) ? n : null
+          })
           if (typeof full['is_active'] === 'boolean') {
             payload['is_active'] = full['is_active']
           } else {

@@ -50,12 +50,13 @@
               <th>源库房</th>
               <th>对标库房</th>
               <th>库房距离</th>
+              <th>阶梯价差</th>
               <th class="wdc-col-actions">操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="listRows.length === 0">
-              <td colspan="4">暂无数据</td>
+              <td colspan="5">暂无数据</td>
             </tr>
             <template v-for="grp in groupedTableRows" :key="`grp-${grp.rows[0]?.fromId ?? 0}`">
               <tr v-for="(r, idx) in grp.rows" :key="`edge-${r.fromId}-${r.toId}`">
@@ -64,6 +65,7 @@
                 </td>
                 <td>{{ r.toName }}（{{ r.toId }}）</td>
                 <td class="wdc-td-distance">{{ distanceCellText(r) }}</td>
+                <td class="wdc-td-tier">{{ tierPriceCellText(r) }}</td>
                 <td v-if="idx === 0" class="wdc-td-ops wdc-col-actions" :rowspan="grp.rows.length">
                   <div class="wdc-ops-merge">
                     <div class="wdc-ops-buttons-row">
@@ -82,6 +84,14 @@
                         @click="openEditModalFromGroup(grp)"
                       >
                         修改
+                      </button>
+                      <button
+                        type="button"
+                        class="btn btn-sm btn-outline-secondary"
+                        :disabled="busy || grp.rows.length === 0"
+                        @click="openEditTierModalFromGroup(grp)"
+                      >
+                        编辑差价
                       </button>
                       <button
                         type="button"
@@ -184,13 +194,45 @@
           </div>
           <p class="wdc-hint">将删除从上述源库房到所选对标库房的绑定关系。</p>
         </div>
+        <div v-else-if="dialogMode === 'edit-tier'" class="wdc-modal-body">
+          <p class="wdc-modal-readonly">
+            <span class="wdc-muted">源库房：</span>{{ editingRow?.fromName }}（{{ editingRow?.fromId }}）
+          </p>
+          <div v-if="dialogEditGroup?.rows.length" class="wdc-row">
+            <label for="wdc-dlg-pick-tier">对标库房</label>
+            <select
+              id="wdc-dlg-pick-tier"
+              class="wdc-select"
+              :value="editingRow?.toId ?? 0"
+              @change="onModalPickTargetChange($event)"
+            >
+              <option v-for="br in dialogEditGroup.rows" :key="`tier-${br.fromId}-${br.toId}`" :value="br.toId">
+                {{ br.toName }}（{{ br.toId }}）
+              </option>
+            </select>
+          </div>
+          <div class="wdc-row">
+            <label for="wdc-dlg-tier-text">差价</label>
+            <textarea
+              id="wdc-dlg-tier-text"
+              v-model="dialogTierText"
+              class="wdc-textarea"
+              rows="3"
+              placeholder="填写差价金额；若无需差价，请清空此处后点「确定」"
+            ></textarea>
+          </div>
+          <p class="wdc-hint">保存后生效。若框内留空再保存，将去掉当前已保存的差价。</p>
+        </div>
         <div class="wdc-modal-footer">
           <button type="button" class="btn btn-outline-secondary" :disabled="busy" @click="closeDialog">取消</button>
           <button
             v-if="dialogMode !== 'delete'"
             type="button"
             class="btn btn-primary"
-            :disabled="busy || !dialogValid"
+            :disabled="
+              busy ||
+              (dialogMode === 'edit-tier' ? !dialogValidEditTier : !dialogValid)
+            "
             @click="submitDialog"
           >
             确定
@@ -219,10 +261,19 @@ import {
   fetchTlWarehousesAll,
   postTlBatchBindWarehouseLinks,
   postTlBindWarehouseLink,
+  putTlUpdateWarehouseLinkTier,
 } from '../api/tlApi'
 
 type WarehouseOption = { id: number; name: string }
-type LinkRow = { fromId: number; toId: number; fromName: string; toName: string }
+/** 阶梯价差：接口可为 null；非纯数字时保留 tierPriceEditSeed 供展示与编辑 */
+type LinkRow = {
+  fromId: number
+  toId: number
+  fromName: string
+  toName: string
+  tierPriceDiff: number | null
+  tierPriceEditSeed: string
+}
 
 /** 同一源库房的多条出边，用于合并首列与末列 */
 type LinkRowGroup = { rows: LinkRow[] }
@@ -266,10 +317,12 @@ const message = ref('')
 const error = ref('')
 
 const dialogOpen = ref(false)
-const dialogMode = ref<'add' | 'edit' | 'delete'>('add')
+const dialogMode = ref<'add' | 'edit' | 'delete' | 'edit-tier'>('add')
 const dialogFromId = ref(0)
 const dialogToId = ref(0)
 const dialogAddTargetIds = ref<number[]>([])
+/** 编辑阶梯价差弹窗输入内容 */
+const dialogTierText = ref('')
 const editingRow = ref<LinkRow | null>(null)
 /** 从表格「修改/删除」打开弹窗时，携带该源库房下的绑定行列表 */
 const dialogEditGroup = ref<LinkRowGroup | null>(null)
@@ -280,6 +333,7 @@ const opTargetToIdByFromId = ref<Record<number, number>>({})
 const dialogTitle = computed(() => {
   if (dialogMode.value === 'add') return '新增绑定'
   if (dialogMode.value === 'edit') return '修改绑定'
+  if (dialogMode.value === 'edit-tier') return '编辑差价'
   return '删除绑定'
 })
 
@@ -334,6 +388,14 @@ const dialogValidDelete = computed(
   () => !!editingRow.value && !!(dialogEditGroup.value && dialogEditGroup.value.rows.length),
 )
 
+const dialogValidEditTier = computed(
+  () =>
+    !!editingRow.value &&
+    editingRow.value.fromId > 0 &&
+    editingRow.value.toId > 0 &&
+    !!(dialogEditGroup.value && dialogEditGroup.value.rows.length),
+)
+
 function onModalGroupTargetChange(toId: number) {
   const grp = dialogEditGroup.value
   if (!grp) return
@@ -343,6 +405,9 @@ function onModalGroupTargetChange(toId: number) {
   dialogFromId.value = row.fromId
   dialogToId.value = row.toId
   opTargetToIdByFromId.value = { ...opTargetToIdByFromId.value, [row.fromId]: toId }
+  if (dialogMode.value === 'edit-tier') {
+    dialogTierText.value = row.tierPriceEditSeed
+  }
 }
 
 function onModalPickTargetChange(e: Event) {
@@ -373,6 +438,17 @@ function openDeleteModalFromGroup(grp: LinkRowGroup) {
   dialogOpen.value = true
 }
 
+function openEditTierModalFromGroup(grp: LinkRowGroup) {
+  if (!grp.rows.length) return
+  const row = pickRowByGroupSelection(grp)
+  if (!row) return
+  dialogEditGroup.value = grp
+  dialogMode.value = 'edit-tier'
+  editingRow.value = row
+  dialogTierText.value = row.tierPriceEditSeed
+  dialogOpen.value = true
+}
+
 function pickNum(row: Record<string, unknown>, keys: string[]): number {
   for (const k of keys) {
     const v = row[k]
@@ -395,8 +471,56 @@ function pickStr(row: Record<string, unknown>, keys: string[]): string {
   return ''
 }
 
+/** 解析阶梯价差：纯数字用 num 展示；JSON/其它字符串用 seed 原样编辑 */
+function parseTierFields(row: Record<string, unknown>): { num: number | null; seed: string } {
+  const keys = ['阶梯价差', 'ladder_price_diff', 'tier_price_diff', 'step_price_diff']
+  for (const k of keys) {
+    if (!Object.prototype.hasOwnProperty.call(row, k)) continue
+    const v = row[k]
+    if (v === null || v === undefined) return { num: null, seed: '' }
+    if (v === '') return { num: null, seed: '' }
+    if (typeof v === 'number' && Number.isFinite(v)) return { num: v, seed: String(v) }
+    if (typeof v === 'string') {
+      const s = v.trim()
+      if (s === '') return { num: null, seed: '' }
+      const n = Number(s)
+      if (Number.isFinite(n) && s === String(n)) return { num: n, seed: s }
+      return { num: null, seed: s }
+    }
+    if (typeof v === 'object') {
+      try {
+        return { num: null, seed: JSON.stringify(v) }
+      } catch {
+        return { num: null, seed: '' }
+      }
+    }
+  }
+  return { num: null, seed: '' }
+}
+
 function warehouseNameById(id: number): string {
   return warehouseOptions.value.find((w) => w.id === id)?.name || `库房#${id}`
+}
+
+function asNestedRecord(v: unknown): Record<string, unknown> | null {
+  if (v == null || typeof v !== 'object' || Array.isArray(v)) return null
+  return v as Record<string, unknown>
+}
+
+/** 列表接口常把库房嵌在「源库房」「对标库房」等对象里；合并进缓存以便算距 */
+function mergeWarehouseCoordsFromLinkRows(rows: Record<string, unknown>[]) {
+  const map: Record<number, { lat: number; lng: number }> = { ...warehouseCoordById.value }
+  const blobsKeys = ['源库房', '对标库房', 'from_warehouse', 'to_warehouse', 'source_warehouse', 'target_warehouse']
+  for (const row of rows) {
+    for (const k of blobsKeys) {
+      const rec = asNestedRecord(row[k])
+      if (!rec) continue
+      const id = pickNum(rec, ['仓库id', '库房id', 'warehouse_id', 'id'])
+      const c = pickWarehouseCoord(rec)
+      if (id > 0 && c) map[id] = c
+    }
+  }
+  warehouseCoordById.value = map
 }
 
 function pickWarehouseCoord(row: Record<string, unknown>): { lat: number; lng: number } | null {
@@ -446,6 +570,14 @@ function distanceCellText(r: LinkRow): string {
   return distanceTextByEdgeKey.value[edgeKey(r)] ?? '—'
 }
 
+function tierPriceCellText(r: LinkRow): string {
+  if (r.tierPriceDiff != null) {
+    return r.tierPriceDiff.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
+  }
+  if (r.tierPriceEditSeed) return r.tierPriceEditSeed
+  return '—'
+}
+
 async function loadDistancesForRows(rows: LinkRow[]) {
   if (!rows.length) {
     distanceTextByEdgeKey.value = {}
@@ -480,26 +612,60 @@ async function loadDistancesForRows(rows: LinkRow[]) {
 }
 
 function toLinkRow(row: Record<string, unknown>): LinkRow {
-  const fromId = pickNum(row, [
+  const srcObj =
+    asNestedRecord(row['源库房']) ||
+    asNestedRecord(row['from_warehouse']) ||
+    asNestedRecord(row['source_warehouse'])
+  const tgtObj =
+    asNestedRecord(row['对标库房']) ||
+    asNestedRecord(row['to_warehouse']) ||
+    asNestedRecord(row['target_warehouse'])
+
+  let fromId = pickNum(row, [
     'from_warehouse_id',
     '源库房id',
     '源仓库id',
     'source_warehouse_id',
     'from_id',
   ])
-  const toId = pickNum(row, [
+  if (!fromId && srcObj) {
+    fromId = pickNum(srcObj, ['仓库id', '库房id', 'warehouse_id', 'id'])
+  }
+
+  let toId = pickNum(row, [
     'to_warehouse_id',
     '目标库房id',
+    '对标库房id',
     '目标仓库id',
+    '对标仓库id',
     'target_warehouse_id',
     'to_id',
     'target_id',
   ])
-  const fromName =
-    pickStr(row, ['from_warehouse_name', '源库房名', 'source_warehouse_name']) || warehouseNameById(fromId)
-  const toName =
-    pickStr(row, ['to_warehouse_name', '目标库房名', 'target_warehouse_name']) || warehouseNameById(toId)
-  return { fromId, toId, fromName, toName }
+  if (!toId && tgtObj) {
+    toId = pickNum(tgtObj, ['仓库id', '库房id', 'warehouse_id', 'id'])
+  }
+
+  let fromName = pickStr(row, ['from_warehouse_name', '源库房名', 'source_warehouse_name'])
+  if (!fromName && srcObj) {
+    fromName = pickStr(srcObj, ['仓库名', 'warehouse_name', 'name', '库房名'])
+  }
+  if (!fromName) fromName = warehouseNameById(fromId)
+
+  let toName = pickStr(row, [
+    'to_warehouse_name',
+    '目标库房名',
+    '对标库房名',
+    'target_warehouse_name',
+  ])
+  if (!toName && tgtObj) {
+    toName = pickStr(tgtObj, ['仓库名', 'warehouse_name', 'name', '库房名'])
+  }
+  if (!toName) toName = warehouseNameById(toId)
+
+  const { num: tierPriceDiff, seed: tierPriceEditSeed } = parseTierFields(row)
+
+  return { fromId, toId, fromName, toName, tierPriceDiff, tierPriceEditSeed }
 }
 
 async function loadWarehouses() {
@@ -525,10 +691,24 @@ async function fetchListPage(page: number) {
     from_warehouse_id: filterFromId.value > 0 ? filterFromId.value : undefined,
     to_warehouse_id: filterToId.value > 0 ? filterToId.value : undefined,
   })
+  mergeWarehouseCoordsFromLinkRows(r.rows)
   listRows.value = r.rows.map(toLinkRow)
   listTotal.value = r.total
   listPage.value = page
   await loadDistancesForRows(listRows.value)
+}
+
+const WDC_LOAD_FAIL_HINT = '如果长时间未加载请检查网络或者刷新'
+
+function formatWdcLoadError(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e)
+  const s = raw.trim()
+  if (/failed to fetch/i.test(s)) return WDC_LOAD_FAIL_HINT
+  if (/load failed/i.test(s)) return WDC_LOAD_FAIL_HINT
+  if (/networkerror/i.test(s)) return WDC_LOAD_FAIL_HINT
+  if (/net::err_/i.test(s)) return WDC_LOAD_FAIL_HINT
+  if (/aborted|timeout|timed out|超时|连接.*拒绝|无法连接/i.test(s)) return WDC_LOAD_FAIL_HINT
+  return raw
 }
 
 async function runAction(fn: () => Promise<void>, okText: string) {
@@ -539,7 +719,7 @@ async function runAction(fn: () => Promise<void>, okText: string) {
     await fn()
     if (okText) message.value = okText
   } catch (e) {
-    error.value = e instanceof Error ? e.message : String(e)
+    error.value = formatWdcLoadError(e)
   } finally {
     busy.value = false
   }
@@ -591,6 +771,7 @@ function closeDialog() {
   editingRow.value = null
   dialogEditGroup.value = null
   dialogAddTargetIds.value = []
+  dialogTierText.value = ''
 }
 
 async function submitDialog() {
@@ -601,6 +782,21 @@ async function submitDialog() {
       await deleteTlUnbindWarehouseLink(row.fromId, row.toId)
       await fetchListPage(listPage.value)
     }, '已删除绑定')
+    if (!error.value) closeDialog()
+    return
+  }
+  if (dialogMode.value === 'edit-tier') {
+    if (!dialogValidEditTier.value || !editingRow.value) return
+    const row = editingRow.value
+    const raw = dialogTierText.value.trim()
+    await runAction(async () => {
+      await putTlUpdateWarehouseLinkTier({
+        源库房id: row.fromId,
+        对标库房id: row.toId,
+        阶梯价差: raw === '' ? null : raw,
+      })
+      await fetchListPage(listPage.value)
+    }, '已保存')
     if (!error.value) closeDialog()
     return
   }
@@ -754,6 +950,12 @@ onMounted(async () => {
   color: #334155;
 }
 
+.wdc-td-tier {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+}
+
 .wdc-td-ops {
   vertical-align: top;
   background: #fafafa;
@@ -885,5 +1087,18 @@ onMounted(async () => {
   margin: 0;
   font-size: 12px;
   color: #64748b;
+}
+
+.wdc-textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-size: 13px;
+  font-family: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  box-sizing: border-box;
 }
 </style>

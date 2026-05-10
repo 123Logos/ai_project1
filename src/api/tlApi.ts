@@ -396,6 +396,24 @@ export async function putTlReplaceWarehouseLinksOutbound(
   return raw
 }
 
+/**
+ * PUT /tl/update_warehouse_link_tier
+ * 修改源库房→对标库房边上的阶梯价差；阶梯价差传 null 表示清空。
+ */
+export async function putTlUpdateWarehouseLinkTier(payload: {
+  源库房id: number
+  对标库房id: number
+  阶梯价差: string | null
+}): Promise<unknown> {
+  const raw = await tlPutJson('/tl/update_warehouse_link_tier', {
+    源库房id: payload.源库房id,
+    对标库房id: payload.对标库房id,
+    阶梯价差: payload.阶梯价差,
+  })
+  assertTlBizCode200(raw, '修改阶梯价差')
+  return raw
+}
+
 export async function postTlBindWarehouseLink(源库房id: number, 目标库房id: number): Promise<unknown> {
   const raw = await tlPostJson('/tl/bind_warehouse_link', { 源库房id, 目标库房id })
   assertTlBizCode200(raw, '绑定出边')

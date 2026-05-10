@@ -1653,6 +1653,38 @@ function warehousePopupHtml(p: MapPoint): string {
   )}</span></div>`
 }
 
+/** 库房鼠标悬浮：多字段完整展示，换行包裹不撑破框（点击弹窗仍用 warehousePopupHtml） */
+function warehouseHoverTooltipHtml(p: MapPoint): string {
+  const raw = p.raw
+  const name =
+    pickStr(raw, ['仓库名', 'warehouse_name', 'name', '仓库', '库房名', 'title']) || p.title
+  const addr = addressText(raw)
+  const contact = pickStr(raw, ['库房联系人', '联系人', 'contact', '联络人'])
+  const phone = pickStr(raw, ['电话', '手机', '联系电话', 'mobile', 'tel'])
+  const haz = pickNumber(raw, ['危废经营许可数量', 'hazard_license_count', '危废许可数量'])
+  const monthly = pickNumber(raw, ['月均收货', 'monthly_avg_receipt', '月均采购'])
+  const freight = pickNumber(raw, ['运费', 'freight', 'shipping_fee'])
+  const hazText = haz === null ? '—' : String(haz)
+  const monthlyText = monthly === null ? '—' : String(monthly)
+  const freightText = freight === null ? '—' : String(freight)
+  const tipRow = (label: string, value: string) =>
+    `<div class="emap-wh-hover-row"><span class="emap-wh-hover-k">${escapeHtml(
+      label,
+    )}</span><span class="emap-wh-hover-v">${escapeHtml(value)}</span></div>`
+  const metric = (label: string, value: string) =>
+    `<div class="emap-wh-hover-metric"><span class="emap-wh-hover-k">${escapeHtml(
+      label,
+    )}</span><span class="emap-wh-hover-v">${escapeHtml(value)}</span></div>`
+  const dual = (a: string, b: string) => `<div class="emap-wh-hover-dual">${a}${b}</div>`
+  return `<div class="emap-wh-hover-tip"><div class="emap-wh-hover-inner">${tipRow('库房名称', name)}${tipRow(
+    '地址',
+    addr || '—',
+  )}${dual(metric('联系人', contact || '—'), metric('电话', phone || '—'))}${dual(
+    metric('危废经营许可数量', hazText),
+    metric('月均收货', monthlyText),
+  )}${tipRow('运费', freightText)}</div></div>`
+}
+
 function smelterPopupHtml(p: MapPoint): string {
   const row = p.raw
   const xrbShip = pickStr(row, ['循融宝发货', 'xunrongbao_ship', 'xrb_ship'])
@@ -2048,8 +2080,10 @@ function renderMarkers(points: MapPoint[]) {
       p.kind === 'warehouse'
         ? warehousePopupHtml(p)
         : smelterPopupHtml(p)
+    const tooltipHtml =
+      p.kind === 'warehouse' ? warehouseHoverTooltipHtml(p) : popupHtml
     marker.bindPopup(popupHtml)
-    marker.bindTooltip(popupHtml, {
+    marker.bindTooltip(tooltipHtml, {
       sticky: false,
       direction: 'top',
       opacity: 1,
@@ -6368,6 +6402,74 @@ onBeforeUnmount(() => {
   max-width: min(280px, 85vw);
   overflow: hidden;
   box-sizing: border-box;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip:has(.emap-wh-hover-tip) {
+  max-width: none;
+  width: auto;
+  padding: 6px 8px !important;
+}
+
+/* 库房悬浮：宽度定标，高度不超过 16:9 对应高度（内容少则盒子变矮）；同行标签+值、双列指标提高利用率 */
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-tip {
+  --emap-wh-w: min(420px, calc(100vw - 36px));
+  box-sizing: border-box;
+  width: var(--emap-wh-w);
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-inner {
+  box-sizing: border-box;
+  padding: 6px 8px;
+  max-height: calc(var(--emap-wh-w) * 9 / 16);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px 0;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-row {
+  display: grid;
+  grid-template-columns: minmax(5em, max-content) minmax(0, 1fr);
+  column-gap: 6px;
+  align-items: start;
+  font-size: 11px;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-dual {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 10px;
+  min-width: 0;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-metric {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 4px;
+  align-items: baseline;
+  font-size: 11px;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-k {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-k::after {
+  content: '：';
+  color: #64748b;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-v {
+  color: #e2e8f0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .leaflet-tooltip.emap-marker-hover-tip .leaflet-tooltip-content {
