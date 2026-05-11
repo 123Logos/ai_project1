@@ -355,10 +355,6 @@
             <div class="emap-cmp-summary-value">{{ comparisonSummary.bestSmelter || '-' }}</div>
           </div>
           <div class="emap-cmp-summary-card">
-            <div class="emap-cmp-summary-label">单价</div>
-            <div class="emap-cmp-summary-value">¥ {{ formatNum(comparisonSummary.bestUnitPrice) }}</div>
-          </div>
-          <div class="emap-cmp-summary-card">
             <div class="emap-cmp-summary-label">总货值</div>
             <div class="emap-cmp-summary-value">¥ {{ formatNum(comparisonSummary.bestProfit) }}</div>
           </div>
@@ -373,7 +369,6 @@
               <tr>
                 <th class="emap-cmp-col-rank">排名</th>
                 <th class="emap-cmp-col-smelter">冶炼厂名称</th>
-                <th class="emap-cmp-col-unit">单价</th>
                 <th class="emap-cmp-col-unit">运费单价</th>
                 <th class="emap-cmp-col-cats">各品种单价</th>
                 <th class="emap-cmp-col-money">总回收价</th>
@@ -384,7 +379,7 @@
             </thead>
             <tbody>
               <tr v-if="!comparisonRanks.length">
-                <td colspan="9" class="text-center text-muted py-3 emap-cmp-table-empty">
+                <td colspan="8" class="text-center text-muted py-3 emap-cmp-table-empty">
                   暂无比价明细
                 </td>
               </tr>
@@ -415,22 +410,7 @@
                 </td>
                 <td class="emap-cmp-col-unit">
                   <span
-                    v-if="comparisonMoneyCellText(row, 'lineUnit')"
-                    class="emap-cmp-cell-truncate"
-                    tabindex="0"
-                    role="button"
-                    title="点击查看完整内容"
-                    @click.stop="
-                      openComparisonCellDetail('单价', comparisonMoneyCellText(row, 'lineUnit')!)
-                    "
-                    @keydown.enter.prevent="
-                      openComparisonCellDetail('单价', comparisonMoneyCellText(row, 'lineUnit')!)
-                    "
-                    >{{ comparisonMoneyCellText(row, 'lineUnit') }}</span>
-                </td>
-                <td class="emap-cmp-col-unit">
-                  <span
-                    v-if="comparisonMoneyCellText(row, 'freightUnit')"
+                    v-if="comparisonFreightUnitMoneyCellText(row)"
                     class="emap-cmp-cell-truncate"
                     tabindex="0"
                     role="button"
@@ -438,16 +418,16 @@
                     @click.stop="
                       openComparisonCellDetail(
                         '运费单价',
-                        comparisonMoneyCellText(row, 'freightUnit')!,
+                        comparisonFreightUnitMoneyCellText(row)!,
                       )
                     "
                     @keydown.enter.prevent="
                       openComparisonCellDetail(
                         '运费单价',
-                        comparisonMoneyCellText(row, 'freightUnit')!,
+                        comparisonFreightUnitMoneyCellText(row)!,
                       )
                     "
-                    >{{ comparisonMoneyCellText(row, 'freightUnit') }}</span>
+                    >{{ comparisonFreightUnitMoneyCellText(row) }}</span>
                 </td>
                 <td class="emap-cmp-col-cats">
                   <div
@@ -511,10 +491,10 @@
                     role="button"
                     title="点击查看完整内容"
                     @click.stop="
-                      openComparisonCellDetail('利润', formatComparisonNetProfitCell(row))
+                      openComparisonCellDetail('货值', formatComparisonNetProfitCell(row))
                     "
                     @keydown.enter.prevent="
-                      openComparisonCellDetail('利润', formatComparisonNetProfitCell(row))
+                      openComparisonCellDetail('货值', formatComparisonNetProfitCell(row))
                     "
                     >{{ formatComparisonNetProfitCell(row) }}</span>
                 </td>
@@ -2160,7 +2140,7 @@ function comparisonRankTipHtml(row: ComparisonRankItem): string {
   const rk = escapeHtml(String(row.rank))
   const name = escapeHtml(row.smelter)
   const badgeCls = comparisonRankBadgeClass(row.rank)
-  return `<div class="emap-rank-tip-inner"><span class="${badgeCls}">${rk}</span><div class="emap-rank-tip-body"><div class="emap-rank-tip-name">${name}</div><div>利润: ${formatNum(row.netProfit)}</div><div>总价: ${formatNum(row.totalRecovery)}</div><div>总运费: ${formatNum(row.totalFreight)}</div></div></div>`
+  return `<div class="emap-rank-tip-inner"><span class="${badgeCls}">${rk}</span><div class="emap-rank-tip-body"><div class="emap-rank-tip-name">${name}</div><div>货值: ${formatNum(row.netProfit)}</div><div>总价: ${formatNum(row.totalRecovery)}</div><div>总运费: ${formatNum(row.totalFreight)}</div></div></div>`
 }
 
 /** 比价常驻 tip：方向轮询 + 像素防重叠 */
@@ -2646,11 +2626,7 @@ function formatComparisonOptionalMoneyCell(n: number | undefined): string {
   return `¥${Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
 }
 
-function comparisonMoneyCellText(
-  row: ComparisonRankItem,
-  kind: 'lineUnit' | 'freightUnit',
-): string {
-  if (kind === 'lineUnit') return formatComparisonOptionalMoneyCell(row.lineUnitPrice)
+function comparisonFreightUnitMoneyCellText(row: ComparisonRankItem): string {
   return formatComparisonOptionalMoneyCell(row.freightUnitPrice)
 }
 
@@ -4069,12 +4045,10 @@ const comparisonSummary = computed(() => {
   const sorted = [...comparisonRanks.value].sort((a, b) => a.rank - b.rank)
   const first = sorted[0]
   const second = sorted[1]
-  const bestUnitPrice = first?.unitPrice ?? 0
   const bestProfit = first?.netProfit ?? 0
   const marginToSecond = first && second ? bestProfit - second.netProfit : 0
   return {
     bestSmelter: first?.smelter ?? '',
-    bestUnitPrice: toDisplayNum(bestUnitPrice),
     bestProfit: toDisplayNum(bestProfit),
     marginToSecond: toDisplayNum(marginToSecond),
   }
