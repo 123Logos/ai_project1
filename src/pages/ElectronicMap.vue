@@ -3651,8 +3651,43 @@ function formatFreightDisplay(v: unknown): string {
   return s
 }
 
+/** 出库绑定行「阶梯价差」：与库房距离配置页 parseTierFields 行为一致（纯数字 / JSON 字符串等） */
+function formatWarehouseLinkTierDisplay(row: Record<string, unknown>): string {
+  const keys = ['阶梯价差', 'ladder_price_diff', 'tier_price_diff', 'step_price_diff']
+  for (const k of keys) {
+    if (!Object.prototype.hasOwnProperty.call(row, k)) continue
+    const v = row[k]
+    if (v === null || v === undefined) return '—'
+    if (v === '') return '—'
+    if (typeof v === 'number' && Number.isFinite(v)) {
+      return v.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
+    }
+    if (typeof v === 'string') {
+      const s = v.trim()
+      if (s === '') return '—'
+      const n = Number(s)
+      if (Number.isFinite(n) && s === String(n)) {
+        return n.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
+      }
+      return s
+    }
+    if (typeof v === 'object') {
+      try {
+        return JSON.stringify(v)
+      } catch {
+        return '—'
+      }
+    }
+  }
+  return '—'
+}
+
 /** 距离监测中点标签：浏览器原生 title（完整地址等） */
-function warehouseBindTargetPlainSummary(tgt: MapPoint, freightDisplay: string): string {
+function warehouseBindTargetPlainSummary(
+  tgt: MapPoint,
+  tierDisplay: string,
+  freightDisplay: string,
+): string {
   const row = tgt.raw
   const lines: string[] = [tgt.title]
   const typeName = pickStr(row, ['类型', 'type', 'warehouse_type_name', '类型名']).trim()
@@ -3661,12 +3696,18 @@ function warehouseBindTargetPlainSummary(tgt: MapPoint, freightDisplay: string):
   if (pv) lines.push(`省份：${pv}`)
   const addr = addressText(row).trim()
   if (addr) lines.push(`地址：${addr}`)
+  lines.push(`阶梯价差：${tierDisplay}`)
   lines.push(`运费：${freightDisplay}`)
   return lines.join('\n')
 }
 
 /** 距离监测常驻 tip 内容（与比价冶炼厂 tip 相同：锚在目标点 + Leaflet 箭头指向该点） */
-function warehouseBindMidpointLabelHtml(kmStr: string, tgt: MapPoint, freightDisplay: string): string {
+function warehouseBindMidpointLabelHtml(
+  kmStr: string,
+  tgt: MapPoint,
+  tierDisplay: string,
+  freightDisplay: string,
+): string {
   const row = tgt.raw
   const metaBits: string[] = []
   const typeName = pickStr(row, ['类型', 'type', 'warehouse_type_name', '类型名']).trim()
@@ -3678,12 +3719,15 @@ function warehouseBindMidpointLabelHtml(kmStr: string, tgt: MapPoint, freightDis
     const short = addr.length > 56 ? `${addr.slice(0, 55)}…` : addr
     metaBits.push(`地址：${escapeHtml(short)}`)
   }
+  metaBits.push(`阶梯价差：${escapeHtml(tierDisplay)}`)
   metaBits.push(`运费：${escapeHtml(freightDisplay)}`)
   const meta =
     metaBits.length > 0
       ? `<div class="emap-wh-bind-dist-meta">${metaBits.join('<br/>')}</div>`
       : ''
-  const titleAttr = escapeHtml(warehouseBindTargetPlainSummary(tgt, freightDisplay).replace(/\n/g, ' — '))
+  const titleAttr = escapeHtml(
+    warehouseBindTargetPlainSummary(tgt, tierDisplay, freightDisplay).replace(/\n/g, ' — '),
+  )
   return `<div class="emap-wh-bind-dist-tip-inner" title="${titleAttr}"><div class="emap-wh-bind-dist-km">${escapeHtml(
     kmStr,
   )}</div><div class="emap-wh-bind-dist-target">→ ${escapeHtml(tgt.title)}</div>${meta}</div>`
@@ -3699,11 +3743,13 @@ async function drawWarehouseBindingDistanceLines(warehouse: MapPoint) {
   const links = await fetchTlWarehouseLinksOutbound(whId)
   const targetIds = new Set<number>()
   const freightByTargetId = new Map<number, string>()
+  const tierByTargetId = new Map<number, string>()
   for (const row of links) {
     const tid = linkOutboundTargetId(row)
     if (tid != null && tid > 0) {
       targetIds.add(tid)
       freightByTargetId.set(tid, formatFreightDisplay(pickFreightFromWarehouseLinkRow(row)))
+      tierByTargetId.set(tid, formatWarehouseLinkTierDisplay(row))
     }
   }
   if (!targetIds.size) {
@@ -3745,6 +3791,7 @@ async function drawWarehouseBindingDistanceLines(warehouse: MapPoint) {
     const dir = emapRankTipDirectionForIdx(drawn)
     const base = emapRankTipBasePixelOffset(dir, comparisonRankTipYOffset())
     const freightLine = freightByTargetId.get(tid) ?? '—'
+    const tierLine = tierByTargetId.get(tid) ?? '—'
     L.tooltip({
       permanent: true,
       direction: dir,
@@ -3754,7 +3801,7 @@ async function drawWarehouseBindingDistanceLines(warehouse: MapPoint) {
       opacity: 1,
     })
       .setLatLng([tgt.lat, tgt.lng])
-      .setContent(warehouseBindMidpointLabelHtml(kmStr, tgt, freightLine))
+      .setContent(warehouseBindMidpointLabelHtml(kmStr, tgt, tierLine, freightLine))
       .addTo(tipLayer)
     drawn++
   }
