@@ -3591,12 +3591,20 @@ function linkOutboundTargetId(row: Record<string, unknown>): number | null {
     'to_warehouse_id',
     '目标库房id',
     '目标仓库id',
+    '对标库房id',
+    '对标仓库id',
     'target_warehouse_id',
     'to_id',
     'target_id',
   ])
   if (direct != null && direct > 0) return direct
-  const nestedKeys = ['to_warehouse', 'target_warehouse', '目标库房', '目标仓库']
+  const nestedKeys = [
+    '对标库房',
+    'to_warehouse',
+    'target_warehouse',
+    '目标库房',
+    '目标仓库',
+  ]
   for (const k of nestedKeys) {
     const v = row[k]
     if (v && typeof v === 'object' && !Array.isArray(v)) {
@@ -3613,8 +3621,38 @@ function linkOutboundTargetId(row: Record<string, unknown>): number | null {
   return null
 }
 
+/** 出库绑定行上「运费」：可能在边对象或嵌套对标库房上 */
+function pickFreightFromWarehouseLinkRow(row: Record<string, unknown>): unknown {
+  const top = row['运费'] ?? row['freight'] ?? row['shipping_fee']
+  if (top != null && top !== '') return top
+  const nestedKeys = ['对标库房', 'to_warehouse', 'target_warehouse', '目标库房', '目标仓库']
+  for (const k of nestedKeys) {
+    const v = row[k]
+    if (v && typeof v === 'object' && !Array.isArray(v)) {
+      const nested = v as Record<string, unknown>
+      const f = nested['运费'] ?? nested['freight'] ?? nested['shipping_fee']
+      if (f != null && f !== '') return f
+    }
+  }
+  return null
+}
+
+function formatFreightDisplay(v: unknown): string {
+  if (v == null || v === '') return '—'
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    return v.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
+  }
+  const s = String(v).trim()
+  if (!s) return '—'
+  const n = Number(s)
+  if (Number.isFinite(n) && s === String(n)) {
+    return n.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
+  }
+  return s
+}
+
 /** 距离监测中点标签：浏览器原生 title（完整地址等） */
-function warehouseBindTargetPlainSummary(tgt: MapPoint): string {
+function warehouseBindTargetPlainSummary(tgt: MapPoint, freightDisplay: string): string {
   const row = tgt.raw
   const lines: string[] = [tgt.title]
   const typeName = pickStr(row, ['类型', 'type', 'warehouse_type_name', '类型名']).trim()
@@ -3623,11 +3661,12 @@ function warehouseBindTargetPlainSummary(tgt: MapPoint): string {
   if (pv) lines.push(`省份：${pv}`)
   const addr = addressText(row).trim()
   if (addr) lines.push(`地址：${addr}`)
+  lines.push(`运费：${freightDisplay}`)
   return lines.join('\n')
 }
 
 /** 距离监测常驻 tip 内容（与比价冶炼厂 tip 相同：锚在目标点 + Leaflet 箭头指向该点） */
-function warehouseBindMidpointLabelHtml(kmStr: string, tgt: MapPoint): string {
+function warehouseBindMidpointLabelHtml(kmStr: string, tgt: MapPoint, freightDisplay: string): string {
   const row = tgt.raw
   const metaBits: string[] = []
   const typeName = pickStr(row, ['类型', 'type', 'warehouse_type_name', '类型名']).trim()
@@ -3639,11 +3678,12 @@ function warehouseBindMidpointLabelHtml(kmStr: string, tgt: MapPoint): string {
     const short = addr.length > 56 ? `${addr.slice(0, 55)}…` : addr
     metaBits.push(`地址：${escapeHtml(short)}`)
   }
+  metaBits.push(`运费：${escapeHtml(freightDisplay)}`)
   const meta =
     metaBits.length > 0
       ? `<div class="emap-wh-bind-dist-meta">${metaBits.join('<br/>')}</div>`
       : ''
-  const titleAttr = escapeHtml(warehouseBindTargetPlainSummary(tgt).replace(/\n/g, ' — '))
+  const titleAttr = escapeHtml(warehouseBindTargetPlainSummary(tgt, freightDisplay).replace(/\n/g, ' — '))
   return `<div class="emap-wh-bind-dist-tip-inner" title="${titleAttr}"><div class="emap-wh-bind-dist-km">${escapeHtml(
     kmStr,
   )}</div><div class="emap-wh-bind-dist-target">→ ${escapeHtml(tgt.title)}</div>${meta}</div>`
@@ -3658,9 +3698,13 @@ async function drawWarehouseBindingDistanceLines(warehouse: MapPoint) {
   if (whId == null) throw new Error('该库房缺少仓库 id，无法查询绑定')
   const links = await fetchTlWarehouseLinksOutbound(whId)
   const targetIds = new Set<number>()
+  const freightByTargetId = new Map<number, string>()
   for (const row of links) {
     const tid = linkOutboundTargetId(row)
-    if (tid != null && tid > 0) targetIds.add(tid)
+    if (tid != null && tid > 0) {
+      targetIds.add(tid)
+      freightByTargetId.set(tid, formatFreightDisplay(pickFreightFromWarehouseLinkRow(row)))
+    }
   }
   if (!targetIds.size) {
     throw new Error('该库房暂无出库绑定（请先在「库房距离监测配置」中维护）')
@@ -3700,6 +3744,7 @@ async function drawWarehouseBindingDistanceLines(warehouse: MapPoint) {
     }
     const dir = emapRankTipDirectionForIdx(drawn)
     const base = emapRankTipBasePixelOffset(dir, comparisonRankTipYOffset())
+    const freightLine = freightByTargetId.get(tid) ?? '—'
     L.tooltip({
       permanent: true,
       direction: dir,
@@ -3709,7 +3754,7 @@ async function drawWarehouseBindingDistanceLines(warehouse: MapPoint) {
       opacity: 1,
     })
       .setLatLng([tgt.lat, tgt.lng])
-      .setContent(warehouseBindMidpointLabelHtml(kmStr, tgt))
+      .setContent(warehouseBindMidpointLabelHtml(kmStr, tgt, freightLine))
       .addTo(tipLayer)
     drawn++
   }

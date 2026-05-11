@@ -51,12 +51,13 @@
               <th>对标库房</th>
               <th>库房距离</th>
               <th>阶梯价差</th>
+              <th>运费</th>
               <th class="wdc-col-actions">操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="listRows.length === 0">
-              <td colspan="5">暂无数据</td>
+              <td colspan="6">暂无数据</td>
             </tr>
             <template v-for="grp in groupedTableRows" :key="`grp-${grp.rows[0]?.fromId ?? 0}`">
               <tr v-for="(r, idx) in grp.rows" :key="`edge-${r.fromId}-${r.toId}`">
@@ -66,6 +67,7 @@
                 <td>{{ r.toName }}（{{ r.toId }}）</td>
                 <td class="wdc-td-distance">{{ distanceCellText(r) }}</td>
                 <td class="wdc-td-tier">{{ tierPriceCellText(r) }}</td>
+                <td class="wdc-td-freight">{{ r.freightDisplay }}</td>
                 <td v-if="idx === 0" class="wdc-td-ops wdc-col-actions" :rowspan="grp.rows.length">
                   <div class="wdc-ops-merge">
                     <div class="wdc-ops-buttons-row">
@@ -273,6 +275,8 @@ type LinkRow = {
   toName: string
   tierPriceDiff: number | null
   tierPriceEditSeed: string
+  /** 对标库房等接口上的「运费」，无则展示为 — */
+  freightDisplay: string
 }
 
 /** 同一源库房的多条出边，用于合并首列与末列 */
@@ -471,6 +475,33 @@ function pickStr(row: Record<string, unknown>, keys: string[]): string {
   return ''
 }
 
+function formatFreightDisplay(v: unknown): string {
+  if (v == null || v === '') return '—'
+  if (typeof v === 'number' && Number.isFinite(v)) {
+    return v.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
+  }
+  const s = String(v).trim()
+  if (!s) return '—'
+  const n = Number(s)
+  if (Number.isFinite(n) && s === String(n)) {
+    return n.toLocaleString('zh-CN', { maximumFractionDigits: 4 })
+  }
+  return s
+}
+
+function pickFreightFromLinkRow(
+  row: Record<string, unknown>,
+  tgtObj: Record<string, unknown> | null,
+): string {
+  const top = row['运费'] ?? row['freight'] ?? row['shipping_fee']
+  if (top != null && top !== '') return formatFreightDisplay(top)
+  if (tgtObj) {
+    const f = tgtObj['运费'] ?? tgtObj['freight'] ?? tgtObj['shipping_fee']
+    if (f != null && f !== '') return formatFreightDisplay(f)
+  }
+  return '—'
+}
+
 /** 解析阶梯价差：纯数字用 num 展示；JSON/其它字符串用 seed 原样编辑 */
 function parseTierFields(row: Record<string, unknown>): { num: number | null; seed: string } {
   const keys = ['阶梯价差', 'ladder_price_diff', 'tier_price_diff', 'step_price_diff']
@@ -664,8 +695,9 @@ function toLinkRow(row: Record<string, unknown>): LinkRow {
   if (!toName) toName = warehouseNameById(toId)
 
   const { num: tierPriceDiff, seed: tierPriceEditSeed } = parseTierFields(row)
+  const freightDisplay = pickFreightFromLinkRow(row, tgtObj)
 
-  return { fromId, toId, fromName, toName, tierPriceDiff, tierPriceEditSeed }
+  return { fromId, toId, fromName, toName, tierPriceDiff, tierPriceEditSeed, freightDisplay }
 }
 
 async function loadWarehouses() {
@@ -951,6 +983,12 @@ onMounted(async () => {
 }
 
 .wdc-td-tier {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+}
+
+.wdc-td-freight {
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   color: #334155;
