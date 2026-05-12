@@ -70,7 +70,559 @@
       </div>
     </div>
 
-    <!-- 子页面 -->
+    <!-- 库房AI定价对标分析 -->
+    <div v-else-if="activePage === 'benchmarkAnalysis'" class="sub-page">
+      <div class="sub-page-header">
+        <button class="back-btn" @click="activePage = ''">
+          <i class="bi bi-arrow-left"></i>
+          返回
+        </button>
+        <h3 class="sub-page-title">库房AI定价对标分析</h3>
+      </div>
+      <div class="sub-page-body">
+        <div class="table-toolbar">
+          <div class="toolbar-filters">
+            <select v-model="analysisFilterProvince" class="form-select filter-input">
+              <option value="">全部省份</option>
+              <option v-for="p in provinceOptions" :key="p" :value="p">{{ p }}</option>
+            </select>
+            <input
+              v-model.trim="analysisFilterCity"
+              class="form-control filter-input"
+              placeholder="按城市筛选"
+            />
+            <button class="btn filter-btn" @click="loadBenchmarkAnalysis">
+              <i class="bi bi-search"></i>
+              查询
+            </button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table analysis-table">
+            <thead>
+              <tr>
+                <th>省</th>
+                <th>城市</th>
+                <th>仓库</th>
+                <th>对标城市</th>
+                <th>对标城市定价</th>
+                <th>对标城市差额</th>
+                <th>标定价格</th>
+                <th>运费</th>
+                <th>毛利（配置）</th>
+                <th>毛利（计算）</th>
+                <th>定价</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="analysisLoading">
+                <td colspan="11" class="text-center py-4">
+                  <span class="spinner-border spinner-border-sm me-2"></span>
+                  加载中…
+                </td>
+              </tr>
+              <tr v-else-if="analysisData.length === 0">
+                <td colspan="11" class="text-center py-4 text-muted">暂无数据</td>
+              </tr>
+              <tr v-for="row in analysisData" :key="row.id">
+                <td>{{ row.province }}</td>
+                <td>{{ row.city }}</td>
+                <td>{{ row.warehouse }}</td>
+                <td>{{ row.benchmark_city }}</td>
+                <td>{{ row.benchmark_price.toFixed(2) }}</td>
+                <td>{{ row.benchmark_diff.toFixed(2) }}</td>
+                <td>{{ row.calibrated_price.toFixed(2) }}</td>
+                <td>{{ row.freight.toFixed(2) }}</td>
+                <td>{{ row.margin_config.toFixed(2) }}</td>
+                <td>{{ row.margin_calculated.toFixed(2) }}</td>
+                <td>{{ row.price.toFixed(2) }}</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="analysisTotal > analysisPageSize" class="table-pagination">
+          <span class="pagination-info">共 {{ analysisTotal }} 条</span>
+          <button class="page-btn" :disabled="analysisPage <= 1" @click="changeAnalysisPage(analysisPage - 1)">上一页</button>
+          <span class="page-current">第 {{ analysisPage }} 页</span>
+          <button class="page-btn" :disabled="analysisPage * analysisPageSize >= analysisTotal" @click="changeAnalysisPage(analysisPage + 1)">下一页</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 对标城市定价 -->
+    <div v-else-if="activePage === 'cityBenchmark'" class="sub-page">
+      <div class="sub-page-header">
+        <button class="back-btn" @click="activePage = ''">
+          <i class="bi bi-arrow-left"></i>
+          返回
+        </button>
+        <h3 class="sub-page-title">对标城市定价</h3>
+        <div class="header-actions">
+          <button class="btn add-btn" @click="openAddForm">
+            <i class="bi bi-plus-lg me-1"></i>
+            新增对标城市定价
+          </button>
+        </div>
+      </div>
+      <div class="sub-page-body">
+        <div class="table-toolbar">
+          <div class="toolbar-filters">
+            <select v-model="filterProvince" class="form-select filter-input">
+              <option value="">全部省份</option>
+              <option v-for="p in provinceOptions" :key="p" :value="p">{{ p }}</option>
+            </select>
+            <input
+              v-model.trim="filterCity"
+              class="form-control filter-input"
+              placeholder="按城市筛选"
+            />
+            <input
+              v-model="filterDate"
+              type="date"
+              class="form-control filter-input"
+            />
+            <button class="btn filter-btn" @click="loadCityBenchmarks">
+              <i class="bi bi-search"></i>
+              查询
+            </button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>省份</th>
+                <th>对标城市</th>
+                <th>定价</th>
+                <th>日期</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="tableLoading">
+                <td colspan="5" class="text-center py-4">
+                  <span class="spinner-border spinner-border-sm me-2"></span>
+                  加载中…
+                </td>
+              </tr>
+              <tr v-else-if="tableData.length === 0">
+                <td colspan="5" class="text-center py-4 text-muted">暂无数据</td>
+              </tr>
+              <tr v-for="row in tableData" :key="row.id">
+                <td>{{ row.province }}</td>
+                <td>{{ row.city }}</td>
+                <td>{{ row.price.toFixed(2) }}</td>
+                <td>{{ row.date }}</td>
+                <td class="col-actions">
+                  <button class="action-btn action-edit" @click="openEditForm(row)">
+                    <i class="bi bi-pencil-square"></i>
+                    修改
+                  </button>
+                  <button class="action-btn action-delete" @click="handleDelete(row)">
+                    <i class="bi bi-trash3"></i>
+                    删除
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="total > pageSize" class="table-pagination">
+          <span class="pagination-info">共 {{ total }} 条</span>
+          <button class="page-btn" :disabled="page <= 1" @click="changePage(page - 1)">上一页</button>
+          <span class="page-current">第 {{ page }} 页</span>
+          <button class="page-btn" :disabled="page * pageSize >= total" @click="changePage(page + 1)">下一页</button>
+        </div>
+      </div>
+
+      <!-- 新增/编辑弹窗 -->
+      <div v-if="showForm" class="form-mask" @click.self="showForm = false">
+        <div class="form-card">
+          <div class="form-card-header">
+            <h6>{{ editingRow ? '修改对标城市定价' : '新增对标城市定价' }}</h6>
+            <button class="form-close-btn" @click="showForm = false">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <div class="form-card-body">
+            <div class="form-field">
+              <label class="form-label">省份</label>
+              <input v-model.trim="form.province" class="form-control" placeholder="请输入省份" />
+            </div>
+            <div class="form-field">
+              <label class="form-label">对标城市</label>
+              <input v-model.trim="form.city" class="form-control" placeholder="请输入城市" />
+            </div>
+            <div class="form-field">
+              <label class="form-label">定价</label>
+              <input
+                v-model.number="form.price"
+                type="number"
+                step="0.01"
+                min="0"
+                class="form-control"
+                placeholder="请输入定价"
+              />
+            </div>
+            <div class="form-field">
+              <label class="form-label">日期</label>
+              <input v-model="form.date" type="date" class="form-control" />
+            </div>
+            <div v-if="formError" class="alert alert-warning py-2 mb-2">{{ formError }}</div>
+          </div>
+          <div class="form-card-footer">
+            <button class="btn form-btn-cancel" @click="showForm = false">取消</button>
+            <button class="btn form-btn-submit" :disabled="formLoading" @click="submitForm">
+              {{ formLoading ? '提交中…' : '确定' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 冶炼厂标定价格 -->
+    <div v-else-if="activePage === 'smelterPrice'" class="sub-page">
+      <div class="sub-page-header">
+        <button class="back-btn" @click="activePage = ''">
+          <i class="bi bi-arrow-left"></i>
+          返回
+        </button>
+        <h3 class="sub-page-title">冶炼厂标定价格</h3>
+        <div class="header-actions">
+          <button class="btn add-btn" @click="showHistory = true">
+            <i class="bi bi-clock-history me-1"></i>
+            历史记录
+          </button>
+        </div>
+      </div>
+      <div class="sub-page-body">
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>冶炼厂</th>
+                <th>标定价格</th>
+                <th>日期</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="smelterLoading">
+                <td colspan="4" class="text-center py-4">
+                  <span class="spinner-border spinner-border-sm me-2"></span>
+                  加载中…
+                </td>
+              </tr>
+              <tr v-else-if="!smelterData">
+                <td colspan="4" class="text-center py-4 text-muted">暂无数据</td>
+              </tr>
+              <tr v-else>
+                <td>{{ smelterData.smelter }}</td>
+                <td>{{ smelterData.price.toFixed(2) }}</td>
+                <td>{{ smelterData.date }}</td>
+                <td class="col-actions">
+                  <button class="action-btn action-edit" @click="openSmelterEdit">
+                    <i class="bi bi-pencil-square"></i>
+                    修改标定价格
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 修改价格弹窗 -->
+      <div v-if="showSmelterForm" class="form-mask" @click.self="showSmelterForm = false">
+        <div class="form-card">
+          <div class="form-card-header">
+            <h6>修改标定价格</h6>
+            <button class="form-close-btn" @click="showSmelterForm = false">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <div class="form-card-body">
+            <div class="form-field">
+              <label class="form-label">标定价格</label>
+              <input
+                v-model.number="smelterForm.price"
+                type="number"
+                step="0.01"
+                min="0"
+                class="form-control"
+                placeholder="请输入标定价格"
+              />
+            </div>
+            <div class="form-field">
+              <label class="form-label">日期</label>
+              <input v-model="smelterForm.date" type="date" class="form-control" />
+            </div>
+            <div v-if="smelterFormError" class="alert alert-warning py-2 mb-2">{{ smelterFormError }}</div>
+          </div>
+          <div class="form-card-footer">
+            <button class="btn form-btn-cancel" @click="showSmelterForm = false">取消</button>
+            <button class="btn form-btn-submit" :disabled="smelterFormLoading" @click="submitSmelterForm">
+              {{ smelterFormLoading ? '提交中…' : '确定' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 历史记录弹窗 -->
+      <div v-if="showHistory" class="form-mask" @click.self="showHistory = false">
+        <div class="form-card history-card">
+          <div class="form-card-header">
+            <h6>标定价格修改历史</h6>
+            <button class="form-close-btn" @click="showHistory = false">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <div class="form-card-body" style="padding: 0;">
+            <table class="data-table history-table">
+              <thead>
+                <tr>
+                  <th>标定价格</th>
+                  <th>操作人</th>
+                  <th>更改时间</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-if="historyLoading">
+                  <td colspan="3" class="text-center py-4">
+                    <span class="spinner-border spinner-border-sm me-2"></span>
+                    加载中…
+                  </td>
+                </tr>
+                <tr v-else-if="historyData.length === 0">
+                  <td colspan="3" class="text-center py-4 text-muted">暂无记录</td>
+                </tr>
+                <tr v-for="item in historyData" :key="item.id">
+                  <td>{{ item.price.toFixed(2) }}</td>
+                  <td>{{ item.operator }}</td>
+                  <td>{{ item.change_time }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div v-if="historyTotal > historyPageSize" class="form-card-footer" style="justify-content: center;">
+            <button class="page-btn" :disabled="historyPage <= 1" @click="changeHistoryPage(historyPage - 1)">上一页</button>
+            <span class="page-current">第 {{ historyPage }} 页</span>
+            <button class="page-btn" :disabled="historyPage * historyPageSize >= historyTotal" @click="changeHistoryPage(historyPage + 1)">下一页</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 库房差价和毛利管理 -->
+    <div v-else-if="activePage === 'marginManage'" class="sub-page">
+      <div class="sub-page-header">
+        <button class="back-btn" @click="activePage = ''">
+          <i class="bi bi-arrow-left"></i>
+          返回
+        </button>
+        <h3 class="sub-page-title">库房差价和毛利管理</h3>
+        <div class="header-actions" style="display:flex; gap:8px;">
+          <button class="btn add-btn add-btn--outline" @click="triggerMarginImport">
+            <i class="bi bi-upload me-1"></i>
+            导入表格数据
+          </button>
+          <button class="btn add-btn" @click="openMarginAdd">
+            <i class="bi bi-plus-lg me-1"></i>
+            新增
+          </button>
+        </div>
+      </div>
+      <input ref="marginFileInput" type="file" accept=".xlsx,.xls,.csv" style="display:none" @change="handleMarginImport" />
+      <div class="sub-page-body">
+        <div class="table-toolbar">
+          <div class="toolbar-filters">
+            <select v-model="marginFilterProvince" class="form-select filter-input">
+              <option value="">全部省份</option>
+              <option v-for="p in provinceOptions" :key="p" :value="p">{{ p }}</option>
+            </select>
+            <input
+              v-model.trim="marginFilterCity"
+              class="form-control filter-input"
+              placeholder="按城市筛选"
+            />
+            <button class="btn filter-btn" @click="loadMargins">
+              <i class="bi bi-search"></i>
+              查询
+            </button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>省份</th>
+                <th>城市</th>
+                <th>库房名称</th>
+                <th>对标城市</th>
+                <th>对标城市差额</th>
+                <th>毛利</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-if="marginLoading">
+                <td colspan="7" class="text-center py-4">
+                  <span class="spinner-border spinner-border-sm me-2"></span>
+                  加载中…
+                </td>
+              </tr>
+              <tr v-else-if="marginData.length === 0">
+                <td colspan="7" class="text-center py-4 text-muted">暂无数据</td>
+              </tr>
+              <tr v-for="row in marginData" :key="row.id">
+                <td>{{ row.province }}</td>
+                <td>{{ row.city }}</td>
+                <td>{{ row.warehouse_name }}</td>
+                <td>{{ row.benchmark_city }}</td>
+                <td>{{ row.benchmark_diff.toFixed(2) }}</td>
+                <td>{{ row.margin.toFixed(2) }}</td>
+                <td class="col-actions">
+                  <button class="action-btn action-edit" @click="openMarginEdit(row)">
+                    <i class="bi bi-pencil-square"></i>
+                    修改
+                  </button>
+                  <button class="action-btn action-delete" @click="handleMarginDelete(row)">
+                    <i class="bi bi-trash3"></i>
+                    删除
+                  </button>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div v-if="marginTotal > marginPageSize" class="table-pagination">
+          <span class="pagination-info">共 {{ marginTotal }} 条</span>
+          <button class="page-btn" :disabled="marginPage <= 1" @click="changeMarginPage(marginPage - 1)">上一页</button>
+          <span class="page-current">第 {{ marginPage }} 页</span>
+          <button class="page-btn" :disabled="marginPage * marginPageSize >= marginTotal" @click="changeMarginPage(marginPage + 1)">下一页</button>
+        </div>
+      </div>
+
+      <!-- 新增/编辑弹窗 -->
+      <div v-if="showMarginForm" class="form-mask" @click.self="showMarginForm = false">
+        <div class="form-card">
+          <div class="form-card-header">
+            <h6>{{ marginEditing ? '修改库房差价和毛利' : '新增库房差价和毛利' }}</h6>
+            <button class="form-close-btn" @click="showMarginForm = false">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <div class="form-card-body">
+            <div class="form-field">
+              <label class="form-label">省份</label>
+              <select v-model="marginForm.province" class="form-control">
+                <option value="">请选择省份</option>
+                <option v-for="p in provinceOptions" :key="p" :value="p">{{ p }}</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="form-label">城市</label>
+              <input v-model.trim="marginForm.city" class="form-control" placeholder="请输入城市" />
+            </div>
+            <div class="form-field">
+              <label class="form-label">库房名称</label>
+              <div class="search-select" ref="warehouseSelectRef">
+                <input
+                  v-model.trim="marginForm.warehouse_name"
+                  class="form-control"
+                  placeholder="搜索或输入库房名称"
+                  @focus="showWarehouseDropdown = true"
+                  @input="showWarehouseDropdown = true"
+                />
+                <div v-if="showWarehouseDropdown && filteredWarehouseNames.length" class="search-select-dropdown">
+                  <div
+                    v-for="w in filteredWarehouseNames"
+                    :key="w"
+                    class="search-select-item"
+                    @mousedown.prevent="marginForm.warehouse_name = w; showWarehouseDropdown = false"
+                  >
+                    {{ w }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="form-field">
+              <label class="form-label">对标城市</label>
+              <div class="search-select" ref="benchmarkCitySelectRef">
+                <input
+                  v-model.trim="marginForm.benchmark_city"
+                  class="form-control"
+                  placeholder="搜索或输入对标城市"
+                  @focus="showBenchmarkCityDropdown = true"
+                  @input="showBenchmarkCityDropdown = true"
+                />
+                <div v-if="showBenchmarkCityDropdown && filteredBenchmarkCities.length" class="search-select-dropdown">
+                  <div
+                    v-for="c in filteredBenchmarkCities"
+                    :key="c"
+                    class="search-select-item"
+                    @mousedown.prevent="marginForm.benchmark_city = c; showBenchmarkCityDropdown = false"
+                  >
+                    {{ c }}
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="form-field">
+              <label class="form-label">对标城市差额</label>
+              <input v-model.number="marginForm.benchmark_diff" type="number" step="0.01" class="form-control" placeholder="请输入差额" />
+            </div>
+            <div class="form-field">
+              <label class="form-label">毛利</label>
+              <input v-model.number="marginForm.margin" type="number" step="0.01" class="form-control" placeholder="请输入毛利" />
+            </div>
+            <div v-if="marginFormError" class="alert alert-warning py-2 mb-2">{{ marginFormError }}</div>
+          </div>
+          <div class="form-card-footer">
+            <button class="btn form-btn-cancel" @click="showMarginForm = false">取消</button>
+            <button class="btn form-btn-submit" :disabled="marginFormLoading" @click="submitMarginForm">
+              {{ marginFormLoading ? '提交中…' : '确定' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 导入预览弹窗 -->
+      <div v-if="showImportPreview" class="form-mask" @click.self="showImportPreview = false">
+        <div class="form-card history-card">
+          <div class="form-card-header">
+            <h6>导入预览（共 {{ importTotalRows }} 行）</h6>
+            <button class="form-close-btn" @click="showImportPreview = false">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <div class="form-card-body" style="padding: 0;">
+            <div class="table-wrap">
+              <table class="data-table history-table">
+                <thead>
+                  <tr>
+                    <th v-for="col in importColumns" :key="col">{{ col }}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, idx) in importPreviewData" :key="idx">
+                    <td v-for="col in importColumns" :key="col">{{ row[col] ?? '' }}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="form-card-footer">
+            <button class="btn form-btn-cancel" @click="showImportPreview = false">取消</button>
+            <button class="btn form-btn-submit" :disabled="importLoading" @click="confirmImport">
+              {{ importLoading ? '导入中…' : '确认导入' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 其他子页面 -->
     <div v-else class="sub-page">
       <div class="sub-page-header">
         <button class="back-btn" @click="activePage = ''">
@@ -91,8 +643,37 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import * as XLSX from 'xlsx'
 import { hasNavPermission } from '@/composables/useMePermissions'
+import {
+  fetchCityBenchmarks,
+  createCityBenchmark,
+  updateCityBenchmark,
+  deleteCityBenchmark,
+  type CityBenchmarkRow,
+  type CityBenchmarkForm,
+} from '@/api/cityBenchmarkApi'
+import {
+  fetchSmelterPrice,
+  updateSmelterPrice,
+  fetchSmelterPriceHistory,
+  type SmelterPriceRow,
+  type SmelterPriceHistoryRow,
+} from '@/api/smelterPriceApi'
+import {
+  fetchBenchmarkAnalysis,
+  type BenchmarkAnalysisRow,
+} from '@/api/benchmarkAnalysisApi'
+import {
+  fetchWarehouseMargins,
+  createWarehouseMargin,
+  updateWarehouseMargin,
+  deleteWarehouseMargin,
+  importWarehouseMargins,
+  type WarehouseMarginRow,
+  type WarehouseMarginForm,
+} from '@/api/warehouseMarginApi'
 
 const activePage = ref('')
 
@@ -119,6 +700,457 @@ const pageMeta: Record<string, { title: string; icon: string }> = {
 
 const pageTitle = computed(() => pageMeta[activePage.value]?.title ?? '')
 const pageIcon = computed(() => pageMeta[activePage.value]?.icon ?? 'bi bi-grid')
+
+/* ===== 对标城市定价 ===== */
+const provinceOptions = [
+  '北京市', '天津市', '河北省', '山西省', '内蒙古自治区',
+  '辽宁省', '吉林省', '黑龙江省',
+  '上海市', '江苏省', '浙江省', '安徽省', '福建省', '江西省', '山东省',
+  '河南省', '湖北省', '湖南省', '广东省', '广西壮族自治区', '海南省',
+  '重庆市', '四川省', '贵州省', '云南省', '西藏自治区',
+  '陕西省', '甘肃省', '青海省', '宁夏回族自治区', '新疆维吾尔自治区',
+  '台湾省', '香港特别行政区', '澳门特别行政区',
+]
+
+const tableData = ref<CityBenchmarkRow[]>([])
+const tableLoading = ref(false)
+const total = ref(0)
+const page = ref(1)
+const pageSize = 20
+const filterProvince = ref('')
+const filterCity = ref('')
+const filterDate = ref('')
+
+const showForm = ref(false)
+const editingRow = ref<CityBenchmarkRow | null>(null)
+const formLoading = ref(false)
+const formError = ref('')
+const form = ref<CityBenchmarkForm>({ province: '', city: '', price: 0, date: '' })
+
+async function loadCityBenchmarks() {
+  tableLoading.value = true
+  try {
+    const res = await fetchCityBenchmarks({
+      province: filterProvince.value || undefined,
+      city: filterCity.value || undefined,
+      date: filterDate.value || undefined,
+      page: page.value,
+      page_size: pageSize,
+    })
+    tableData.value = res.items
+    total.value = res.total
+  } catch (e) {
+    tableData.value = []
+    total.value = 0
+    console.error('加载对标城市定价失败:', e)
+  } finally {
+    tableLoading.value = false
+  }
+}
+
+function changePage(p: number) {
+  page.value = p
+  loadCityBenchmarks()
+}
+
+function openAddForm() {
+  editingRow.value = null
+  form.value = { province: '', city: '', price: 0, date: new Date().toISOString().slice(0, 10) }
+  formError.value = ''
+  showForm.value = true
+}
+
+function openEditForm(row: CityBenchmarkRow) {
+  editingRow.value = row
+  form.value = { province: row.province, city: row.city, price: row.price, date: row.date }
+  formError.value = ''
+  showForm.value = true
+}
+
+async function submitForm() {
+  if (!form.value.province) { formError.value = '请输入省份'; return }
+  if (!form.value.city) { formError.value = '请输入对标城市'; return }
+  if (!form.value.price && form.value.price !== 0) { formError.value = '请输入定价'; return }
+  if (!form.value.date) { formError.value = '请选择日期'; return }
+  formLoading.value = true
+  formError.value = ''
+  try {
+    if (editingRow.value) {
+      await updateCityBenchmark(editingRow.value.id, form.value)
+    } else {
+      await createCityBenchmark(form.value)
+    }
+    showForm.value = false
+    await loadCityBenchmarks()
+  } catch (e) {
+    formError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    formLoading.value = false
+  }
+}
+
+async function handleDelete(row: CityBenchmarkRow) {
+  if (!confirm(`确定删除「${row.province} - ${row.city}」的对标定价吗？`)) return
+  try {
+    await deleteCityBenchmark(row.id)
+    await loadCityBenchmarks()
+  } catch (e) {
+    alert(e instanceof Error ? e.message : String(e))
+  }
+}
+
+watch(activePage, (val) => {
+  if (val === 'cityBenchmark') {
+    page.value = 1
+    filterProvince.value = ''
+    filterCity.value = ''
+    filterDate.value = ''
+    loadCityBenchmarks()
+  }
+  if (val === 'smelterPrice') {
+    loadSmelterPrice()
+  }
+  if (val === 'benchmarkAnalysis') {
+    analysisPage.value = 1
+    analysisFilterProvince.value = ''
+    analysisFilterCity.value = ''
+    loadBenchmarkAnalysis()
+  }
+  if (val === 'marginManage') {
+    marginPage.value = 1
+    marginFilterProvince.value = ''
+    marginFilterCity.value = ''
+    loadMargins()
+  }
+})
+
+/* ===== 冶炼厂标定价格 ===== */
+const smelterData = ref<SmelterPriceRow | null>(null)
+const smelterLoading = ref(false)
+const showSmelterForm = ref(false)
+const smelterFormLoading = ref(false)
+const smelterFormError = ref('')
+const smelterForm = ref({ price: 0, date: '' })
+
+const showHistory = ref(false)
+const historyData = ref<SmelterPriceHistoryRow[]>([])
+const historyLoading = ref(false)
+const historyTotal = ref(0)
+const historyPage = ref(1)
+const historyPageSize = 20
+
+async function loadSmelterPrice() {
+  smelterLoading.value = true
+  try {
+    smelterData.value = await fetchSmelterPrice()
+  } catch (e) {
+    smelterData.value = null
+    console.error('加载冶炼厂标定价格失败:', e)
+  } finally {
+    smelterLoading.value = false
+  }
+}
+
+function openSmelterEdit() {
+  if (!smelterData.value) return
+  smelterForm.value = { price: smelterData.value.price, date: smelterData.value.date }
+  smelterFormError.value = ''
+  showSmelterForm.value = true
+}
+
+async function submitSmelterForm() {
+  if (!smelterForm.value.price && smelterForm.value.price !== 0) { smelterFormError.value = '请输入标定价格'; return }
+  if (!smelterForm.value.date) { smelterFormError.value = '请选择日期'; return }
+  smelterFormLoading.value = true
+  smelterFormError.value = ''
+  try {
+    smelterData.value = await updateSmelterPrice(smelterForm.value.price, smelterForm.value.date)
+    showSmelterForm.value = false
+  } catch (e) {
+    smelterFormError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    smelterFormLoading.value = false
+  }
+}
+
+async function loadSmelterHistory() {
+  historyLoading.value = true
+  try {
+    const res = await fetchSmelterPriceHistory({ page: historyPage.value, page_size: historyPageSize })
+    historyData.value = res.items
+    historyTotal.value = res.total
+  } catch (e) {
+    historyData.value = []
+    historyTotal.value = 0
+    console.error('加载历史记录失败:', e)
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+function changeHistoryPage(p: number) {
+  historyPage.value = p
+  loadSmelterHistory()
+}
+
+watch(showHistory, (v) => {
+  if (v) {
+    historyPage.value = 1
+    loadSmelterHistory()
+  }
+})
+
+/* ===== 库房AI定价对标分析 ===== */
+const analysisData = ref<BenchmarkAnalysisRow[]>([])
+const analysisLoading = ref(false)
+const analysisTotal = ref(0)
+const analysisPage = ref(1)
+const analysisPageSize = 20
+const analysisFilterProvince = ref('')
+const analysisFilterCity = ref('')
+
+async function loadBenchmarkAnalysis() {
+  analysisLoading.value = true
+  try {
+    const res = await fetchBenchmarkAnalysis({
+      province: analysisFilterProvince.value || undefined,
+      city: analysisFilterCity.value || undefined,
+      page: analysisPage.value,
+      page_size: analysisPageSize,
+    })
+    analysisData.value = res.items
+    analysisTotal.value = res.total
+  } catch (e) {
+    analysisData.value = []
+    analysisTotal.value = 0
+    console.error('加载对标分析数据失败:', e)
+  } finally {
+    analysisLoading.value = false
+  }
+}
+
+function changeAnalysisPage(p: number) {
+  analysisPage.value = p
+  loadBenchmarkAnalysis()
+}
+
+/* ===== 库房差价和毛利管理 ===== */
+const marginData = ref<WarehouseMarginRow[]>([])
+const marginLoading = ref(false)
+const marginTotal = ref(0)
+const marginPage = ref(1)
+const marginPageSize = 20
+const marginFilterProvince = ref('')
+const marginFilterCity = ref('')
+
+const showMarginForm = ref(false)
+const marginEditing = ref<WarehouseMarginRow | null>(null)
+const marginFormLoading = ref(false)
+const marginFormError = ref('')
+const marginForm = ref<WarehouseMarginForm>({
+  province: '', city: '', warehouse_name: '', benchmark_city: '', benchmark_diff: 0, margin: 0,
+})
+
+const marginFileInput = ref<HTMLInputElement | null>(null)
+const showImportPreview = ref(false)
+const importColumns = ref<string[]>([])
+const importPreviewData = ref<Record<string, string>[]>([])
+const importTotalRows = ref(0)
+const importLoading = ref(false)
+let pendingImportFile: File | null = null
+
+function handleMarginFormClickOutside(e: MouseEvent) {
+  const target = e.target as Node
+  if (warehouseSelectRef.value && !warehouseSelectRef.value.contains(target)) {
+    showWarehouseDropdown.value = false
+  }
+  if (benchmarkCitySelectRef.value && !benchmarkCitySelectRef.value.contains(target)) {
+    showBenchmarkCityDropdown.value = false
+  }
+}
+
+watch(showMarginForm, (v) => {
+  if (v) {
+    showWarehouseDropdown.value = false
+    showBenchmarkCityDropdown.value = false
+    setTimeout(() => document.addEventListener('click', handleMarginFormClickOutside), 0)
+  } else {
+    document.removeEventListener('click', handleMarginFormClickOutside)
+  }
+})
+
+const benchmarkCityOptions = ref<string[]>([])
+const warehouseNameOptions = ref<string[]>([])
+const showWarehouseDropdown = ref(false)
+const showBenchmarkCityDropdown = ref(false)
+const warehouseSelectRef = ref<HTMLElement | null>(null)
+const benchmarkCitySelectRef = ref<HTMLElement | null>(null)
+
+const filteredWarehouseNames = computed(() => {
+  const q = marginForm.value.warehouse_name.toLowerCase()
+  if (!q) return warehouseNameOptions.value.slice(0, 50)
+  return warehouseNameOptions.value.filter((w) => w.toLowerCase().includes(q)).slice(0, 50)
+})
+
+const filteredBenchmarkCities = computed(() => {
+  const q = marginForm.value.benchmark_city.toLowerCase()
+  if (!q) return benchmarkCityOptions.value.slice(0, 50)
+  return benchmarkCityOptions.value.filter((c) => c.toLowerCase().includes(q)).slice(0, 50)
+})
+
+async function loadBenchmarkCityOptions() {
+  try {
+    const res = await fetchCityBenchmarks({ page: 1, page_size: 500 })
+    const seen = new Set<string>()
+    for (const item of res.items) {
+      if (item.city) seen.add(item.city)
+    }
+    benchmarkCityOptions.value = [...seen].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+  } catch {
+    benchmarkCityOptions.value = []
+  }
+}
+
+async function loadWarehouseNameOptions() {
+  try {
+    const res = await fetchWarehouseMargins({ page: 1, page_size: 500 })
+    const seen = new Set<string>()
+    for (const item of res.items) {
+      if (item.warehouse_name) seen.add(item.warehouse_name)
+    }
+    warehouseNameOptions.value = [...seen].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+  } catch {
+    warehouseNameOptions.value = []
+  }
+}
+
+async function loadMargins() {
+  marginLoading.value = true
+  try {
+    const res = await fetchWarehouseMargins({
+      province: marginFilterProvince.value || undefined,
+      city: marginFilterCity.value || undefined,
+      page: marginPage.value,
+      page_size: marginPageSize,
+    })
+    marginData.value = res.items
+    marginTotal.value = res.total
+  } catch (e) {
+    marginData.value = []
+    marginTotal.value = 0
+    console.error('加载库房差价和毛利失败:', e)
+  } finally {
+    marginLoading.value = false
+  }
+}
+
+function changeMarginPage(p: number) {
+  marginPage.value = p
+  loadMargins()
+}
+
+function openMarginAdd() {
+  marginEditing.value = null
+  marginForm.value = { province: '', city: '', warehouse_name: '', benchmark_city: '', benchmark_diff: 0, margin: 0 }
+  marginFormError.value = ''
+  showMarginForm.value = true
+  loadBenchmarkCityOptions()
+  loadWarehouseNameOptions()
+}
+
+function openMarginEdit(row: WarehouseMarginRow) {
+  marginEditing.value = row
+  marginForm.value = {
+    province: row.province, city: row.city, warehouse_name: row.warehouse_name,
+    benchmark_city: row.benchmark_city, benchmark_diff: row.benchmark_diff, margin: row.margin,
+  }
+  marginFormError.value = ''
+  showMarginForm.value = true
+  loadBenchmarkCityOptions()
+  loadWarehouseNameOptions()
+}
+
+async function submitMarginForm() {
+  const f = marginForm.value
+  if (!f.province) { marginFormError.value = '请选择省份'; return }
+  if (!f.city) { marginFormError.value = '请输入城市'; return }
+  if (!f.warehouse_name) { marginFormError.value = '请输入库房名称'; return }
+  if (!f.benchmark_city) { marginFormError.value = '请输入对标城市'; return }
+  marginFormLoading.value = true
+  marginFormError.value = ''
+  try {
+    if (marginEditing.value) {
+      await updateWarehouseMargin(marginEditing.value.id, f)
+    } else {
+      await createWarehouseMargin(f)
+    }
+    showMarginForm.value = false
+    await loadMargins()
+  } catch (e) {
+    marginFormError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    marginFormLoading.value = false
+  }
+}
+
+async function handleMarginDelete(row: WarehouseMarginRow) {
+  if (!confirm(`确定删除「${row.warehouse_name} - ${row.benchmark_city}」吗？`)) return
+  try {
+    await deleteWarehouseMargin(row.id)
+    await loadMargins()
+  } catch (e) {
+    alert(e instanceof Error ? e.message : String(e))
+  }
+}
+
+function triggerMarginImport() {
+  marginFileInput.value?.click()
+}
+
+async function handleMarginImport(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+
+  try {
+    const ab = await file.arrayBuffer()
+    const wb = XLSX.read(ab, { type: 'array' })
+    const ws = wb.Sheets[wb.SheetNames[0]!]
+    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
+    if (rows.length === 0) {
+      alert('文件中没有数据')
+      return
+    }
+    const cols = Object.keys(rows[0]!)
+    importColumns.value = cols
+    importTotalRows.value = rows.length
+    importPreviewData.value = rows.slice(0, 10).map((r) => {
+      const obj: Record<string, string> = {}
+      for (const c of cols) obj[c] = String(r[c] ?? '')
+      return obj
+    })
+    pendingImportFile = file
+    showImportPreview.value = true
+  } catch (e) {
+    alert('解析文件失败：' + (e instanceof Error ? e.message : String(e)))
+  }
+}
+
+async function confirmImport() {
+  if (!pendingImportFile) return
+  importLoading.value = true
+  try {
+    await importWarehouseMargins(pendingImportFile)
+    showImportPreview.value = false
+    pendingImportFile = null
+    await loadMargins()
+  } catch (e) {
+    alert(e instanceof Error ? e.message : String(e))
+  } finally {
+    importLoading.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -249,14 +1281,15 @@ const pageIcon = computed(() => pageMeta[activePage.value]?.icon ?? 'bi bi-grid'
 .sub-page {
   max-width: 1280px;
   width: 100%;
-  padding: 0 24px;
+  padding: 20px 24px 0;
+  align-self: start;
 }
 
 .sub-page-header {
   display: flex;
   align-items: center;
   gap: 16px;
-  margin-bottom: 20px;
+  margin-bottom: 12px;
 }
 
 .back-btn {
@@ -325,5 +1358,354 @@ const pageIcon = computed(() => pageMeta[activePage.value]?.icon ?? 'bi bi-grid'
   .home-panel.config-panel {
     grid-column: 1 / -1;
   }
+}
+
+/* ===== 对标城市定价表格 ===== */
+.header-actions {
+  margin-left: auto;
+}
+
+.add-btn {
+  background: #196cc0;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 7px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.add-btn:hover {
+  background: #155a9e;
+}
+
+.add-btn--outline {
+  background: #fff;
+  color: #196cc0;
+  border: 1px solid #196cc0;
+}
+
+.add-btn--outline:hover {
+  background: #e8f0fe;
+}
+
+/* ===== 搜索下拉 ===== */
+.search-select {
+  position: relative;
+}
+
+.search-select-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  max-height: 200px;
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  margin-top: 2px;
+}
+
+.search-select-item {
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #1e293b;
+}
+
+.search-select-item:hover {
+  background: #e8f0fe;
+  color: #196cc0;
+}
+
+.table-toolbar {
+  padding: 14px 16px;
+  border-bottom: 1px solid #e8eef7;
+}
+
+.toolbar-filters {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.filter-input {
+  width: 180px;
+  height: 36px;
+  border-radius: 8px;
+  font-size: 13px;
+  border: 1px solid #d1d5db;
+}
+
+.filter-input:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+
+.filter-btn {
+  height: 36px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: none;
+  background: #196cc0;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.filter-btn:hover {
+  background: #155a9e;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.data-table thead {
+  background: #f8fafc;
+}
+
+.data-table th {
+  padding: 10px 16px;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+  border-bottom: 2px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 10px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+}
+
+.data-table tbody tr:hover {
+  background: #f8fafc;
+}
+
+.col-actions {
+  width: 160px;
+  text-align: center;
+}
+
+.action-btn {
+  border: none;
+  background: none;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: background 0.15s;
+}
+
+.action-edit {
+  color: #196cc0;
+}
+
+.action-edit:hover {
+  background: #e8f0fe;
+}
+
+.action-delete {
+  color: #dc2626;
+}
+
+.action-delete:hover {
+  background: #fef2f2;
+}
+
+.table-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px solid #e8eef7;
+}
+
+.pagination-info {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.page-btn {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 6px;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  color: #374151;
+}
+
+.page-btn:hover:not(:disabled) {
+  background: #f3f4f6;
+}
+
+.page-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.page-current {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+/* ===== 表单弹窗 ===== */
+.form-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 1300;
+  background: rgba(15, 23, 42, 0.4);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.form-card {
+  width: min(480px, 100%);
+  background: #fff;
+  border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.3);
+  overflow: hidden;
+}
+
+.form-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e8eef7;
+}
+
+.form-card-header h6 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.form-close-btn {
+  border: none;
+  background: none;
+  font-size: 18px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.form-close-btn:hover {
+  color: #1e293b;
+}
+
+.form-card-body {
+  padding: 16px 20px;
+}
+
+.form-field {
+  margin-bottom: 14px;
+}
+
+.form-field .form-label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.form-field .form-control {
+  height: 40px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  font-size: 14px;
+}
+
+.form-field .form-control:focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12);
+}
+
+.form-card-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 20px;
+  border-top: 1px solid #e8eef7;
+}
+
+.form-btn-cancel {
+  border: 1px solid #d1d5db;
+  background: #f8fafc;
+  color: #475569;
+  border-radius: 8px;
+  padding: 6px 18px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.form-btn-cancel:hover {
+  background: #f1f5f9;
+}
+
+.form-btn-submit {
+  border: none;
+  background: #196cc0;
+  color: #fff;
+  border-radius: 8px;
+  padding: 6px 18px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.form-btn-submit:hover {
+  background: #155a9e;
+}
+
+.form-btn-submit:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* ===== 历史记录弹窗 ===== */
+.history-card {
+  width: min(640px, 100%);
+}
+
+.history-table th,
+.history-table td {
+  padding: 8px 16px;
+}
+
+/* ===== 对标分析表格 ===== */
+.analysis-table th,
+.analysis-table td {
+  padding: 8px 10px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 </style>
