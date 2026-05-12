@@ -133,19 +133,49 @@
         <h3 class="wdc-modal-title">{{ dialogTitle }}</h3>
         <div v-if="dialogMode === 'add'" class="wdc-modal-body">
           <div class="wdc-row">
-            <label for="wdc-dlg-from">源库房</label>
-            <select id="wdc-dlg-from" v-model.number="dialogFromId" class="wdc-select">
-              <option :value="0">请选择源库房</option>
-              <option v-for="w in warehouseOptions" :key="`df-${w.id}`" :value="w.id">{{ w.name }}（{{ w.id }}）</option>
-            </select>
+            <label for="wdc-dlg-from-search">源库房</label>
+            <input
+              id="wdc-dlg-from-search"
+              v-model="dialogAddFromSearch"
+              type="search"
+              class="wdc-search"
+              placeholder="输入名称或编号筛选，点击下方条目选择"
+              autocomplete="off"
+              aria-controls="wdc-dlg-from-list"
+              aria-autocomplete="list"
+            />
+            <div id="wdc-dlg-from-list" class="wdc-from-picker" role="listbox" aria-label="源库房候选列表">
+              <button
+                v-for="w in dialogFromSelectOptions"
+                :key="`df-${w.id}`"
+                type="button"
+                class="wdc-from-option"
+                :class="{ 'wdc-from-option--selected': dialogFromId === w.id }"
+                role="option"
+                :aria-selected="dialogFromId === w.id"
+                @click="pickAddDialogFromWarehouse(w)"
+              >
+                {{ w.name }}（{{ w.id }}）
+              </button>
+              <p v-if="!dialogFromSelectOptions.length" class="wdc-hint wdc-hint-inline">无匹配库房，请调整关键词</p>
+            </div>
           </div>
           <div class="wdc-row">
-            <label>对标库房（目标，可多选）</label>
+            <label for="wdc-dlg-target-search">对标库房（目标，可多选）</label>
+            <input
+              id="wdc-dlg-target-search"
+              v-model="dialogAddTargetSearch"
+              type="search"
+              class="wdc-search"
+              placeholder="搜索名称或编号以筛选列表…"
+              autocomplete="off"
+            />
             <div class="wdc-modal-chips">
-              <label v-for="w in dialogTargetOptions" :key="`add-b-${w.id}`" class="wdc-chip">
+              <label v-for="w in dialogTargetOptionsFiltered" :key="`add-b-${w.id}`" class="wdc-chip">
                 <input v-model="dialogAddTargetIds" type="checkbox" :value="w.id" />
                 <span>{{ w.name }}（{{ w.id }}）</span>
               </label>
+              <p v-if="!dialogTargetOptionsFiltered.length" class="wdc-hint wdc-hint-inline">无匹配库房，请调整搜索词或清空搜索框</p>
             </div>
             <p v-if="addSelectedCount" class="wdc-hint">已选 {{ addSelectedCount }} 个目标库房</p>
           </div>
@@ -325,6 +355,9 @@ const dialogMode = ref<'add' | 'edit' | 'delete' | 'edit-tier'>('add')
 const dialogFromId = ref(0)
 const dialogToId = ref(0)
 const dialogAddTargetIds = ref<number[]>([])
+/** 「新增绑定」弹窗内：源库房 / 对标列表搜索关键词 */
+const dialogAddFromSearch = ref('')
+const dialogAddTargetSearch = ref('')
 /** 编辑阶梯价差弹窗输入内容 */
 const dialogTierText = ref('')
 const editingRow = ref<LinkRow | null>(null)
@@ -371,6 +404,36 @@ watch(
 const dialogTargetOptions = computed(() =>
   warehouseOptions.value.filter((w) => w.id !== dialogFromId.value),
 )
+
+function warehouseMatchesQuery(w: WarehouseOption, raw: string): boolean {
+  const q = raw.trim()
+  if (!q) return true
+  const idStr = String(w.id)
+  const name = String(w.name)
+  const qLower = q.toLowerCase()
+  return name.includes(q) || idStr.includes(q) || name.toLowerCase().includes(qLower) || idStr.toLowerCase().includes(qLower)
+}
+
+/** 源库房下拉：按搜索词过滤；当前已选若不在过滤结果中仍保留在列表首条以免下拉显示异常 */
+const dialogFromSelectOptions = computed((): WarehouseOption[] => {
+  const all = warehouseOptions.value
+  const q = dialogAddFromSearch.value
+  const filtered = all.filter((w) => warehouseMatchesQuery(w, q))
+  const id = dialogFromId.value
+  if (id > 0) {
+    const sel = all.find((w) => w.id === id)
+    if (sel && !filtered.some((w) => w.id === id)) return [sel, ...filtered]
+  }
+  return filtered
+})
+
+const dialogTargetOptionsFiltered = computed(() =>
+  dialogTargetOptions.value.filter((w) => warehouseMatchesQuery(w, dialogAddTargetSearch.value)),
+)
+
+function pickAddDialogFromWarehouse(w: WarehouseOption) {
+  dialogFromId.value = w.id
+}
 
 const dialogEditTargetOptions = computed(() => {
   const fromId = editingRow.value?.fromId ?? 0
@@ -783,6 +846,8 @@ function openAddDialog() {
   dialogFromId.value = 0
   dialogToId.value = 0
   dialogAddTargetIds.value = []
+  dialogAddFromSearch.value = ''
+  dialogAddTargetSearch.value = ''
   dialogOpen.value = true
 }
 
@@ -794,6 +859,8 @@ function openAddDialogFromRow(r: LinkRow) {
   dialogFromId.value = r.fromId
   dialogToId.value = 0
   dialogAddTargetIds.value = []
+  dialogAddFromSearch.value = ''
+  dialogAddTargetSearch.value = ''
   dialogOpen.value = true
 }
 
@@ -803,6 +870,8 @@ function closeDialog() {
   editingRow.value = null
   dialogEditGroup.value = null
   dialogAddTargetIds.value = []
+  dialogAddFromSearch.value = ''
+  dialogAddTargetSearch.value = ''
   dialogTierText.value = ''
 }
 
@@ -930,6 +999,62 @@ onMounted(async () => {
   padding: 0 10px;
   background: #fff;
   font-size: 13px;
+}
+
+.wdc-search {
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  padding: 0 10px;
+  background: #fff;
+  font-size: 13px;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.wdc-search::placeholder {
+  color: #94a3b8;
+}
+
+.wdc-from-picker {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+}
+
+.wdc-from-option {
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.35;
+  border: none;
+  border-bottom: 1px solid #f1f5f9;
+  background: #fff;
+  color: #1e293b;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.wdc-from-option:last-of-type {
+  border-bottom: none;
+}
+
+.wdc-from-option:hover {
+  background: #f8fafc;
+}
+
+.wdc-from-option--selected {
+  background: #eff6ff;
+  box-shadow: inset 3px 0 0 0 #2563eb;
+}
+
+.wdc-from-option--selected:hover {
+  background: #dbeafe;
 }
 
 .wdc-actions {
@@ -1125,6 +1250,13 @@ onMounted(async () => {
   margin: 0;
   font-size: 12px;
   color: #64748b;
+}
+
+.wdc-hint-inline {
+  width: 100%;
+  flex-basis: 100%;
+  text-align: center;
+  padding: 12px 4px;
 }
 
 .wdc-textarea {
