@@ -1,6 +1,7 @@
 /**
  * 与 src/pages/ElectronicMap.vue 中比价排行逻辑对齐（rankingsFromComparisonResponse 管线）。
  * 嵌入页在 app-BZHDhlyu.js 的 Ht() 中调用；修改地图侧时请同步更新本文件。
+ * 表头/列展示（货值、每吨货值等）与电子地图比价弹窗一致，见 index-e7CRb-gt.js + app-BZHDhlyu.js。
  */
 ;(function (global) {
   'use strict'
