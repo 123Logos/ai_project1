@@ -127,6 +127,9 @@
       <section v-else-if="activeSection === 'warehouseDistance'" class="panel inner-page">
         <WarehouseDistanceConfig />
       </section>
+      <section v-else-if="activeSection === 'aiPricing'" class="panel ai-pricing-panel">
+        <AiPricing />
+      </section>
       <section v-else class="panel iframe-panel">
         <iframe
           class="embedded-frame"
@@ -180,13 +183,12 @@ import PurchaseQuantity from './pages/PurchaseQuantity.vue'
 import ElectronicMap from './pages/ElectronicMap.vue'
 import UserManage from './pages/UserManage.vue'
 import WarehouseDistanceConfig from './components/WarehouseDistanceConfig.vue'
+import AiPricing from './pages/AiPricing.vue'
 import DetectApp from '../PD_max_fronted/src/App.vue'
 import { clearToken, getToken, login } from './api/authApi'
 import {
   canOpenUserManage,
-  canSeePrimaryNav,
   PREDICTION_SUB_TO_FIELD,
-  type PrimaryNavKey,
   type PredictionSubKey,
 } from './constants/navTabPermissionMap'
 import {
@@ -196,13 +198,14 @@ import {
   useMePermissionsState,
 } from './composables/useMePermissions'
 
-type SectionKey = 'prediction' | 'map' | 'detect' | 'price' | 'warehouseDistance' | 'users'
+type SectionKey = 'prediction' | 'map' | 'detect' | 'price' | 'aiPricing' | 'warehouseDistance' | 'users'
 
 const primaryTabs: Array<{ key: SectionKey; label: string }> = [
   { key: 'map', label: '电子地图' },
   { key: 'prediction', label: 'AI 预测' },
   { key: 'detect', label: '图片真伪检查' },
   { key: 'price', label: 'AI 比价系统' },
+  { key: 'aiPricing', label: 'AI 定价' },
   { key: 'warehouseDistance', label: '库房距离监测配置' },
 ]
 
@@ -227,9 +230,7 @@ const loginForm = ref({ username: '', password: '' })
 const mePermState = useMePermissionsState()
 const mePermLoadError = mePermState.loadError
 
-const visiblePrimaryTabs = computed(() =>
-  primaryTabs.filter((item) => canSeePrimaryNav(item.key as PrimaryNavKey, hasNavPermission)),
-)
+const visiblePrimaryTabs = computed(() => primaryTabs)
 
 const visiblePredictionSubTabs = computed(() =>
   predictionSubTabs.filter((item) => hasNavPermission(PREDICTION_SUB_TO_FIELD[item.key])),
@@ -299,7 +300,6 @@ function onSelectSection(key: SectionKey) {
     activeSection.value = 'users'
     return
   }
-  if (!canSeePrimaryNav(key as PrimaryNavKey, hasNavPermission)) return
   activeSection.value = key
 }
 
@@ -785,5 +785,10 @@ body {
 .login-btn-submit:disabled {
   opacity: 0.75;
   cursor: not-allowed;
+}
+
+.ai-pricing-panel {
+  flex: 1;
+  min-height: 0;
 }
 </style>

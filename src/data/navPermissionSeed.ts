@@ -20,6 +20,7 @@ export const NAV_CATEGORY_KEYS = [
   'ai_prediction',
   'ai_security',
   'ai_price',
+  'ai_pricing',
   'system_account',
 ] as const
 
@@ -33,7 +34,8 @@ export const NAV_CATEGORY_META: Record<
   ai_prediction: { title: 'AI 预测', order: 2 },
   ai_security: { title: 'AI 检测与安全', order: 3 },
   ai_price: { title: 'AI 比价系统', order: 4 },
-  system_account: { title: '系统与账号', order: 5 },
+  ai_pricing: { title: 'AI 定价', order: 5 },
+  system_account: { title: '系统与账号', order: 6 },
 }
 
 /** 与主站 App.vue / 嵌入页能力对齐的小 tab 清单 */
@@ -45,6 +47,7 @@ export const NAV_PERMISSION_SEED: NavPermissionSeedRow[] = [
     field_name: 'perm_nav_map_supply_warehouse_distance_config',
   },
 
+  { category: 'ai_prediction', label: 'AI 预测', field_name: 'perm_nav_ai_prediction' },
   { category: 'ai_prediction', label: '历史数据管理', field_name: 'perm_nav_ai_prediction_history_manage' },
   { category: 'ai_prediction', label: '历史数据查询', field_name: 'perm_nav_ai_prediction_history_query' },
   { category: 'ai_prediction', label: '送货量预测', field_name: 'perm_nav_ai_prediction_forecast' },
@@ -52,6 +55,7 @@ export const NAV_PERMISSION_SEED: NavPermissionSeedRow[] = [
   { category: 'ai_security', label: '图片真伪检查', field_name: 'perm_nav_ai_security_image_detect' },
 
   // AI 比价系统（嵌入页内模块/常用入口）
+  { category: 'ai_price', label: 'AI 比价系统', field_name: 'perm_nav_ai_price' },
   { category: 'ai_price', label: '智能比价', field_name: 'perm_nav_ai_price_smart_compare' },
   { category: 'ai_price', label: '比价与决策', field_name: 'perm_nav_ai_price_compare_decision' },
   { category: 'ai_price', label: '后台配置', field_name: 'perm_nav_ai_price_backend_config' },
@@ -67,6 +71,14 @@ export const NAV_PERMISSION_SEED: NavPermissionSeedRow[] = [
   { category: 'ai_price', label: '税金/换算比例', field_name: 'perm_nav_ai_price_tax_rate_config' },
   { category: 'ai_price', label: '异常信息补全', field_name: 'perm_nav_ai_price_abnormal_complete' },
   { category: 'ai_price', label: '报价导出', field_name: 'perm_nav_ai_price_quote_export' },
+
+  // AI 定价
+  { category: 'ai_pricing', label: 'AI 定价', field_name: 'perm_nav_ai_pricing' },
+  { category: 'ai_pricing', label: '库房AI定价对标分析', field_name: 'perm_nav_ai_pricing_benchmark_analysis' },
+  { category: 'ai_pricing', label: '库房自有定价分析', field_name: 'perm_nav_ai_pricing_self_pricing' },
+  { category: 'ai_pricing', label: '对标城市定价', field_name: 'perm_nav_ai_pricing_city_benchmark' },
+  { category: 'ai_pricing', label: '冶炼厂标定价格', field_name: 'perm_nav_ai_pricing_smelter_price' },
+  { category: 'ai_pricing', label: '库房差价和毛利管理', field_name: 'perm_nav_ai_pricing_margin_manage' },
 
   { category: 'system_account', label: '账号管理', field_name: 'perm_nav_system_account_user_account' },
   { category: 'system_account', label: '角色管理', field_name: 'perm_nav_system_account_role_manage' },

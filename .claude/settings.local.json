@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -oP 'module-card[^`]*' \"c:/Users/ysc02/Desktop/ai_project1/public/embedded/price_system/index.html\")",
+      "Bash(grep -oP '`[^`]*template[^`]*`' \"c:/Users/ysc02/Desktop/ai_project1/public/embedded/price_system/assets/app-BZHDhlyu.js\")"
+    ]
+  }
+}

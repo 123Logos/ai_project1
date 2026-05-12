@@ -30,12 +30,14 @@ const NAV_PERMISSION_SEED = [
     field_name: 'perm_nav_map_supply_warehouse_distance_config',
   },
 
+  { label: 'AI 预测', field_name: 'perm_nav_ai_prediction' },
   { label: '历史数据管理', field_name: 'perm_nav_ai_prediction_history_manage' },
   { label: '历史数据查询', field_name: 'perm_nav_ai_prediction_history_query' },
   { label: '送货量预测', field_name: 'perm_nav_ai_prediction_forecast' },
 
   { label: '图片真伪检查', field_name: 'perm_nav_ai_security_image_detect' },
 
+  { label: 'AI 比价系统', field_name: 'perm_nav_ai_price' },
   { label: '智能比价', field_name: 'perm_nav_ai_price_smart_compare' },
   { label: '比价与决策', field_name: 'perm_nav_ai_price_compare_decision' },
   { label: '后台配置', field_name: 'perm_nav_ai_price_backend_config' },
@@ -51,6 +53,14 @@ const NAV_PERMISSION_SEED = [
   { label: '税金/换算比例', field_name: 'perm_nav_ai_price_tax_rate_config' },
   { label: '异常信息补全', field_name: 'perm_nav_ai_price_abnormal_complete' },
   { label: '报价导出', field_name: 'perm_nav_ai_price_quote_export' },
+
+  // AI 定价
+  { label: 'AI 定价', field_name: 'perm_nav_ai_pricing' },
+  { label: '库房AI定价对标分析', field_name: 'perm_nav_ai_pricing_benchmark_analysis' },
+  { label: '库房自有定价分析', field_name: 'perm_nav_ai_pricing_self_pricing' },
+  { label: '对标城市定价', field_name: 'perm_nav_ai_pricing_city_benchmark' },
+  { label: '冶炼厂标定价格', field_name: 'perm_nav_ai_pricing_smelter_price' },
+  { label: '库房差价和毛利管理', field_name: 'perm_nav_ai_pricing_margin_manage' },
 
   { label: '账号管理', field_name: 'perm_nav_system_account_user_account' },
   { label: '角色管理', field_name: 'perm_nav_system_account_role_manage' },
