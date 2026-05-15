@@ -83,9 +83,17 @@ export async function updateSmelterPrice(priceId: number, price: number, date: s
   const { res, data } = await fetchJson(`${BASE}/${priceId}`, {
     method: 'PUT',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
-    body: JSON.stringify({ calibrated_price: price, price_date: date || null }),
+    body: JSON.stringify({ '标定价格': price, '定价日期': date || null }),
   })
   if (!res.ok) throw new Error(readMsg(data) || `修改冶炼厂标定价格失败（HTTP ${res.status}）`)
+}
+
+export async function deleteSmelterPrice(priceId: number): Promise<void> {
+  const { res, data } = await fetchJson(`${BASE}/${priceId}`, {
+    method: 'DELETE',
+    headers: { ...authHeaders() },
+  })
+  if (!res.ok) throw new Error(readMsg(data) || `删除冶炼厂标定价格失败（HTTP ${res.status}）`)
 }
 
 export async function fetchSmelterPriceHistory(params?: {

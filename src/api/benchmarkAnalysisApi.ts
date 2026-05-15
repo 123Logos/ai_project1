@@ -5,6 +5,7 @@ export interface BenchmarkAnalysisRow {
   id: number
   province: string
   city: string
+  county: string
   warehouse: string
   benchmark_city: string
   benchmark_price: number
@@ -34,29 +35,32 @@ function readMsg(data: unknown): string {
 
 function pickRow(r: Record<string, unknown>, idx: number): BenchmarkAnalysisRow {
   return {
-    id: Number(r.id ?? idx),
-    province: String(r.province ?? ''),
-    city: String(r.city ?? ''),
-    warehouse: String(r.warehouse ?? ''),
-    benchmark_city: String(r.benchmark_city ?? ''),
-    benchmark_price: Number(r.benchmark_price ?? 0),
-    benchmark_diff: Number(r.benchmark_diff ?? 0),
-    calibrated_price: Number(r.calibrated_price ?? 0),
-    freight: Number(r.freight ?? 0),
-    margin_config: Number(r.margin_config ?? 0),
-    margin_calculated: Number(r.margin_calculated ?? 0),
-    price: Number(r.price ?? 0),
+    id: Number(r['库房id'] ?? r.id ?? idx),
+    province: String(r['库房省份'] ?? ''),
+    city: String(r['库房城市'] ?? ''),
+    county: String(r['库房区'] ?? ''),
+    warehouse: String(r['库房名称'] ?? ''),
+    benchmark_city: String(r['对标城市'] ?? ''),
+    benchmark_price: Number(r['对标城市定价'] ?? 0),
+    benchmark_diff: Number(r['对标城市差额'] ?? 0),
+    calibrated_price: Number(r['冶炼厂标定价格'] ?? 0),
+    freight: r['库房运费'] != null ? Number(r['库房运费']) : 0,
+    margin_config: r['毛利（配置版）'] != null ? Number(r['毛利（配置版）']) : 0,
+    margin_calculated: r['毛利（计算版）'] != null ? Number(r['毛利（计算版）']) : 0,
+    price: r['库房定价'] != null ? Number(r['库房定价']) : 0,
   }
 }
 
 export async function fetchBenchmarkAnalysis(params?: {
   province?: string
   city?: string
+  county?: string
   page?: number
   page_size?: number
 }): Promise<{ items: BenchmarkAnalysisRow[]; total: number }> {
   const q = new URLSearchParams()
-  if (params?.province) q.set('province', params.province)
+  if (params?.province) q.set('库房省份', params.province)
+  if (params?.county) q.set('库房区', params.county)
   q.set('page', String(params?.page ?? 1))
   q.set('page_size', String(params?.page_size ?? 20))
 
@@ -77,9 +81,9 @@ export async function fetchBenchmarkAnalysis(params?: {
     .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
     .map((r, i) => pickRow(r, i))
 
-  const filtered = params?.city
-    ? items.filter((r) => r.city.includes(params.city!))
-    : items
+  let filtered = items
+  if (params?.city) filtered = filtered.filter((r) => r.city.includes(params.city!))
+  if (params?.county) filtered = filtered.filter((r) => r.county.includes(params.county!))
 
   return {
     items: filtered,

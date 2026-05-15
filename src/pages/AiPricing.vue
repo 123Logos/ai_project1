@@ -86,10 +86,16 @@
               <option value="">全部省份</option>
               <option v-for="p in provinceOptions" :key="p" :value="p">{{ p }}</option>
             </select>
-            <select v-model="analysisFilterCity" class="form-select filter-input" title="先选省份可缩小城市范围">
-              <option value="">全部城市</option>
-              <option v-for="c in analysisFilterCityOptions" :key="c" :value="c">{{ c }}</option>
-            </select>
+            <input
+              v-model.trim="analysisFilterCity"
+              class="form-control filter-input"
+              placeholder="按城市筛选"
+            />
+            <input
+              v-model.trim="analysisFilterCounty"
+              class="form-control filter-input"
+              placeholder="按县筛选"
+            />
             <button class="btn filter-btn" @click="loadBenchmarkAnalysis">
               <i class="bi bi-search"></i>
               查询
@@ -102,15 +108,15 @@
               <tr>
                 <th>省</th>
                 <th>城市</th>
-                <th>仓库</th>
+                <th>区</th>
+                <th>库房名称</th>
                 <th>对标城市</th>
-                <th>对标城市定价</th>
-                <th>对标城市差额</th>
                 <th>标定价格</th>
                 <th>运费</th>
-                <th>毛利（配置）</th>
-                <th>毛利（计算）</th>
-                <th>定价</th>
+                <th>对标城市差额</th>
+                <th>毛利（配置版）</th>
+                <th>毛利（计算版）</th>
+                <th>库房定价</th>
               </tr>
             </thead>
             <tbody>
@@ -126,15 +132,15 @@
               <tr v-for="row in analysisData" :key="row.id">
                 <td>{{ row.province }}</td>
                 <td>{{ row.city }}</td>
+                <td>{{ row.county }}</td>
                 <td>{{ row.warehouse }}</td>
-                <td>{{ row.benchmark_city }}</td>
-                <td>{{ row.benchmark_price.toFixed(2) }}</td>
-                <td>{{ row.benchmark_diff.toFixed(2) }}</td>
-                <td>{{ row.calibrated_price.toFixed(2) }}</td>
-                <td>{{ row.freight.toFixed(2) }}</td>
-                <td>{{ row.margin_config.toFixed(2) }}</td>
-                <td>{{ row.margin_calculated.toFixed(2) }}</td>
-                <td>{{ row.price.toFixed(2) }}</td>
+                <td>{{ row.benchmark_city || '-' }}</td>
+                <td>{{ row.calibrated_price ? row.calibrated_price.toFixed(2) : '-' }}</td>
+                <td>{{ row.freight ? row.freight.toFixed(2) : '-' }}</td>
+                <td>{{ row.benchmark_diff ? row.benchmark_diff.toFixed(2) : '-' }}</td>
+                <td>{{ row.margin_config ? row.margin_config.toFixed(2) : '-' }}</td>
+                <td>{{ row.margin_calculated ? row.margin_calculated.toFixed(2) : '-' }}</td>
+                <td>{{ row.price ? row.price.toFixed(2) : '-' }}</td>
               </tr>
             </tbody>
           </table>
@@ -332,7 +338,11 @@
                 <td class="col-actions">
                   <button class="action-btn action-edit" @click="openSmelterEdit">
                     <i class="bi bi-pencil-square"></i>
-                    修改标定价格
+                    修改
+                  </button>
+                  <button class="action-btn action-delete" @click="handleSmelterDelete">
+                    <i class="bi bi-trash3"></i>
+                    删除
                   </button>
                 </td>
               </tr>
@@ -389,10 +399,16 @@
           <div class="form-card-body">
             <div class="form-field">
               <label class="form-label">冶炼厂</label>
-              <select v-model.number="smelterAddForm.smelter_id" class="form-control">
-                <option :value="0">请选择冶炼厂</option>
-                <option v-for="s in smelterOptions" :key="s.id" :value="s.id">{{ s.name }}</option>
-              </select>
+              <div class="search-select" ref="smelterSelectRef">
+                <input
+                  ref="smelterInputRef"
+                  v-model.trim="smelterInputText"
+                  class="form-control"
+                  placeholder="下拉选择或直接输入冶炼厂名称"
+                  @focus="openSmelterDropdown"
+                  @input="showSmelterDropdown = true"
+                />
+              </div>
             </div>
             <div class="form-field">
               <label class="form-label">标定价格</label>
@@ -418,6 +434,25 @@
             </button>
           </div>
         </div>
+        <Teleport to="body">
+          <div
+            v-if="showSmelterDropdown && filteredSmelterOptions.length"
+            class="smelter-dropdown-portal"
+            :style="smelterDropdownStyle"
+          >
+            <div class="search-select-options">
+              <div
+                v-for="s in filteredSmelterOptions"
+                :key="s.id"
+                class="search-select-item"
+                :class="{ active: s.id === smelterAddForm.smelter_id }"
+                @mousedown.prevent="selectSmelterOption(s)"
+              >
+                {{ s.name }}
+              </div>
+            </div>
+          </div>
+        </Teleport>
       </div>
 
       <!-- 历史记录弹窗 -->
@@ -724,6 +759,7 @@ import {
   createSmelterPrice,
   updateSmelterPrice,
   fetchSmelterPriceHistory,
+  deleteSmelterPrice,
   type SmelterPriceRow,
   type SmelterPriceHistoryRow,
 } from '@/api/smelterPriceApi'
@@ -790,9 +826,22 @@ const marginFilterCityOptions = computed(() =>
   marginFilterProvince.value ? citiesInProvince(marginFilterProvince.value) : allCityNames(),
 )
 
-const filterCityOptions = computed(() =>
-  filterProvince.value ? citiesInProvince(filterProvince.value) : allCityNames(),
-)
+const filterCityOptions = ref<string[]>([])
+let filterCityTimer: ReturnType<typeof setTimeout> | null = null
+
+async function loadFilterCities(province: string) {
+  if (!province) { filterCityOptions.value = []; return }
+  try {
+    const res = await fetchCityBenchmarks({ province, page: 1, page_size: 500 })
+    const seen = new Set<string>()
+    for (const item of res.items) {
+      if (item.city) seen.add(item.city)
+    }
+    filterCityOptions.value = [...seen].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+  } catch {
+    filterCityOptions.value = []
+  }
+}
 
 const marginFormCityOptions = computed(() => {
   const base = marginForm.value.province ? citiesInProvince(marginForm.value.province) : []
@@ -809,6 +858,16 @@ const pageSize = 20
 const filterProvince = ref('')
 const filterCity = ref('')
 const filterDate = ref('')
+
+watch(filterProvince, (val) => {
+  filterCity.value = ''
+  if (filterCityTimer) clearTimeout(filterCityTimer)
+  if (val) {
+    filterCityTimer = setTimeout(() => loadFilterCities(val), 300)
+  } else {
+    filterCityOptions.value = []
+  }
+}, { immediate: true })
 
 const showForm = ref(false)
 const editingRow = ref<CityBenchmarkRow | null>(null)
@@ -908,6 +967,7 @@ watch(activePage, async (val) => {
     analysisPage.value = 1
     analysisFilterProvince.value = ''
     analysisFilterCity.value = ''
+    analysisFilterCounty.value = ''
     loadBenchmarkAnalysis()
   }
   if (val === 'marginManage') {
@@ -930,6 +990,56 @@ const smelterAddLoading = ref(false)
 const smelterAddError = ref('')
 const smelterAddForm = ref({ smelter_id: 0, price: 0, date: '' })
 const smelterOptions = ref<Array<{ id: number; name: string }>>([])
+const smelterInputText = ref('')
+const showSmelterDropdown = ref(false)
+const smelterSelectRef = ref<HTMLElement | null>(null)
+const smelterInputRef = ref<HTMLInputElement | null>(null)
+const smelterDropdownPos = ref({ top: 0, left: 0, width: 0 })
+
+const filteredSmelterOptions = computed(() => {
+  const q = smelterInputText.value.toLowerCase()
+  if (!q) return smelterOptions.value.slice(0, 50)
+  return smelterOptions.value.filter((s) => s.name.toLowerCase().includes(q)).slice(0, 50)
+})
+
+const smelterDropdownStyle = computed(() => ({
+  position: 'fixed' as const,
+  top: `${smelterDropdownPos.value.top}px`,
+  left: `${smelterDropdownPos.value.left}px`,
+  width: `${smelterDropdownPos.value.width}px`,
+  zIndex: 9999,
+}))
+
+function openSmelterDropdown() {
+  const el = smelterInputRef.value
+  if (el) {
+    const rect = el.getBoundingClientRect()
+    smelterDropdownPos.value = { top: rect.bottom + 2, left: rect.left, width: rect.width }
+  }
+  showSmelterDropdown.value = true
+}
+
+function selectSmelterOption(s: { id: number; name: string }) {
+  smelterAddForm.value.smelter_id = s.id
+  smelterInputText.value = s.name
+  showSmelterDropdown.value = false
+}
+
+watch(showSmelterAddForm, (v) => {
+  if (v) {
+    showSmelterDropdown.value = false
+    setTimeout(() => document.addEventListener('click', handleSmelterClickOutside), 0)
+  } else {
+    document.removeEventListener('click', handleSmelterClickOutside)
+  }
+})
+
+function handleSmelterClickOutside(e: MouseEvent) {
+  const target = e.target as Node
+  if (smelterSelectRef.value && !smelterSelectRef.value.contains(target)) {
+    showSmelterDropdown.value = false
+  }
+}
 
 const showHistory = ref(false)
 const historyData = ref<SmelterPriceHistoryRow[]>([])
@@ -959,6 +1069,7 @@ function openSmelterEdit() {
 
 async function openSmelterAdd() {
   smelterAddForm.value = { smelter_id: 0, price: 0, date: new Date().toISOString().slice(0, 10) }
+  smelterInputText.value = ''
   smelterAddError.value = ''
   showSmelterAddForm.value = true
   try {
@@ -973,12 +1084,22 @@ async function openSmelterAdd() {
 }
 
 async function submitSmelterAdd() {
-  if (!smelterAddForm.value.smelter_id) { smelterAddError.value = '请选择冶炼厂'; return }
+  if (!smelterInputText.value) { smelterAddError.value = '请选择或输入冶炼厂'; return }
   if (!smelterAddForm.value.price && smelterAddForm.value.price !== 0) { smelterAddError.value = '请输入标定价格'; return }
+  // 如果没有通过下拉选择，尝试从列表中匹配名称
+  let smelterId = smelterAddForm.value.smelter_id
+  if (!smelterId) {
+    const match = smelterOptions.value.find((s) => s.name === smelterInputText.value)
+    if (match) {
+      smelterId = match.id
+    } else {
+      smelterAddError.value = '未找到匹配的冶炼厂，请从下拉列表中选择'; return
+    }
+  }
   smelterAddLoading.value = true
   smelterAddError.value = ''
   try {
-    await createSmelterPrice(smelterAddForm.value.smelter_id, smelterAddForm.value.price, smelterAddForm.value.date)
+    await createSmelterPrice(smelterId, smelterAddForm.value.price, smelterAddForm.value.date)
     showSmelterAddForm.value = false
     await loadSmelterPrice()
   } catch (e) {
@@ -1001,6 +1122,17 @@ async function submitSmelterForm() {
     smelterFormError.value = e instanceof Error ? e.message : String(e)
   } finally {
     smelterFormLoading.value = false
+  }
+}
+
+async function handleSmelterDelete() {
+  if (!smelterData.value) return
+  if (!confirm('确定删除该冶炼厂标定价格吗？')) return
+  try {
+    await deleteSmelterPrice(smelterData.value.id)
+    await loadSmelterPrice()
+  } catch (e) {
+    alert(e instanceof Error ? e.message : String(e))
   }
 }
 
@@ -1039,6 +1171,7 @@ const analysisPage = ref(1)
 const analysisPageSize = 20
 const analysisFilterProvince = ref('')
 const analysisFilterCity = ref('')
+const analysisFilterCounty = ref('')
 
 async function loadBenchmarkAnalysis() {
   analysisLoading.value = true
@@ -1046,6 +1179,7 @@ async function loadBenchmarkAnalysis() {
     const res = await fetchBenchmarkAnalysis({
       province: analysisFilterProvince.value || undefined,
       city: analysisFilterCity.value || undefined,
+      county: analysisFilterCounty.value || undefined,
       page: analysisPage.value,
       page_size: analysisPageSize,
     })
@@ -1680,6 +1814,15 @@ watch(
 
 .search-select-options {
   max-height: 180px;
+  overflow-y: auto;
+}
+
+.smelter-dropdown-portal {
+  background: #fff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+  max-height: 220px;
   overflow-y: auto;
 }
 
