@@ -821,9 +821,22 @@ const marginFilterCityOptions = computed(() =>
   marginFilterProvince.value ? citiesInProvince(marginFilterProvince.value) : allCityNames(),
 )
 
-const filterCityOptions = computed(() =>
-  filterProvince.value ? citiesInProvince(filterProvince.value) : allCityNames(),
-)
+const filterCityOptions = ref<string[]>([])
+let filterCityTimer: ReturnType<typeof setTimeout> | null = null
+
+async function loadFilterCities(province: string) {
+  if (!province) { filterCityOptions.value = []; return }
+  try {
+    const res = await fetchCityBenchmarks({ province, page: 1, page_size: 500 })
+    const seen = new Set<string>()
+    for (const item of res.items) {
+      if (item.city) seen.add(item.city)
+    }
+    filterCityOptions.value = [...seen].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+  } catch {
+    filterCityOptions.value = []
+  }
+}
 
 const marginFormCityOptions = computed(() => {
   const base = marginForm.value.province ? citiesInProvince(marginForm.value.province) : []
@@ -847,6 +860,16 @@ const pageSize = 20
 const filterProvince = ref('')
 const filterCity = ref('')
 const filterDate = ref('')
+
+watch(filterProvince, (val) => {
+  filterCity.value = ''
+  if (filterCityTimer) clearTimeout(filterCityTimer)
+  if (val) {
+    filterCityTimer = setTimeout(() => loadFilterCities(val), 300)
+  } else {
+    filterCityOptions.value = []
+  }
+}, { immediate: true })
 
 const showForm = ref(false)
 const editingRow = ref<CityBenchmarkRow | null>(null)

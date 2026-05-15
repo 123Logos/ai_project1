@@ -50,7 +50,7 @@ export async function fetchCityBenchmarks(params?: {
   page_size?: number
 }): Promise<{ items: CityBenchmarkRow[]; total: number }> {
   const q = new URLSearchParams()
-  if (params?.province) q.set('province', params.province)
+  if (params?.province) q.set('省份', params.province)
   if (params?.city) q.set('benchmark_city', params.city)
   if (params?.date) {
     q.set('date_from', params.date)
