@@ -271,6 +271,102 @@
           </div>
           </div>
         </transition>
+        <div
+          v-if="emapProvinceFilter.trim()"
+          class="emap-province-facilities"
+        >
+          <button
+            type="button"
+            class="emap-province-facilities-head"
+            :aria-expanded="!provinceFacilitiesPanelCollapsed"
+            title="展开或收起本省库房与冶炼厂列表"
+            @click="provinceFacilitiesPanelCollapsed = !provinceFacilitiesPanelCollapsed"
+          >
+            <span class="emap-province-facilities-head-row">
+              <span class="emap-province-facilities-title">{{ emapProvinceFilter.trim() }}</span>
+              <i
+                class="bi emap-province-facilities-chevron"
+                :class="provinceFacilitiesPanelCollapsed ? 'bi-chevron-down' : 'bi-chevron-up'"
+                aria-hidden="true"
+              />
+            </span>
+            <span class="emap-province-facilities-meta">
+              库房 {{ emapProvinceWarehousePoints.length }} · 冶炼厂 {{ emapProvinceSmelterPoints.length }}
+            </span>
+          </button>
+          <div v-show="!provinceFacilitiesPanelCollapsed" class="emap-province-facilities-body">
+            <div class="emap-province-facilities-section">
+              <button
+                type="button"
+                class="emap-province-facilities-section-toggle"
+                :aria-expanded="provinceListWarehouseSectionOpen"
+                @click="provinceListWarehouseSectionOpen = !provinceListWarehouseSectionOpen"
+              >
+                <span>库房（{{ emapProvinceWarehousePoints.length }}）</span>
+                <i
+                  class="bi"
+                  :class="provinceListWarehouseSectionOpen ? 'bi-chevron-up' : 'bi-chevron-down'"
+                  aria-hidden="true"
+                />
+              </button>
+              <ul
+                v-show="provinceListWarehouseSectionOpen"
+                class="emap-province-facilities-list"
+                aria-label="本省库房"
+              >
+                <li v-for="p in emapProvinceWarehousePoints" :key="'emap-prov-wh-' + p.id">
+                  <button
+                    type="button"
+                    class="emap-province-facilities-item"
+                    :title="p.subtitle || p.title"
+                    @click="focusMapPointFromSearch(p, { silent: true })"
+                  >
+                    <span class="emap-province-facilities-item-title">{{ p.title }}</span>
+                    <span v-if="p.subtitle" class="emap-province-facilities-item-sub">{{ p.subtitle }}</span>
+                  </button>
+                </li>
+                <li v-if="!emapProvinceWarehousePoints.length" class="emap-province-facilities-empty">
+                  该省暂无库房数据
+                </li>
+              </ul>
+            </div>
+            <div class="emap-province-facilities-section">
+              <button
+                type="button"
+                class="emap-province-facilities-section-toggle"
+                :aria-expanded="provinceListSmelterSectionOpen"
+                @click="provinceListSmelterSectionOpen = !provinceListSmelterSectionOpen"
+              >
+                <span>冶炼厂（{{ emapProvinceSmelterPoints.length }}）</span>
+                <i
+                  class="bi"
+                  :class="provinceListSmelterSectionOpen ? 'bi-chevron-up' : 'bi-chevron-down'"
+                  aria-hidden="true"
+                />
+              </button>
+              <ul
+                v-show="provinceListSmelterSectionOpen"
+                class="emap-province-facilities-list"
+                aria-label="本省冶炼厂"
+              >
+                <li v-for="p in emapProvinceSmelterPoints" :key="'emap-prov-sm-' + p.id">
+                  <button
+                    type="button"
+                    class="emap-province-facilities-item"
+                    :title="p.subtitle || p.title"
+                    @click="focusMapPointFromSearch(p, { silent: true })"
+                  >
+                    <span class="emap-province-facilities-item-title">{{ p.title }}</span>
+                    <span v-if="p.subtitle" class="emap-province-facilities-item-sub">{{ p.subtitle }}</span>
+                  </button>
+                </li>
+                <li v-if="!emapProvinceSmelterPoints.length" class="emap-province-facilities-empty">
+                  该省暂无冶炼厂数据
+                </li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
       <div v-if="selectedWarehouse" class="emap-floating-actions">
         <p v-if="compareError" class="emap-floating-actions-err small text-danger mb-0" role="alert">
@@ -980,16 +1076,22 @@ watch(mapToolsCollapsed, async (collapsed) => {
 })
 
 const mapToolsFloatRef = ref<HTMLElement | null>(null)
-/** 贴右侧时相对地图容器顶边的 top（px）；null 表示垂直居中（50% + translateY） */
+/** 贴右侧时相对地图容器顶边的 top（px）；null 表示使用 CSS 默认（靠上 + max-height，避免随内容高度整体上移） */
 const mapToolsFloatTopPx = ref<number | null>(null)
+/** 为右下角 Leaflet 缩放、全屏等保留空隙，拖动/钳制时底边不得压住控件 */
+const EMAP_FLOAT_TR_CORNER_RESERVE_PX = 76
 
 const mapToolsFloatStyle = computed(() => {
   if (mapToolsFloatTopPx.value == null) return {}
+  const top = mapToolsFloatTopPx.value
   return {
-    top: `${mapToolsFloatTopPx.value}px`,
+    top: `${top}px`,
     right: '0',
     left: 'auto',
     transform: 'none',
+    maxHeight: `calc(100% - ${top}px - ${EMAP_FLOAT_TR_CORNER_RESERVE_PX}px)`,
+    overflowX: 'hidden',
+    overflowY: 'auto',
   } as Record<string, string>
 })
 
@@ -1022,7 +1124,7 @@ function onMapToolsDragMove(e: PointerEvent) {
   const dh = dock.offsetHeight
   const pad = 8
   let ny = mapToolsDragOY + (e.clientY - mapToolsDragSY)
-  const maxY = Math.max(pad, wih - dh - pad)
+  const maxY = Math.max(pad, wih - dh - pad - EMAP_FLOAT_TR_CORNER_RESERVE_PX)
   ny = Math.min(Math.max(pad, ny), maxY)
   mapToolsFloatTopPx.value = ny
 }
@@ -1091,7 +1193,7 @@ function clampMapToolsFloatInWrap() {
   const dh = dock.offsetHeight
   if (dh <= 0) return
   if (mapToolsFloatTopPx.value != null) {
-    const maxY = Math.max(pad, wih - dh - pad)
+    const maxY = Math.max(pad, wih - dh - pad - EMAP_FLOAT_TR_CORNER_RESERVE_PX)
     const y = Math.min(Math.max(pad, mapToolsFloatTopPx.value), maxY)
     if (y !== mapToolsFloatTopPx.value) mapToolsFloatTopPx.value = y
   }
@@ -1276,6 +1378,10 @@ const smelterMarkerById = new Map<string, L.Marker>()
 /** 选择省份后，鼠标悬停的外省点 id，该点临时取消变淡 */
 const hoverProvinceLiftId = ref<string | null>(null)
 const emapProvinceFilter = ref('')
+/** 按省筛选时：右侧列表整体收起（仍显示标题条） */
+const provinceFacilitiesPanelCollapsed = ref(false)
+const provinceListWarehouseSectionOpen = ref(true)
+const provinceListSmelterSectionOpen = ref(true)
 const emapMapSearchText = ref('')
 const emapSearchFeedback = ref('')
 
@@ -1304,6 +1410,24 @@ const emapPointSearchCandidates = computed(() => {
     .sort((a, b) => b.s - a.s || a.p.title.localeCompare(b.p.title, 'zh-CN'))
     .slice(0, EMAP_POINT_SEARCH_MAX_RESULTS)
     .map((x) => x.p)
+})
+
+const emapProvinceWarehousePoints = computed(() => {
+  const pr = emapProvinceFilter.value.trim()
+  if (!pr) return []
+  return allWarehousePoints.value
+    .filter((p) => provincesRoughlyEqual(provinceFromRow(p.raw), pr))
+    .slice()
+    .sort((a, b) => a.title.localeCompare(b.title, 'zh-CN'))
+})
+
+const emapProvinceSmelterPoints = computed(() => {
+  const pr = emapProvinceFilter.value.trim()
+  if (!pr) return []
+  return allSmelterPoints.value
+    .filter((p) => provincesRoughlyEqual(provinceFromRow(p.raw), pr))
+    .slice()
+    .sort((a, b) => a.title.localeCompare(b.title, 'zh-CN'))
 })
 
 let resizeObs: ResizeObserver | null = null
@@ -1512,7 +1636,7 @@ function setMapViewWithWarehouseLeftPanelBias(
   map.setView(centerLL, z, { animate })
 }
 
-function focusMapPointFromSearch(p: MapPoint) {
+function focusMapPointFromSearch(p: MapPoint, opts?: { silent?: boolean }) {
   const map = mapRef.value
   if (!map) {
     emapSearchFeedback.value = '地图尚未就绪'
@@ -1531,8 +1655,12 @@ function focusMapPointFromSearch(p: MapPoint) {
     forecastError.value = ''
     void runComparisonAndForecastForWarehouse(p)
   }
-  emapSearchFeedback.value =
-    nMatch > 1 ? `已选择：${p.title}（${nMatch} 处名称匹配，可继续输入缩小）` : `已定位：${p.title}`
+  if (!opts?.silent) {
+    emapSearchFeedback.value =
+      nMatch > 1 ? `已选择：${p.title}（${nMatch} 处名称匹配，可继续输入缩小）` : `已定位：${p.title}`
+  } else {
+    emapSearchFeedback.value = ''
+  }
   if (emapPointSearchBlurTimer != null) {
     clearTimeout(emapPointSearchBlurTimer)
     emapPointSearchBlurTimer = null
@@ -2013,6 +2141,9 @@ function fitViewToProvinceFilter() {
 }
 
 watch(emapProvinceFilter, () => {
+  provinceFacilitiesPanelCollapsed.value = false
+  provinceListWarehouseSectionOpen.value = true
+  provinceListSmelterSectionOpen.value = true
   hoverProvinceLiftId.value = null
   refreshAllMarkerVisualState()
   void (async () => {
@@ -2275,6 +2406,11 @@ function emapWarehouseObstacleRectsForRankTips(map: L.Map): EmapRankTipRect[] {
     if (panel) out.push(panel)
     const fl = emapElementClippedToMapFrame(map, wrap.querySelector('.emap-floating-actions') as HTMLElement | null)
     if (fl) out.push(fl)
+    const prov = emapElementClippedToMapFrame(
+      map,
+      wrap.querySelector('.emap-province-facilities') as HTMLElement | null,
+    )
+    if (prov) out.push(prov)
   }
   return out
 }
@@ -4832,23 +4968,36 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
-  gap: 0;
+  gap: 12px;
   pointer-events: auto;
   touch-action: none;
   max-width: calc(100% - 10px);
   box-sizing: border-box;
+  /* 限高时仍可滚轮滚动，但不显示整列外侧滚动条 */
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
+.emap-map-tools-float::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+/* 靠上锚定 + 限高：内容变高时不再整体上移盖住「按省筛选」；过长时整列滚动 */
 .emap-map-tools-float--default {
   right: 0;
-  top: 44%;
-  transform: translateY(-44%);
+  top: 12px;
+  transform: none;
+  max-height: calc(100% - 12px - 76px);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .emap-map-tools-bubble {
   display: flex;
   flex-direction: column;
   align-items: center;
+  flex-shrink: 0;
   gap: 6px;
   padding: 8px 6px 10px;
   border-radius: 999px;
@@ -4883,6 +5032,8 @@ onBeforeUnmount(() => {
 
 .emap-map-tools {
   position: relative;
+  z-index: 2;
+  flex-shrink: 0;
   width: min(268px, 100%);
   min-width: 0;
   max-width: 100%;
@@ -4966,6 +5117,150 @@ onBeforeUnmount(() => {
 
 .emap-map-tools-tab:hover {
   background: rgba(12, 36, 68, 0.95);
+}
+
+/* 按省筛选：右侧列表（与地图工具同列，不占左侧比价/预测区） */
+.emap-province-facilities {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+  width: min(268px, 100%);
+  box-sizing: border-box;
+  background: rgba(6, 18, 40, 0.92);
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  border-radius: 12px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 26px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  color: #cbd5e1;
+  font-size: 12px;
+}
+
+.emap-province-facilities-head {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: rgba(8, 26, 52, 0.65);
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.emap-province-facilities-head-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.emap-province-facilities-chevron {
+  flex-shrink: 0;
+  color: #7dd3fc;
+  font-size: 1rem;
+}
+
+.emap-province-facilities-head:hover {
+  background: rgba(12, 36, 68, 0.85);
+}
+
+.emap-province-facilities-title {
+  font-weight: 700;
+  color: #f1f5f9;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.emap-province-facilities-meta {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+/* 固定列表区高度，避免随条数撑高整列、压住全屏与上方工具 */
+.emap-province-facilities-body {
+  height: 236px;
+  max-height: 236px;
+  overflow-y: auto;
+  padding: 0 8px 8px;
+  border-top: 1px solid rgba(34, 211, 238, 0.15);
+}
+
+.emap-province-facilities-section {
+  margin-top: 8px;
+}
+
+.emap-province-facilities-section-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid rgba(34, 211, 238, 0.22);
+  border-radius: 8px;
+  background: rgba(8, 26, 52, 0.75);
+  color: #cbd5e1;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.emap-province-facilities-section-toggle:hover {
+  border-color: rgba(34, 211, 238, 0.45);
+  color: #f1f5f9;
+}
+
+.emap-province-facilities-list {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.emap-province-facilities-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border: none;
+  border-radius: 6px;
+  background: rgba(15, 39, 72, 0.55);
+  color: #e2e8f0;
+  font-size: 11px;
+  line-height: 1.35;
+  cursor: pointer;
+}
+
+.emap-province-facilities-item:hover {
+  background: rgba(59, 130, 246, 0.35);
+}
+
+.emap-province-facilities-item-title {
+  font-weight: 600;
+  color: #f8fafc;
+  word-break: break-word;
+}
+
+.emap-province-facilities-item-sub {
+  margin-top: 2px;
+  font-size: 10px;
+  color: #94a3b8;
+  word-break: break-word;
+}
+
+.emap-province-facilities-empty {
+  padding: 8px 6px;
+  font-size: 11px;
+  color: #64748b;
+  text-align: center;
 }
 
 .emap-tools-slide-enter-active,
