@@ -659,10 +659,15 @@
             </div>
             <div class="form-field">
               <label class="form-label">对标城市</label>
-              <select v-model="marginForm.benchmark_city" class="form-control">
-                <option value="">请选择对标城市</option>
-                <option v-for="c in benchmarkCitySelectOptions" :key="c" :value="c">{{ c }}</option>
+              <select
+                v-model="marginForm.benchmark_city"
+                class="form-control"
+                :disabled="marginBenchmarkCityLoading"
+              >
+                <option value="">{{ marginBenchmarkCityLoading ? '加载中…' : '请选择对标城市' }}</option>
+                <option v-for="c in marginBenchmarkCityOptions" :key="c" :value="c">{{ c }}</option>
               </select>
+              <p v-if="marginBenchmarkCityLoadError" class="text-danger small mb-0 mt-1">{{ marginBenchmarkCityLoadError }}</p>
             </div>
             <div class="form-field">
               <label class="form-label">对标城市差额</label>
@@ -844,13 +849,6 @@ const marginFormCityOptions = computed(() => {
   const base = marginForm.value.province ? citiesInProvince(marginForm.value.province) : []
   const c = marginForm.value.city
   if (c && !base.includes(c)) return [c, ...base]
-  return base
-})
-
-const benchmarkCitySelectOptions = computed(() => {
-  const base = allCityNames()
-  const b = marginForm.value.benchmark_city
-  if (b && !base.includes(b)) return [b, ...base]
   return base
 })
 
@@ -1220,6 +1218,38 @@ const marginForm = ref<WarehouseMarginForm & { warehouse_id?: number }>({
   province: '', city: '', warehouse_name: '', benchmark_city: '', benchmark_diff: 0, margin: 0, warehouse_id: undefined,
 })
 
+/** 对标城市下拉：GET /tl/province_benchmark_prices，有省份时带 province，未选省份不带该参数 */
+const marginBenchmarkCityOptions = ref<string[]>([])
+const marginBenchmarkCityLoading = ref(false)
+const marginBenchmarkCityLoadError = ref('')
+
+async function loadMarginBenchmarkCityOptions() {
+  if (!showMarginForm.value) return
+  marginBenchmarkCityLoading.value = true
+  marginBenchmarkCityLoadError.value = ''
+  try {
+    const prov = (marginForm.value.province || '').trim()
+    const res = await fetchCityBenchmarks({
+      province: prov || undefined,
+      page: 1,
+      page_size: 500,
+    })
+    const seen = new Set<string>()
+    for (const item of res.items) {
+      if (item.city) seen.add(item.city)
+    }
+    let list = [...seen].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    const cur = (marginForm.value.benchmark_city || '').trim()
+    if (cur && !list.includes(cur)) list = [cur, ...list]
+    marginBenchmarkCityOptions.value = list
+  } catch (e) {
+    marginBenchmarkCityOptions.value = []
+    marginBenchmarkCityLoadError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    marginBenchmarkCityLoading.value = false
+  }
+}
+
 const marginFileInput = ref<HTMLInputElement | null>(null)
 const showImportPreview = ref(false)
 const importColumns = ref<string[]>([])
@@ -1241,8 +1271,11 @@ watch(showMarginForm, (v) => {
     showWarehouseDropdown.value = false
     warehouseSearchQuery.value = ''
     setTimeout(() => document.addEventListener('click', handleMarginFormClickOutside), 0)
+    void loadMarginBenchmarkCityOptions()
   } else {
     document.removeEventListener('click', handleMarginFormClickOutside)
+    marginBenchmarkCityOptions.value = []
+    marginBenchmarkCityLoadError.value = ''
   }
 })
 
@@ -1462,10 +1495,14 @@ watch(
 
 watch(
   () => marginForm.value.province,
-  () => {
+  (newP, oldP) => {
     if (marginEditing.value) return
     const opts = marginFormCityOptions.value
     if (marginForm.value.city && !opts.includes(marginForm.value.city)) marginForm.value.city = ''
+    if (oldP !== undefined && String(oldP).trim() !== String(newP ?? '').trim()) {
+      marginForm.value.benchmark_city = ''
+    }
+    if (showMarginForm.value) void loadMarginBenchmarkCityOptions()
   },
 )
 </script>
