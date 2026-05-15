@@ -2,7 +2,21 @@
   "permissions": {
     "allow": [
       "Bash(printf '{\"库房id\":909,\"对标城市\":\"青岛市\",\"对标城市差额\":50,\"毛利配置版\":100}')",
-      "Bash(curl -s -X POST \"http://118.25.96.187:8001/tl/warehouse_spread_configs\" -H \"Content-Type: application/json\" -d @/tmp/wf.json)"
+      "Bash(curl -s -X POST \"http://118.25.96.187:8001/tl/warehouse_spread_configs\" -H \"Content-Type: application/json\" -d @/tmp/wf.json)",
+      "Bash(grep -oP '[\\\\x{4e00}-\\\\x{9fff}]{2,20}' \"c:/Users/ysc02/Desktop/ai_project1/public/embedded/ai_test/assets/index-BjQnPnbX.js\")",
+      "Bash(grep -o '.\\\\{0,30\\\\}创建时间.\\\\{0,30\\\\}' \"c:/Users/ysc02/Desktop/ai_project1/public/embedded/price_system/index.html\")",
+      "Bash(grep -o '.\\\\{0,30\\\\}详情.\\\\{0,30\\\\}' \"c:/Users/ysc02/Desktop/ai_project1/public/embedded/price_system/assets/app-BZHDhlyu.js\")",
+      "Bash(grep -o '.\\\\{0,80\\\\}详情.\\\\{0,80\\\\}' \"c:/Users/ysc02/Desktop/ai_project1/public/embedded/price_system/assets/app-BZHDhlyu.js\")",
+      "Bash(grep -o '.\\\\{0,80\\\\}详情.\\\\{0,80\\\\}' \"c:/Users/ysc02/Desktop/ai_project1/public/embedded/price_system/index.html\")",
+      "Bash(grep -o '.\\\\{0,100\\\\}操作.\\\\{0,100\\\\}' \"c:/Users/ysc02/Desktop/ai_project1/public/embedded/price_system/index.html\")",
+      "Bash(grep -o '.\\\\{0,60\\\\}项目.\\\\{0,60\\\\}' \"c:/Users/ysc02/Desktop/ai_project1/public/embedded/price_system/index.html\")",
+      "Bash(git -C \"c:/Users/ysc02/Desktop/ai_project1\" log --oneline -20)",
+      "Bash(grep -o '.\\\\{0,100\\\\}详情.\\\\{0,100\\\\}' \"c:/Users/ysc02/Desktop/ai_project1/public/embedded/price_system/index.html\")",
+      "Bash(grep -o '.\\\\{0,120\\\\}创建时间.\\\\{0,120\\\\}' \"c:/Users/ysc02/Desktop/ai_project1/dist/assets/index-DrANUzmO.js\")",
+      "Bash(grep -o '.\\\\{0,120\\\\}序号.\\\\{0,120\\\\}' \"c:/Users/ysc02/Desktop/ai_project1/public/embedded/price_system/assets/app-BZHDhlyu.js\")",
+      "Bash(python3 -c ' *)",
+      "Bash(python -c ' *)",
+      "Bash(node -e ' *)"
     ]
   }
 }
