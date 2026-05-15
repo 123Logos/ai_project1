@@ -427,6 +427,18 @@
         font-size: 12px;
         line-height: 1.4;
       }
+      /* 库房管理：省市区为下拉，选项多时便于滚动 */
+      #warehouse-form select[id$='-province'],
+      #warehouse-form select[id$='-city'],
+      #warehouse-form select[id$='-district'] {
+        max-height: 240px;
+      }
+      /* 与标准行政区划 JSON 不一致时标红，提示用户改选 */
+      #warehouse-form select.region-pcd-conflict,
+      #abnormal-edit-overlay select.region-pcd-conflict {
+        border-color: #dc2626 !important;
+        box-shadow: 0 0 0 1px rgba(220, 38, 38, 0.35);
+      }
       /* 报价查询表：表头与单元格居中，操作列按钮居中 */
       .quote-query-page .data-table thead th,
       .quote-query-page .data-table tbody td {
@@ -515,6 +527,172 @@
           return
         }
 
+        /** 库房表单省市区：与 public/region/p-c-a.json 一致 */
+        let whPcaData = null
+        let whPcaLoadPromise = null
+        let whPcdCascadeWired = false
+        let whRegionFillSeq = 0
+
+        async function ensureWhPcaLoaded() {
+          if (whPcaData) return
+          if (!whPcaLoadPromise) {
+            whPcaLoadPromise = (async () => {
+              const r = await fetch('/region/p-c-a.json', { credentials: 'same-origin' })
+              if (!r.ok) throw new Error(`加载省市区数据失败（HTTP ${r.status}）`)
+              const data = await r.json()
+              if (!Array.isArray(data)) throw new Error('省市区数据格式无效')
+              whPcaData = data
+            })()
+          }
+          try {
+            await whPcaLoadPromise
+          } catch (e) {
+            whPcaLoadPromise = null
+            throw e
+          }
+        }
+
+        function findWhProvinceNode(name) {
+          const n = (name || '').trim()
+          if (!n || !whPcaData) return null
+          const hit = whPcaData.find((p) => p.name === n)
+          if (hit) return hit
+          return whPcaData.find((p) => n.includes(p.name) || p.name.includes(n)) || null
+        }
+
+        function findWhCityNode(provNode, cityName) {
+          const c = (cityName || '').trim()
+          if (!provNode || !Array.isArray(provNode.children) || !c) return null
+          const hit = provNode.children.find((x) => x.name === c)
+          if (hit) return hit
+          return provNode.children.find((x) => c.includes(x.name) || x.name.includes(c)) || null
+        }
+
+        function getWhProvinceNodeExact(name) {
+          const n = (name || '').trim()
+          if (!n || !whPcaData) return null
+          return whPcaData.find((p) => p.name === n) || null
+        }
+
+        function getWhCityNodeExact(provNode, cityName) {
+          const c = (cityName || '').trim()
+          if (!provNode || !Array.isArray(provNode.children) || !c) return null
+          return provNode.children.find((x) => x.name === c) || null
+        }
+
+        function isWhProvinceStandard(name) {
+          return !!(name || '').trim() && !!getWhProvinceNodeExact(name)
+        }
+
+        function isWhCityStandard(provName, cityName) {
+          const c = (cityName || '').trim()
+          if (!c) return true
+          const pn = getWhProvinceNodeExact(provName)
+          if (!pn) return false
+          return !!getWhCityNodeExact(pn, c)
+        }
+
+        function isWhDistStandard(provName, cityName, distName) {
+          const d = (distName || '').trim()
+          if (!d) return true
+          const pn = getWhProvinceNodeExact(provName)
+          const cn = getWhCityNodeExact(pn, cityName)
+          if (!cn || !Array.isArray(cn.children)) return false
+          return cn.children.some((x) => x.name === d)
+        }
+
+        function updateWarehouseRegionConflictUi() {
+          const sp = document.getElementById('warehouse-province')
+          const sc = document.getElementById('warehouse-city')
+          const sd = document.getElementById('warehouse-district')
+          const tip = document.getElementById('warehouse-region-pcd-conflict-tip')
+          if (!sp || !sc || !sd) return
+          const pv = (sp.value || '').trim()
+          const cv = (sc.value || '').trim()
+          const dv = (sd.value || '').trim()
+          const cp = !!pv && !isWhProvinceStandard(pv)
+          const cc = !!pv && !!cv && !isWhCityStandard(pv, cv)
+          const cd = !!pv && !!cv && !!dv && !isWhDistStandard(pv, cv, dv)
+          sp.classList.toggle('region-pcd-conflict', cp)
+          sc.classList.toggle('region-pcd-conflict', cc)
+          sd.classList.toggle('region-pcd-conflict', cd)
+          if (tip) tip.style.display = cp || cc || cd ? 'block' : 'none'
+        }
+
+        function whFillSelectOptions(sel, placeholder, names, current) {
+          if (!sel) return
+          const uniq = [...new Set((names || []).filter(Boolean))]
+          uniq.sort((a, b) => a.localeCompare(b, 'zh-CN'))
+          const cur = (current || '').trim()
+          if (cur && !uniq.includes(cur)) uniq.unshift(`${cur}`)
+          sel.innerHTML = ''
+          const o0 = document.createElement('option')
+          o0.value = ''
+          o0.textContent = placeholder
+          sel.appendChild(o0)
+          for (const nm of uniq) {
+            const o = document.createElement('option')
+            o.value = nm
+            o.textContent = nm
+            sel.appendChild(o)
+          }
+          sel.value = cur
+        }
+
+        function refreshWhRegionSelects(prefix, region) {
+          const sp = document.getElementById(`${prefix}-province`)
+          const sc = document.getElementById(`${prefix}-city`)
+          const sd = document.getElementById(`${prefix}-district`)
+          if (!sp || !sc || !sd || !whPcaData) return
+          const r = region || {}
+          const pcdProv = (r.province || '').trim()
+          const pcdCity = (r.city || '').trim()
+          const pcdDist = (r.district || '').trim()
+          const provNames = whPcaData.map((p) => p.name).filter(Boolean)
+          whFillSelectOptions(sp, '请选择省份', provNames, pcdProv)
+          const pv = pcdProv || (sp.value || '').trim()
+          const provNode = findWhProvinceNode(pv)
+          const cityNames =
+            provNode && Array.isArray(provNode.children) ? provNode.children.map((c) => c.name) : []
+          whFillSelectOptions(sc, '请选择市', cityNames, pcdCity)
+          const cv = pcdCity || (sc.value || '').trim()
+          const cityNode = findWhCityNode(provNode, cv)
+          const distNames =
+            cityNode && Array.isArray(cityNode.children) ? cityNode.children.map((d) => d.name) : []
+          whFillSelectOptions(sd, '请选择区/县', distNames, pcdDist)
+          updateWarehouseRegionConflictUi()
+        }
+
+        function wireWhPcdCascadesOnce(prefix) {
+          if (whPcdCascadeWired) return
+          whPcdCascadeWired = true
+          const sp = document.getElementById(`${prefix}-province`)
+          const sc = document.getElementById(`${prefix}-city`)
+          const sd = document.getElementById(`${prefix}-district`)
+          if (!sp || !sc || !sd) return
+          sp.addEventListener('change', () => {
+            if (!whPcaData) return
+            const provNode = findWhProvinceNode(sp.value)
+            const cityNames =
+              provNode && Array.isArray(provNode.children) ? provNode.children.map((c) => c.name) : []
+            whFillSelectOptions(sc, '请选择市', cityNames, '')
+            whFillSelectOptions(sd, '请选择区/县', [], '')
+            updateWarehouseRegionConflictUi()
+          })
+          sc.addEventListener('change', () => {
+            if (!whPcaData) return
+            const provNode = findWhProvinceNode(sp.value)
+            const cityNode = findWhCityNode(provNode, sc.value)
+            const distNames =
+              cityNode && Array.isArray(cityNode.children) ? cityNode.children.map((d) => d.name) : []
+            whFillSelectOptions(sd, '请选择区/县', distNames, '')
+            updateWarehouseRegionConflictUi()
+          })
+          sd.addEventListener('change', () => {
+            updateWarehouseRegionConflictUi()
+          })
+        }
+
         function ensureRegionInputs(prefix) {
           if (document.getElementById(`${prefix}-province`)) return
           const form = document.getElementById(`${prefix}-form`)
@@ -523,28 +701,52 @@
           block.innerHTML = `
             <div class="form-group">
               <label for="${prefix}-province">省</label>
-              <input type="text" id="${prefix}-province" class="form-control" placeholder="手动补录省（缺省时必填）">
+              <select id="${prefix}-province" class="form-control"></select>
             </div>
             <div class="form-group">
               <label for="${prefix}-city">市</label>
-              <input type="text" id="${prefix}-city" class="form-control" placeholder="手动补录市（缺市时必填）">
+              <select id="${prefix}-city" class="form-control"></select>
             </div>
             <div class="form-group">
               <label for="${prefix}-district">区</label>
-              <input type="text" id="${prefix}-district" class="form-control" placeholder="手动补录区/县（缺区时必填）">
+              <select id="${prefix}-district" class="form-control"></select>
             </div>
+            <p id="warehouse-region-pcd-conflict-tip" class="region-missing-tip" style="display:none;margin-top:6px;">
+              红色边框表示该项与标准行政区划不一致，请从下拉中改选标准省/市/区后保存。
+            </p>
             
           `
           form.appendChild(block)
+          if (prefix === 'warehouse') wireWhPcdCascadesOnce(prefix)
+        }
+
+        async function fillRegionInputsAsync(prefix, region) {
+          const reg = region || { province: '', city: '', district: '' }
+          if (!document.getElementById(`${prefix}-province`)) return
+          if (prefix !== 'warehouse') {
+            const p = document.getElementById(`${prefix}-province`)
+            const c = document.getElementById(`${prefix}-city`)
+            const d = document.getElementById(`${prefix}-district`)
+            if (p) p.value = reg.province || ''
+            if (c) c.value = reg.city || ''
+            if (d) d.value = reg.district || ''
+            return
+          }
+          const mySeq = ++whRegionFillSeq
+          try {
+            await ensureWhPcaLoaded()
+          } catch (e) {
+            console.error(e)
+            alert(e instanceof Error ? e.message : String(e))
+            return
+          }
+          if (mySeq !== whRegionFillSeq) return
+          refreshWhRegionSelects(prefix, reg)
+          updateWarehouseRegionConflictUi()
         }
 
         function fillRegionInputs(prefix, region) {
-          const p = document.getElementById(`${prefix}-province`)
-          const c = document.getElementById(`${prefix}-city`)
-          const d = document.getElementById(`${prefix}-district`)
-          if (p) p.value = region?.province || ''
-          if (c) c.value = region?.city || ''
-          if (d) d.value = region?.district || ''
+          void fillRegionInputsAsync(prefix, region)
         }
 
         function extractWarehouseRows(json) {
@@ -594,6 +796,18 @@
 
         let warehouseRegionHydrateTimer = null
         let warehouseRegionHydrateSeq = 0
+
+        /** 库房省市区 select 重绘 option 会触发 body 级 MutationObserver；若再次 schedule 会形成高频循环卡死主线程 */
+        function mutationsLookLikeOnlyWarehouseRegionSelectRebuild(mutations) {
+          if (!Array.isArray(mutations) || mutations.length === 0) return false
+          return mutations.every((m) => {
+            if (m.type !== 'childList') return false
+            const t = m.target
+            if (!(t instanceof HTMLSelectElement)) return false
+            const id = t.id || ''
+            return id === 'warehouse-province' || id === 'warehouse-city' || id === 'warehouse-district'
+          })
+        }
 
         async function hydrateWarehouseRegionFromApi() {
           const seq = ++warehouseRegionHydrateSeq
@@ -904,7 +1118,14 @@
               .trim()
             if (!name) throw new Error('请填写库房名称')
             if (!address) throw new Error('请填写库房地址')
-            if (!(province && city && district)) throw new Error('请手动补齐省/市/区')
+            if (!(province && city && district)) throw new Error('请从下拉列表选择完整的省、市、区')
+            if (
+              !isWhProvinceStandard(province) ||
+              !isWhCityStandard(province, city) ||
+              !isWhDistStandard(province, city, district)
+            ) {
+              throw new Error('省/市/区与标准行政区划不一致（见红色边框），请从下拉中改选标准项后再保存')
+            }
             if (!Number.isFinite(typeId) || typeId <= 0) throw new Error('请先选择库房类型')
             const phoneRaw = (document.getElementById('warehouse-phone')?.value || '').trim()
             let phoneNorm = ''
@@ -1043,7 +1264,7 @@
           true,
         )
 
-        const mo = new MutationObserver(() => {
+        const mo = new MutationObserver((mutations) => {
           const title = (document.getElementById('modal-title')?.textContent || '').trim()
           const hasSmelterForm = !!document.getElementById('smelter-name')
           const hasWarehouseForm = !!document.getElementById('warehouse-name')
@@ -1074,7 +1295,8 @@
           ) {
             sf.dataset.tlSmelterId = String(state.currentSmelterEditId)
           }
-          if (title.includes('库房') || hasWarehouseForm) {
+          const skipWarehouseRegionSchedule = mutationsLookLikeOnlyWarehouseRegionSelectRebuild(mutations)
+          if ((title.includes('库房') || hasWarehouseForm) && !skipWarehouseRegionSchedule) {
             scheduleWarehouseRegionFill()
           }
           markMissingRows()
@@ -1118,7 +1340,8 @@
         font-weight: 700;
         color: #0f172a;
       }
-      #abnormal-edit-overlay .abnormal-pcd-input[readonly] {
+      #abnormal-edit-overlay .abnormal-pcd-input[readonly],
+      #abnormal-edit-overlay select.abnormal-pcd-input:disabled {
         background: #f1f5f9;
         cursor: not-allowed;
       }
@@ -1211,16 +1434,19 @@
                   <p id="abnormal-edit-meta" class="text-muted" style="font-size:13px;margin-bottom:10px;"></p>
                   <div class="form-group" id="abnormal-row-prov">
                     <label for="abnormal-in-prov">省</label>
-                    <input type="text" id="abnormal-in-prov" class="form-control abnormal-pcd-input" placeholder="省" autocomplete="address-level1">
+                    <select id="abnormal-in-prov" class="form-control abnormal-pcd-input" autocomplete="address-level1"></select>
                   </div>
                   <div class="form-group" id="abnormal-row-city">
                     <label for="abnormal-in-city">市</label>
-                    <input type="text" id="abnormal-in-city" class="form-control abnormal-pcd-input" placeholder="市" autocomplete="address-level2">
+                    <select id="abnormal-in-city" class="form-control abnormal-pcd-input" autocomplete="address-level2"></select>
                   </div>
                   <div class="form-group" id="abnormal-row-dist">
                     <label for="abnormal-in-dist">区/县</label>
-                    <input type="text" id="abnormal-in-dist" class="form-control abnormal-pcd-input" placeholder="区/县" autocomplete="address-level3">
+                    <select id="abnormal-in-dist" class="form-control abnormal-pcd-input" autocomplete="address-level3"></select>
                   </div>
+                  <p id="abnormal-pcd-conflict-tip" class="region-missing-tip" style="display:none;margin-top:4px;">
+                    红色边框表示该项与标准行政区划不一致，请从下拉中改选标准省/市/区后保存。
+                  </p>
                   <div class="form-group" id="abnormal-row-wh-name" style="display:none">
                     <label for="abnormal-in-wh-name">仓库名</label>
                     <input type="text" id="abnormal-in-wh-name" class="form-control" placeholder="库房名称" autocomplete="organization">
@@ -1273,6 +1499,10 @@
         let abnormalModalBound = false
         /** 库房类型下拉缓存（/tl/get_warehouse_types） */
         let abnormalWarehouseTypesCache = null
+        /** 省市区树（/region/p-c-a.json） */
+        let abnormalPcaData = null
+        let abnormalPcaLoadPromise = null
+        let abnormalPcdCascadeWired = false
 
         function pick(obj, keys) {
           if (!obj || typeof obj !== 'object') return ''
@@ -1746,6 +1976,181 @@
           if (ac) ac.checked = !activeKnown ? true : row.is_active === true
         }
 
+        async function ensureAbnormalPcaLoaded() {
+          if (abnormalPcaData) return
+          if (!abnormalPcaLoadPromise) {
+            abnormalPcaLoadPromise = (async () => {
+              const r = await fetch('/region/p-c-a.json', { credentials: 'same-origin' })
+              if (!r.ok) throw new Error(`加载省市区数据失败（HTTP ${r.status}）`)
+              const data = await r.json()
+              if (!Array.isArray(data)) throw new Error('省市区数据格式无效')
+              abnormalPcaData = data
+            })()
+          }
+          try {
+            await abnormalPcaLoadPromise
+          } catch (e) {
+            abnormalPcaLoadPromise = null
+            throw e
+          }
+        }
+
+        function abnormalFindProvinceNode(name) {
+          const n = (name || '').trim()
+          if (!n || !abnormalPcaData) return null
+          const hit = abnormalPcaData.find((p) => p.name === n)
+          if (hit) return hit
+          return abnormalPcaData.find((p) => n.includes(p.name) || p.name.includes(n)) || null
+        }
+
+        function abnormalFindCityNode(provNode, cityName) {
+          const c = (cityName || '').trim()
+          if (!provNode || !Array.isArray(provNode.children) || !c) return null
+          const hit = provNode.children.find((x) => x.name === c)
+          if (hit) return hit
+          return provNode.children.find((x) => c.includes(x.name) || x.name.includes(c)) || null
+        }
+
+        function getAbnormalProvinceNodeExact(name) {
+          const n = (name || '').trim()
+          if (!n || !abnormalPcaData) return null
+          return abnormalPcaData.find((p) => p.name === n) || null
+        }
+
+        function getAbnormalCityNodeExact(provNode, cityName) {
+          const c = (cityName || '').trim()
+          if (!provNode || !Array.isArray(provNode.children) || !c) return null
+          return provNode.children.find((x) => x.name === c) || null
+        }
+
+        function isAbnormalProvinceStandard(name) {
+          return !!(name || '').trim() && !!getAbnormalProvinceNodeExact(name)
+        }
+
+        function isAbnormalCityStandard(provName, cityName) {
+          const c = (cityName || '').trim()
+          if (!c) return true
+          const pn = getAbnormalProvinceNodeExact(provName)
+          if (!pn) return false
+          return !!getAbnormalCityNodeExact(pn, c)
+        }
+
+        function isAbnormalDistStandard(provName, cityName, distName) {
+          const d = (distName || '').trim()
+          if (!d) return true
+          const pn = getAbnormalProvinceNodeExact(provName)
+          const cn = getAbnormalCityNodeExact(pn, cityName)
+          if (!cn || !Array.isArray(cn.children)) return false
+          return cn.children.some((x) => x.name === d)
+        }
+
+        function abnormalPcdRowIsVisible(rowId) {
+          const row = document.getElementById(rowId)
+          return !!(row && row.style.display !== 'none')
+        }
+
+        function abnormalUpdatePcdConflictUi() {
+          const sp = document.getElementById('abnormal-in-prov')
+          const sc = document.getElementById('abnormal-in-city')
+          const sd = document.getElementById('abnormal-in-dist')
+          const tip = document.getElementById('abnormal-pcd-conflict-tip')
+          if (!sp || !sc || !sd || !abnormalPcaData) return
+          const pv = (sp.value || '').trim()
+          const cv = (sc.value || '').trim()
+          const dv = (sd.value || '').trim()
+          sp.classList.remove('region-pcd-conflict')
+          sc.classList.remove('region-pcd-conflict')
+          sd.classList.remove('region-pcd-conflict')
+          let any = false
+          if (abnormalPcdRowIsVisible('abnormal-row-prov') && pv && !isAbnormalProvinceStandard(pv)) {
+            sp.classList.add('region-pcd-conflict')
+            any = true
+          }
+          if (abnormalPcdRowIsVisible('abnormal-row-city') && pv && cv && !isAbnormalCityStandard(pv, cv)) {
+            sc.classList.add('region-pcd-conflict')
+            any = true
+          }
+          if (
+            abnormalPcdRowIsVisible('abnormal-row-dist') &&
+            pv &&
+            cv &&
+            dv &&
+            !isAbnormalDistStandard(pv, cv, dv)
+          ) {
+            sd.classList.add('region-pcd-conflict')
+            any = true
+          }
+          if (tip) tip.style.display = any ? 'block' : 'none'
+        }
+
+        function abnormalFillSelectOptions(sel, placeholder, names, current) {
+          if (!sel) return
+          const uniq = [...new Set((names || []).filter(Boolean))]
+          uniq.sort((a, b) => a.localeCompare(b, 'zh-CN'))
+          const cur = (current || '').trim()
+          if (cur && !uniq.includes(cur)) uniq.unshift(cur)
+          const opts = [`<option value="">${esc(placeholder)}</option>`].concat(
+            uniq.map((nm) => `<option value="${esc(nm)}">${esc(nm)}</option>`),
+          )
+          sel.innerHTML = opts.join('')
+          sel.value = cur
+        }
+
+        function abnormalRefreshPcdSelects(pcd) {
+          const sp = document.getElementById('abnormal-in-prov')
+          const sc = document.getElementById('abnormal-in-city')
+          const sd = document.getElementById('abnormal-in-dist')
+          if (!sp || !sc || !sd || !abnormalPcaData) return
+          const provNames = abnormalPcaData.map((p) => p.name).filter(Boolean)
+          abnormalFillSelectOptions(sp, '请选择省份', provNames, pcd.prov)
+          sp.disabled = !!(pcd.prov || '').trim()
+
+          const pv = (pcd.prov || '').trim() || (sp.value || '').trim()
+          const provNode = abnormalFindProvinceNode(pv)
+          const cityNames = provNode && Array.isArray(provNode.children) ? provNode.children.map((c) => c.name) : []
+          abnormalFillSelectOptions(sc, '请选择市', cityNames, pcd.city)
+          sc.disabled = !!(pcd.city || '').trim()
+
+          const cv = (pcd.city || '').trim() || (sc.value || '').trim()
+          const cityNode = abnormalFindCityNode(provNode, cv)
+          const distNames =
+            cityNode && Array.isArray(cityNode.children) ? cityNode.children.map((d) => d.name) : []
+          abnormalFillSelectOptions(sd, '请选择区/县', distNames, pcd.dist)
+          sd.disabled = !!(pcd.dist || '').trim()
+        }
+
+        function wireAbnormalPcdCascadesOnce() {
+          if (abnormalPcdCascadeWired) return
+          abnormalPcdCascadeWired = true
+          const sp = document.getElementById('abnormal-in-prov')
+          const sc = document.getElementById('abnormal-in-city')
+          const sd = document.getElementById('abnormal-in-dist')
+          if (!sp || !sc || !sd) return
+          sp.addEventListener('change', () => {
+            if (sp.disabled || !abnormalPcaData) return
+            const provNode = abnormalFindProvinceNode(sp.value)
+            const cityNames = provNode && Array.isArray(provNode.children) ? provNode.children.map((c) => c.name) : []
+            abnormalFillSelectOptions(sc, '请选择市', cityNames, '')
+            sc.disabled = false
+            abnormalFillSelectOptions(sd, '请选择区/县', [], '')
+            sd.disabled = false
+            abnormalUpdatePcdConflictUi()
+          })
+          sc.addEventListener('change', () => {
+            if (sc.disabled || !abnormalPcaData) return
+            const provNode = abnormalFindProvinceNode(sp.value)
+            const cityNode = abnormalFindCityNode(provNode, sc.value)
+            const distNames =
+              cityNode && Array.isArray(cityNode.children) ? cityNode.children.map((d) => d.name) : []
+            abnormalFillSelectOptions(sd, '请选择区/县', distNames, '')
+            sd.disabled = false
+            abnormalUpdatePcdConflictUi()
+          })
+          sd.addEventListener('change', () => {
+            abnormalUpdatePcdConflictUi()
+          })
+        }
+
         async function openAbnormalEdit(kind, idKey) {
           const row = kind === 'wh' ? abnormalWhCache.get(idKey) : abnormalSmCache.get(idKey)
           if (!row) return
@@ -1776,21 +2181,15 @@
             }
           } else syncAbnormalSmExtraRows(row)
 
-          const setField = (idEl, val) => {
-            const el = document.getElementById(idEl)
-            if (!el) return
-            const v = (val || '').trim()
-            el.value = v
-            if (v) {
-              el.setAttribute('readonly', 'readonly')
-            } else {
-              el.removeAttribute('readonly')
-            }
+          try {
+            await ensureAbnormalPcaLoaded()
+          } catch (e) {
+            alert(e instanceof Error ? e.message : String(e))
+            return
           }
-          setField('abnormal-in-prov', pcd.prov)
-          setField('abnormal-in-city', pcd.city)
-          setField('abnormal-in-dist', pcd.dist)
+          abnormalRefreshPcdSelects(pcd)
           syncAbnormalPcdRowVisibility(pcd)
+          abnormalUpdatePcdConflictUi()
           const ov = document.getElementById('abnormal-edit-overlay')
           if (ov) ov.style.display = 'flex'
         }
@@ -1808,14 +2207,23 @@
           const inC = document.getElementById('abnormal-in-city')
           const inD = document.getElementById('abnormal-in-dist')
           const read = (el, orig) => {
-            if (el && el.hasAttribute('readonly')) return (orig || '').trim() || (el.value || '').trim()
-            return (el && el.value ? el.value : '').trim() || (orig || '').trim()
+            const locked = el && (el.hasAttribute('readonly') || el.disabled === true)
+            if (locked) return (orig || '').trim() || String(el.value || '').trim()
+            return (el && el.value ? String(el.value).trim() : '') || (orig || '').trim()
           }
           const prov = read(inP, pcd.prov)
           const city = read(inC, pcd.city)
           const dist = read(inD, pcd.dist)
           if (!(prov && city && dist)) {
-            alert('请填写页面上展示的空白省/市/区项，保存需省、市、区均有效')
+            alert('请从下拉列表中选择并补全页面上展示的空白省/市/区项，保存需省、市、区均有效')
+            return
+          }
+          if (
+            !isAbnormalProvinceStandard(prov) ||
+            !isAbnormalCityStandard(prov, city) ||
+            !isAbnormalDistStandard(prov, city, dist)
+          ) {
+            alert('省/市/区与标准行政区划不一致（见红色边框），请从下拉中改选标准项后再保存')
             return
           }
           const saveBtn = document.getElementById('abnormal-edit-save')
@@ -1904,6 +2312,7 @@
           const ov = document.getElementById('abnormal-edit-overlay')
           if (!ov) return
           abnormalModalBound = true
+          wireAbnormalPcdCascadesOnce()
           document.getElementById('abnormal-edit-close')?.addEventListener('click', closeAbnormalEdit)
           document.getElementById('abnormal-edit-cancel')?.addEventListener('click', closeAbnormalEdit)
           document.getElementById('abnormal-edit-save')?.addEventListener('click', () => {
