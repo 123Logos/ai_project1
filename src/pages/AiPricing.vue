@@ -86,11 +86,10 @@
               <option value="">全部省份</option>
               <option v-for="p in provinceOptions" :key="p" :value="p">{{ p }}</option>
             </select>
-            <input
-              v-model.trim="analysisFilterCity"
-              class="form-control filter-input"
-              placeholder="按城市筛选"
-            />
+            <select v-model="analysisFilterCity" class="form-select filter-input" title="先选省份可缩小城市范围">
+              <option value="">全部城市</option>
+              <option v-for="c in analysisFilterCityOptions" :key="c" :value="c">{{ c }}</option>
+            </select>
             <button class="btn filter-btn" @click="loadBenchmarkAnalysis">
               <i class="bi bi-search"></i>
               查询
@@ -167,9 +166,14 @@
       <div class="sub-page-body">
         <div class="table-toolbar">
           <div class="toolbar-filters">
+            <span v-if="regionLoadError" class="align-self-center text-warning small">{{ regionLoadError }}</span>
             <select v-model="filterProvince" class="form-select filter-input">
               <option value="">全部省份</option>
               <option v-for="p in provinceOptions" :key="p" :value="p">{{ p }}</option>
+            </select>
+            <select v-model="filterCity" class="form-select filter-input" title="先选省份可缩小城市范围">
+              <option value="">全部城市</option>
+              <option v-for="c in filterCityOptions" :key="c" :value="c">{{ c }}</option>
             </select>
             <input
               v-model="filterDate"
@@ -249,7 +253,10 @@
             </div>
             <div class="form-field">
               <label class="form-label">对标城市</label>
-              <input v-model.trim="form.city" class="form-control" placeholder="请输入城市" />
+              <select v-model="form.city" class="form-control" :disabled="!form.province">
+                <option value="">{{ form.province ? '请选择城市' : '请先选择省份' }}</option>
+                <option v-for="c in formCityOptions" :key="c" :value="c">{{ c }}</option>
+              </select>
             </div>
             <div class="form-field">
               <label class="form-label">定价</label>
@@ -483,11 +490,10 @@
               <option value="">全部省份</option>
               <option v-for="p in provinceOptions" :key="p" :value="p">{{ p }}</option>
             </select>
-            <input
-              v-model.trim="marginFilterCity"
-              class="form-control filter-input"
-              placeholder="按城市筛选"
-            />
+            <select v-model="marginFilterCity" class="form-select filter-input" title="先选省份可缩小城市范围">
+              <option value="">全部城市</option>
+              <option v-for="c in marginFilterCityOptions" :key="c" :value="c">{{ c }}</option>
+            </select>
             <button class="btn filter-btn" @click="loadMargins">
               <i class="bi bi-search"></i>
               查询
@@ -565,7 +571,10 @@
             </div>
             <div class="form-field">
               <label class="form-label">城市</label>
-              <input v-model.trim="marginForm.city" class="form-control" placeholder="请输入城市" :disabled="!!marginEditing" />
+              <select v-model="marginForm.city" class="form-control" :disabled="!!marginEditing || !marginForm.province">
+                <option value="">{{ marginForm.province ? '请选择城市' : '请先选择省份' }}</option>
+                <option v-for="c in marginFormCityOptions" :key="c" :value="c">{{ c }}</option>
+              </select>
             </div>
             <div class="form-field">
               <label class="form-label">库房名称</label>
@@ -613,25 +622,10 @@
             </div>
             <div class="form-field">
               <label class="form-label">对标城市</label>
-              <div class="search-select" ref="benchmarkCitySelectRef">
-                <input
-                  v-model.trim="marginForm.benchmark_city"
-                  class="form-control"
-                  placeholder="搜索或输入对标城市"
-                  @focus="showBenchmarkCityDropdown = true"
-                  @input="showBenchmarkCityDropdown = true"
-                />
-                <div v-if="showBenchmarkCityDropdown && filteredBenchmarkCities.length" class="search-select-dropdown">
-                  <div
-                    v-for="c in filteredBenchmarkCities"
-                    :key="c"
-                    class="search-select-item"
-                    @mousedown.prevent="marginForm.benchmark_city = c; showBenchmarkCityDropdown = false"
-                  >
-                    {{ c }}
-                  </div>
-                </div>
-              </div>
+              <select v-model="marginForm.benchmark_city" class="form-control">
+                <option value="">请选择对标城市</option>
+                <option v-for="c in benchmarkCitySelectOptions" :key="c" :value="c">{{ c }}</option>
+              </select>
             </div>
             <div class="form-field">
               <label class="form-label">对标城市差额</label>
@@ -711,6 +705,7 @@
 import { ref, computed, watch, nextTick } from 'vue'
 import * as XLSX from 'xlsx'
 import { hasNavPermission } from '@/composables/useMePermissions'
+import { useChinaRegion } from '@/composables/useChinaRegion'
 import {
   fetchCityBenchmarks,
   createCityBenchmark,
@@ -768,16 +763,45 @@ const pageMeta: Record<string, { title: string; icon: string }> = {
 const pageTitle = computed(() => pageMeta[activePage.value]?.title ?? '')
 const pageIcon = computed(() => pageMeta[activePage.value]?.icon ?? 'bi bi-grid')
 
-/* ===== 对标城市定价 ===== */
-const provinceOptions = [
-  '北京市', '天津市', '河北省', '山西省', '内蒙古自治区',
-  '辽宁省', '吉林省', '黑龙江省',
-  '上海市', '江苏省', '浙江省', '安徽省', '福建省', '江西省', '山东省',
-  '河南省', '湖北省', '湖南省', '广东省', '广西壮族自治区', '海南省',
-  '重庆市', '四川省', '贵州省', '云南省', '西藏自治区',
-  '陕西省', '甘肃省', '青海省', '宁夏回族自治区', '新疆维吾尔自治区',
-  '台湾省', '香港特别行政区', '澳门特别行政区',
-]
+/* ===== 对标城市定价 / 省市区数据 ===== */
+const chinaRegion = useChinaRegion()
+const { ensureLoaded, provinceNames, citiesInProvince, allCityNames } = chinaRegion
+const regionLoadError = chinaRegion.loadError
+
+const provinceOptions = computed(() => [...provinceNames.value])
+
+const formCityOptions = computed(() => {
+  const base = form.value.province ? citiesInProvince(form.value.province) : []
+  const c = form.value.city
+  if (c && !base.includes(c)) return [c, ...base]
+  return base
+})
+
+const analysisFilterCityOptions = computed(() =>
+  analysisFilterProvince.value ? citiesInProvince(analysisFilterProvince.value) : allCityNames(),
+)
+
+const marginFilterCityOptions = computed(() =>
+  marginFilterProvince.value ? citiesInProvince(marginFilterProvince.value) : allCityNames(),
+)
+
+const filterCityOptions = computed(() =>
+  filterProvince.value ? citiesInProvince(filterProvince.value) : allCityNames(),
+)
+
+const marginFormCityOptions = computed(() => {
+  const base = marginForm.value.province ? citiesInProvince(marginForm.value.province) : []
+  const c = marginForm.value.city
+  if (c && !base.includes(c)) return [c, ...base]
+  return base
+})
+
+const benchmarkCitySelectOptions = computed(() => {
+  const base = allCityNames()
+  const b = marginForm.value.benchmark_city
+  if (b && !base.includes(b)) return [b, ...base]
+  return base
+})
 
 const tableData = ref<CityBenchmarkRow[]>([])
 const tableLoading = ref(false)
@@ -820,14 +844,16 @@ function changePage(p: number) {
   loadCityBenchmarks()
 }
 
-function openAddForm() {
+async function openAddForm() {
+  await ensureLoaded()
   editingRow.value = null
   form.value = { province: '', city: '', price: 0, date: new Date().toISOString().slice(0, 10) }
   formError.value = ''
   showForm.value = true
 }
 
-function openEditForm(row: CityBenchmarkRow) {
+async function openEditForm(row: CityBenchmarkRow) {
+  await ensureLoaded()
   editingRow.value = row
   form.value = { province: row.province, city: row.city, price: row.price, date: row.date }
   formError.value = ''
@@ -836,7 +862,7 @@ function openEditForm(row: CityBenchmarkRow) {
 
 async function submitForm() {
   if (!form.value.province) { formError.value = '请输入省份'; return }
-  if (!form.value.city) { formError.value = '请输入对标城市'; return }
+  if (!form.value.city) { formError.value = '请选择对标城市'; return }
   if (!form.value.price && form.value.price !== 0) { formError.value = '请输入定价'; return }
   if (!form.value.date) { formError.value = '请选择日期'; return }
   formLoading.value = true
@@ -866,7 +892,10 @@ async function handleDelete(row: CityBenchmarkRow) {
   }
 }
 
-watch(activePage, (val) => {
+watch(activePage, async (val) => {
+  if (val === 'cityBenchmark' || val === 'benchmarkAnalysis' || val === 'marginManage') {
+    await ensureLoaded()
+  }
   if (val === 'cityBenchmark') {
     page.value = 1
     filterProvince.value = ''
@@ -1069,15 +1098,11 @@ function handleMarginFormClickOutside(e: MouseEvent) {
     showWarehouseDropdown.value = false
     warehouseSearchQuery.value = ''
   }
-  if (benchmarkCitySelectRef.value && !benchmarkCitySelectRef.value.contains(target)) {
-    showBenchmarkCityDropdown.value = false
-  }
 }
 
 watch(showMarginForm, (v) => {
   if (v) {
     showWarehouseDropdown.value = false
-    showBenchmarkCityDropdown.value = false
     warehouseSearchQuery.value = ''
     setTimeout(() => document.addEventListener('click', handleMarginFormClickOutside), 0)
   } else {
@@ -1085,17 +1110,14 @@ watch(showMarginForm, (v) => {
   }
 })
 
-const benchmarkCityOptions = ref<string[]>([])
 const warehouseSearchResults = ref<Array<{ id: number; name: string }>>([])
 const warehouseSearchLoading = ref(false)
 const warehouseDetailMap = ref<Map<string, { id: number; province: string; city: string }>>(new Map())
 const showWarehouseDropdown = ref(false)
-const showBenchmarkCityDropdown = ref(false)
 const warehouseSearchQuery = ref('')
 const warehouseSearchInputRef = ref<HTMLInputElement | null>(null)
 let warehouseSearchTimer: ReturnType<typeof setTimeout> | null = null
 const warehouseSelectRef = ref<HTMLElement | null>(null)
-const benchmarkCitySelectRef = ref<HTMLElement | null>(null)
 
 async function doWarehouseSearch(query: string) {
   if (!query) { warehouseSearchResults.value = []; return }
@@ -1130,25 +1152,6 @@ watch(warehouseSearchQuery, (val) => {
   if (warehouseSearchTimer) clearTimeout(warehouseSearchTimer)
   warehouseSearchTimer = setTimeout(() => doWarehouseSearch(val), 300)
 })
-
-const filteredBenchmarkCities = computed(() => {
-  const q = marginForm.value.benchmark_city.toLowerCase()
-  if (!q) return benchmarkCityOptions.value.slice(0, 50)
-  return benchmarkCityOptions.value.filter((c) => c.toLowerCase().includes(q)).slice(0, 50)
-})
-
-async function loadBenchmarkCityOptions() {
-  try {
-    const res = await fetchCityBenchmarks({ page: 1, page_size: 500 })
-    const seen = new Set<string>()
-    for (const item of res.items) {
-      if (item.city) seen.add(item.city)
-    }
-    benchmarkCityOptions.value = [...seen].sort((a, b) => a.localeCompare(b, 'zh-CN'))
-  } catch {
-    benchmarkCityOptions.value = []
-  }
-}
 
 function toggleWarehouseDropdown() {
   showWarehouseDropdown.value = !showWarehouseDropdown.value
@@ -1196,15 +1199,16 @@ function changeMarginPage(p: number) {
   loadMargins()
 }
 
-function openMarginAdd() {
+async function openMarginAdd() {
+  await ensureLoaded()
   marginEditing.value = null
   marginForm.value = { province: '', city: '', warehouse_name: '', benchmark_city: '', benchmark_diff: 0, margin: 0, warehouse_id: undefined }
   marginFormError.value = ''
   showMarginForm.value = true
-  loadBenchmarkCityOptions()
 }
 
-function openMarginEdit(row: WarehouseMarginRow) {
+async function openMarginEdit(row: WarehouseMarginRow) {
+  await ensureLoaded()
   marginEditing.value = row
   marginForm.value = {
     province: row.province, city: row.city, warehouse_name: row.warehouse_name,
@@ -1212,15 +1216,14 @@ function openMarginEdit(row: WarehouseMarginRow) {
   }
   marginFormError.value = ''
   showMarginForm.value = true
-  loadBenchmarkCityOptions()
 }
 
 async function submitMarginForm() {
   const f = marginForm.value
   if (!f.province) { marginFormError.value = '请选择省份'; return }
-  if (!f.city) { marginFormError.value = '请输入城市'; return }
+  if (!f.city) { marginFormError.value = '请选择城市'; return }
   if (!f.warehouse_name) { marginFormError.value = '请输入库房名称'; return }
-  if (!f.benchmark_city) { marginFormError.value = '请输入对标城市'; return }
+  if (!f.benchmark_city) { marginFormError.value = '请选择对标城市'; return }
   marginFormLoading.value = true
   marginFormError.value = ''
   try {
@@ -1297,6 +1300,38 @@ async function confirmImport() {
     importLoading.value = false
   }
 }
+
+watch(analysisFilterProvince, () => {
+  const opts = analysisFilterCityOptions.value
+  if (analysisFilterCity.value && !opts.includes(analysisFilterCity.value)) analysisFilterCity.value = ''
+})
+
+watch(marginFilterProvince, () => {
+  const opts = marginFilterCityOptions.value
+  if (marginFilterCity.value && !opts.includes(marginFilterCity.value)) marginFilterCity.value = ''
+})
+
+watch(filterProvince, () => {
+  const opts = filterCityOptions.value
+  if (filterCity.value && !opts.includes(filterCity.value)) filterCity.value = ''
+})
+
+watch(
+  () => form.value.province,
+  () => {
+    const opts = formCityOptions.value
+    if (form.value.city && !opts.includes(form.value.city)) form.value.city = ''
+  },
+)
+
+watch(
+  () => marginForm.value.province,
+  () => {
+    if (marginEditing.value) return
+    const opts = marginFormCityOptions.value
+    if (marginForm.value.city && !opts.includes(marginForm.value.city)) marginForm.value.city = ''
+  },
+)
 </script>
 
 <style scoped>
