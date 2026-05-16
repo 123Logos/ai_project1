@@ -111,7 +111,8 @@
                 <th>区</th>
                 <th>库房名称</th>
                 <th>对标城市</th>
-                <th>标定价格</th>
+                <th>对标城市定价</th>
+                <th>冶炼厂标定价格</th>
                 <th>运费</th>
                 <th>对标城市差额</th>
                 <th>毛利（配置版）</th>
@@ -121,13 +122,13 @@
             </thead>
             <tbody>
               <tr v-if="analysisLoading">
-                <td colspan="11" class="text-center py-4">
+                <td colspan="12" class="text-center py-4">
                   <span class="spinner-border spinner-border-sm me-2"></span>
                   加载中…
                 </td>
               </tr>
               <tr v-else-if="analysisData.length === 0">
-                <td colspan="11" class="text-center py-4 text-muted">暂无数据</td>
+                <td colspan="12" class="text-center py-4 text-muted">暂无数据</td>
               </tr>
               <tr v-for="row in analysisData" :key="row.id">
                 <td>{{ row.province }}</td>
@@ -135,6 +136,7 @@
                 <td>{{ row.county }}</td>
                 <td>{{ row.warehouse }}</td>
                 <td>{{ row.benchmark_city || '-' }}</td>
+                <td>{{ row.benchmark_price ? row.benchmark_price.toFixed(2) : '-' }}</td>
                 <td>{{ row.calibrated_price ? row.calibrated_price.toFixed(2) : '-' }}</td>
                 <td>{{ row.freight ? row.freight.toFixed(2) : '-' }}</td>
                 <td>{{ row.benchmark_diff ? row.benchmark_diff.toFixed(2) : '-' }}</td>
@@ -1168,7 +1170,7 @@ const analysisData = ref<BenchmarkAnalysisRow[]>([])
 const analysisLoading = ref(false)
 const analysisTotal = ref(0)
 const analysisPage = ref(1)
-const analysisPageSize = 20
+const analysisPageSize = 15
 const analysisFilterProvince = ref('')
 const analysisFilterCity = ref('')
 const analysisFilterCounty = ref('')
