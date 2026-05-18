@@ -130,6 +130,32 @@ function normalizeRoleTemplates(raw: unknown): RoleTemplateRow[] {
   return out.sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
 }
 
+/** 后端可能返回 true / 1 / "true" / { value: true } 等表示已授权 */
+export function isPermissionGranted(value: unknown): boolean {
+  if (value === true || value === 1) return true
+  if (typeof value === 'string') {
+    const s = value.trim().toLowerCase()
+    if (s === 'true' || s === '1' || s === 'yes') return true
+  }
+  if (value && typeof value === 'object' && !Array.isArray(value) && 'value' in value) {
+    return isPermissionGranted((value as { value?: unknown }).value)
+  }
+  return false
+}
+
+/** 从 GET /auth/permissions/me 等详情解析已开启的 field_name（与角色模板解析规则一致） */
+export function collectGrantedFieldNames(detail: Record<string, unknown>): Set<string> {
+  const { permissions } = parseTemplatePermissions(detail)
+  const granted = new Set<string>()
+  for (const [k, v] of Object.entries(permissions)) {
+    if (v === true) granted.add(k)
+  }
+  for (const [k, v] of Object.entries(detail)) {
+    if (k.startsWith('perm_') && isPermissionGranted(v)) granted.add(k)
+  }
+  return granted
+}
+
 function mergePermissionsWithLabels(
   permissions: Record<string, boolean>,
   permissionLabels: Record<string, string>,
@@ -140,7 +166,7 @@ function mergePermissionsWithLabels(
     if (!k) continue
     if (v && typeof v === 'object' && !Array.isArray(v)) {
       const vo = v as Record<string, unknown>
-      if ('value' in vo) permissions[k] = vo.value === true
+      if ('value' in vo) permissions[k] = isPermissionGranted(vo.value)
       const lab = String(vo.label ?? '').trim()
       if (lab) permissionLabels[k] = lab
     }
@@ -165,25 +191,25 @@ function parseTemplatePermissions(obj: Record<string, unknown>): {
       const o = item as Record<string, unknown>
       const field = String(o.field ?? o.field_name ?? o.key ?? '').trim()
       if (!field) continue
-      permissions[field] = o.value === true
+      permissions[field] = isPermissionGranted(o.value)
       const lab = String(o.label ?? o.name ?? o.title ?? '').trim()
       if (lab) permissionLabels[field] = lab
     }
   } else if (permsSrc && typeof permsSrc === 'object') {
     for (const [k, v] of Object.entries(permsSrc as Record<string, unknown>)) {
-      if (v === true || v === false) {
-        permissions[k] = v === true
+      if (typeof v === 'boolean') {
+        permissions[k] = v
       } else if (v && typeof v === 'object' && !Array.isArray(v)) {
         const vo = v as Record<string, unknown>
         if ('value' in vo) {
-          permissions[k] = vo.value === true
+          permissions[k] = isPermissionGranted(vo.value)
           const lab = String(vo.label ?? '').trim()
           if (lab) permissionLabels[k] = lab
         } else {
           permissions[k] = !!v
         }
       } else {
-        permissions[k] = !!v
+        permissions[k] = isPermissionGranted(v)
       }
     }
   }

@@ -180,7 +180,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import HistoryManage from './pages/HistoryManage.vue'
 import HistoryQuery from './pages/HistoryQuery.vue'
 import PurchaseQuantity from './pages/PurchaseQuantity.vue'
@@ -192,7 +192,7 @@ import DetectApp from '../PD_max_fronted/src/App.vue'
 import { clearToken, getToken, login } from './api/authApi'
 import {
   canOpenUserManage,
-  PREDICTION_SUB_TO_FIELD,
+  hasPredictionSubNavPermission,
   type PredictionSubKey,
 } from './constants/navTabPermissionMap'
 import {
@@ -224,7 +224,7 @@ const predictionSubTab = ref<PredictionSubKey>('historyManage')
 const baseUrl = import.meta.env.BASE_URL
 const embeddedCacheVersion = `${Date.now()}`
 const isLoggedIn = ref(!!getToken())
-/** 有 token 时先拉 /auth/permissions/me，再展示受控导航，避免闪错页 */
+/** 有 token 时整页刷新会先拉 /auth/permissions/me 再展示导航，避免闪错页 */
 const navPermissionsReady = ref(!getToken())
 const showLogin = ref(false)
 const loginLoading = ref(false)
@@ -237,7 +237,7 @@ const mePermLoadError = mePermState.loadError
 const visiblePrimaryTabs = computed(() => primaryTabs)
 
 const visiblePredictionSubTabs = computed(() =>
-  predictionSubTabs.filter((item) => hasNavPermission(PREDICTION_SUB_TO_FIELD[item.key])),
+  predictionSubTabs.filter((item) => hasPredictionSubNavPermission(item.key, hasNavPermission)),
 )
 
 const showUserManageBtn = computed(() => canOpenUserManage(hasNavPermission))
@@ -278,14 +278,34 @@ watch(
   { flush: 'post', immediate: true },
 )
 
-onMounted(async () => {
-  if (!getToken()) return
+/** 整页刷新（F5）或从浏览器往返缓存恢复时：重新请求 /auth/permissions/me 并解析导航权限 */
+async function refreshNavPermissionsOnPageLoad() {
+  if (!getToken()) {
+    clearMePermissions()
+    navPermissionsReady.value = true
+    return
+  }
+  navPermissionsReady.value = false
   await loadMePermissions()
   navPermissionsReady.value = true
+}
+
+function onPageShow(ev: PageTransitionEvent) {
+  if (ev.persisted) void refreshNavPermissionsOnPageLoad()
+}
+
+onMounted(() => {
+  isLoggedIn.value = !!getToken()
+  void refreshNavPermissionsOnPageLoad()
+  window.addEventListener('pageshow', onPageShow)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('pageshow', onPageShow)
 })
 
 async function retryLoadPermissions() {
-  await loadMePermissions()
+  await refreshNavPermissionsOnPageLoad()
 }
 
 watch(showLogin, (v) => {
@@ -349,10 +369,8 @@ async function submitLogin() {
   loginError.value = ''
   try {
     await login(loginForm.value.username, loginForm.value.password)
-    navPermissionsReady.value = false
-    await loadMePermissions()
-    navPermissionsReady.value = true
     isLoggedIn.value = true
+    await refreshNavPermissionsOnPageLoad()
     showLogin.value = false
     activeSection.value = firstVisiblePrimarySection()
     predictionSubTab.value =

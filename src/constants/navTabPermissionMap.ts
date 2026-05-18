@@ -40,6 +40,15 @@ export const PREDICTION_SUB_TO_FIELD: Record<PredictionSubKey, string> = {
   forecast: 'perm_nav_ai_prediction_forecast',
 }
 
+/** 子 Tab：显式子权限，或已勾选父级「AI 预测」时视为全部可进 */
+export function hasPredictionSubNavPermission(
+  key: PredictionSubKey,
+  has: (field: string) => boolean,
+): boolean {
+  if (has(PREDICTION_SUB_TO_FIELD[key])) return true
+  return has('perm_nav_ai_prediction')
+}
+
 export function canOpenUserManage(has: (field: string) => boolean): boolean {
   return (
     has('perm_nav_system_account_user_account') || has('perm_nav_system_account_role_manage')
