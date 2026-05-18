@@ -60,7 +60,8 @@ export async function fetchBenchmarkAnalysis(params?: {
 }): Promise<{ items: BenchmarkAnalysisRow[]; total: number }> {
   const q = new URLSearchParams()
   if (params?.province) q.set('province', params.province)
-  if (params?.county) q.set('库房区', params.county)
+  if (params?.city) q.set('city_keyword', params.city)
+  if (params?.county) q.set('district_keyword', params.county)
   q.set('page', String(params?.page ?? 1))
   q.set('page_size', String(params?.page_size ?? 20))
 
@@ -81,12 +82,8 @@ export async function fetchBenchmarkAnalysis(params?: {
     .filter((x): x is Record<string, unknown> => !!x && typeof x === 'object')
     .map((r, i) => pickRow(r, i))
 
-  let filtered = items
-  if (params?.city) filtered = filtered.filter((r) => r.city.includes(params.city!))
-  if (params?.county) filtered = filtered.filter((r) => r.county.includes(params.county!))
-
   return {
-    items: filtered,
+    items,
     total: typeof inner.total === 'number' ? inner.total : items.length,
   }
 }
