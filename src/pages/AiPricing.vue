@@ -100,6 +100,10 @@
               <i class="bi bi-search"></i>
               查询
             </button>
+            <button class="btn filter-btn" @click="loadBenchmarkAnalysis" :disabled="analysisLoading">
+              <i class="bi bi-arrow-clockwise"></i>
+              重新计算
+            </button>
           </div>
         </div>
         <div class="table-wrap">
@@ -330,19 +334,19 @@
                   加载中…
                 </td>
               </tr>
-              <tr v-else-if="!smelterData">
+              <tr v-else-if="smelterData.length === 0">
                 <td colspan="4" class="text-center py-4 text-muted">暂无数据</td>
               </tr>
-              <tr v-else>
-                <td>{{ smelterData.smelter }}</td>
-                <td>{{ smelterData.price.toFixed(2) }}</td>
-                <td>{{ smelterData.date }}</td>
+              <tr v-for="row in smelterData" :key="row.id">
+                <td>{{ row.smelter }}</td>
+                <td>{{ row.price.toFixed(2) }}</td>
+                <td>{{ row.date }}</td>
                 <td class="col-actions">
-                  <button class="action-btn action-edit" @click="openSmelterEdit">
+                  <button class="action-btn action-edit" @click="openSmelterEdit(row)">
                     <i class="bi bi-pencil-square"></i>
                     修改
                   </button>
-                  <button class="action-btn action-delete" @click="handleSmelterDelete">
+                  <button class="action-btn action-delete" @click="handleSmelterDelete(row)">
                     <i class="bi bi-trash3"></i>
                     删除
                   </button>
@@ -470,23 +474,25 @@
             <table class="data-table history-table">
               <thead>
                 <tr>
+                  <th>冶炼厂</th>
                   <th>标定价格</th>
                   <th>更改时间</th>
                 </tr>
               </thead>
               <tbody>
                 <tr v-if="historyLoading">
-                  <td colspan="2" class="text-center py-4">
+                  <td colspan="3" class="text-center py-4">
                     <span class="spinner-border spinner-border-sm me-2"></span>
                     加载中…
                   </td>
                 </tr>
                 <tr v-else-if="historyData.length === 0">
-                  <td colspan="2" class="text-center py-4 text-muted">暂无记录</td>
+                  <td colspan="3" class="text-center py-4 text-muted">暂无记录</td>
                 </tr>
                 <tr v-for="item in historyData" :key="item.id">
+                  <td>{{ item.smelter }}</td>
                   <td>{{ item.price.toFixed(2) }}</td>
-                  <td>{{ item.change_time }}</td>
+                  <td>{{ formatTime(item.change_time) }}</td>
                 </tr>
               </tbody>
             </table>
@@ -745,7 +751,6 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import * as XLSX from 'xlsx'
 import { hasNavPermission } from '@/composables/useMePermissions'
 import { useChinaRegion } from '@/composables/useChinaRegion'
 import {
@@ -981,12 +986,13 @@ watch(activePage, async (val) => {
 })
 
 /* ===== 冶炼厂标定价格 ===== */
-const smelterData = ref<SmelterPriceRow | null>(null)
+const smelterData = ref<SmelterPriceRow[]>([])
 const smelterLoading = ref(false)
 const showSmelterForm = ref(false)
 const smelterFormLoading = ref(false)
 const smelterFormError = ref('')
 const smelterForm = ref({ price: 0, date: '' })
+const smelterEditId = ref(0)
 const showSmelterAddForm = ref(false)
 const smelterAddLoading = ref(false)
 const smelterAddError = ref('')
@@ -1055,16 +1061,16 @@ async function loadSmelterPrice() {
   try {
     smelterData.value = await fetchSmelterPrice()
   } catch (e) {
-    smelterData.value = null
+    smelterData.value = []
     console.error('加载冶炼厂标定价格失败:', e)
   } finally {
     smelterLoading.value = false
   }
 }
 
-function openSmelterEdit() {
-  if (!smelterData.value) return
-  smelterForm.value = { price: smelterData.value.price, date: smelterData.value.date }
+function openSmelterEdit(row: SmelterPriceRow) {
+  smelterEditId.value = row.id
+  smelterForm.value = { price: row.price, date: row.date }
   smelterFormError.value = ''
   showSmelterForm.value = true
 }
@@ -1117,7 +1123,7 @@ async function submitSmelterForm() {
   smelterFormLoading.value = true
   smelterFormError.value = ''
   try {
-    await updateSmelterPrice(smelterData.value!.id, smelterForm.value.price, smelterForm.value.date)
+    await updateSmelterPrice(smelterEditId.value, smelterForm.value.price, smelterForm.value.date)
     showSmelterForm.value = false
     await loadSmelterPrice()
   } catch (e) {
@@ -1127,11 +1133,10 @@ async function submitSmelterForm() {
   }
 }
 
-async function handleSmelterDelete() {
-  if (!smelterData.value) return
-  if (!confirm('确定删除该冶炼厂标定价格吗？')) return
+async function handleSmelterDelete(row: SmelterPriceRow) {
+  if (!confirm(`确定删除${row.smelter}的标定价格吗？`)) return
   try {
-    await deleteSmelterPrice(smelterData.value.id)
+    await deleteSmelterPrice(row.id)
     await loadSmelterPrice()
   } catch (e) {
     alert(e instanceof Error ? e.message : String(e))
@@ -1156,6 +1161,11 @@ async function loadSmelterHistory() {
 function changeHistoryPage(p: number) {
   historyPage.value = p
   loadSmelterHistory()
+}
+
+function formatTime(t: string): string {
+  if (!t) return '-'
+  return t.replace('T', ' ').slice(0, 19)
 }
 
 watch(showHistory, (v) => {
@@ -1431,27 +1441,15 @@ async function handleMarginImport(event: Event) {
   input.value = ''
   if (!file) return
 
+  importLoading.value = true
   try {
-    const ab = await file.arrayBuffer()
-    const wb = XLSX.read(ab, { type: 'array' })
-    const ws = wb.Sheets[wb.SheetNames[0]!]
-    const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' })
-    if (rows.length === 0) {
-      alert('文件中没有数据')
-      return
-    }
-    const cols = Object.keys(rows[0]!)
-    importColumns.value = cols
-    importTotalRows.value = rows.length
-    importPreviewData.value = rows.slice(0, 10).map((r) => {
-      const obj: Record<string, string> = {}
-      for (const c of cols) obj[c] = String(r[c] ?? '')
-      return obj
-    })
-    pendingImportFile = file
-    showImportPreview.value = true
+    await importWarehouseMargins(file)
+    alert('导入成功')
+    await loadMargins()
   } catch (e) {
-    alert('解析文件失败：' + (e instanceof Error ? e.message : String(e)))
+    alert('导入失败：' + (e instanceof Error ? e.message : String(e)))
+  } finally {
+    importLoading.value = false
   }
 }
 

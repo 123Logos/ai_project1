@@ -3,13 +3,16 @@ import { getToken } from './authApi'
 
 export interface SmelterPriceRow {
   id: number
+  smelterId: number
   smelter: string
   price: number
   date: string
+  isLatest: boolean
 }
 
 export interface SmelterPriceHistoryRow {
   id: number
+  smelter: string
   price: number
   operator: string
   change_time: string
@@ -34,15 +37,18 @@ function readMsg(data: unknown): string {
 function pickSmelterRow(r: Record<string, unknown>): SmelterPriceRow {
   return {
     id: Number(r.config_id ?? r.id ?? 0),
+    smelterId: Number(r['冶炼厂id'] ?? 0),
     smelter: String(r['冶炼厂'] ?? ''),
     price: Number(r['标定价格'] ?? 0),
     date: String(r['定价日期'] ?? ''),
+    isLatest: r['是否当前冶炼厂最新'] === true,
   }
 }
 
 function pickHistoryRow(r: Record<string, unknown>): SmelterPriceHistoryRow {
   return {
     id: Number(r.id ?? 0),
+    smelter: String(r['冶炼厂'] ?? ''),
     price: Number(r['标定价格'] ?? 0),
     operator: String(r['操作人'] ?? r.created_by ?? '-'),
     change_time: String(r['上传时间'] ?? r['定价日期'] ?? ''),
@@ -59,15 +65,15 @@ function unwrapList(data: unknown): Record<string, unknown>[] {
   return []
 }
 
-export async function fetchSmelterPrice(): Promise<SmelterPriceRow | null> {
-  const q = new URLSearchParams({ page: '1', page_size: '1', only_latest: 'true' })
+export async function fetchSmelterPrice(): Promise<SmelterPriceRow[]> {
+  const q = new URLSearchParams({ page: '1', page_size: '500', only_latest: 'true' })
   const { res, data } = await fetchJson(`${BASE}?${q.toString()}`, {
     method: 'GET',
     headers: { ...authHeaders() },
   })
   if (!res.ok) throw new Error(readMsg(data) || `获取冶炼厂标定价格失败（HTTP ${res.status}）`)
   const rows = unwrapList(data)
-  return rows.length > 0 ? pickSmelterRow(rows[0]) : null
+  return rows.map(pickSmelterRow).filter(r => r.isLatest)
 }
 
 export async function createSmelterPrice(smelterId: number, price: number, date: string): Promise<void> {

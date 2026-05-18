@@ -117,6 +117,21 @@ export async function deleteWarehouseMargin(id: number): Promise<void> {
   if (!res.ok) throw new Error(readMsg(data) || `删除库房差价和毛利失败（HTTP ${res.status}）`)
 }
 
-export async function importWarehouseMargins(_file: File): Promise<void> {
-  throw new Error('导入功能暂未对接新接口，请手动添加数据')
+export async function importWarehouseMargins(file: File): Promise<void> {
+  const fd = new FormData()
+  fd.append('file', file)
+  const res = await fetch('/tl/import_warehouse_spread_excel', {
+    method: 'POST',
+    headers: { ...authHeaders() },
+    body: fd,
+  })
+  const text = await res.text()
+  if (!res.ok) {
+    let msg = ''
+    try {
+      const data = JSON.parse(text)
+      msg = readMsg(data)
+    } catch { /* ignore */ }
+    throw new Error(msg || text || `导入库房差价失败（HTTP ${res.status}）`)
+  }
 }
