@@ -483,6 +483,7 @@ function roleText(role: string | undefined) {
   max-width: 1400px;
   margin: 0 auto;
   padding: 20px;
+  animation: fadeIn 0.25s ease both;
 }
 
 .um-page-title {
@@ -568,10 +569,12 @@ function roleText(role: string | undefined) {
   align-items: center;
   justify-content: center;
   padding: 16px;
+  animation: fadeIn 0.2s ease both;
 }
 
 .dialog {
   width: min(680px, 100%);
+  animation: scaleIn 0.25s ease both;
 }
 
 .dialog-actions {

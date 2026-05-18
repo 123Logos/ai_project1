@@ -408,6 +408,7 @@ body {
   top: 0;
   z-index: 1100;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  animation: slideDown 0.3s ease both;
 }
 
 .top-nav-inner {
@@ -537,6 +538,11 @@ body {
 .tab-btn:hover {
   color: white;
   background-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+
+.tab-btn:active {
+  transform: scale(0.97);
 }
 
 .tab-btn.active {
@@ -579,12 +585,17 @@ body {
   color: #4b5563;
   background: #f3f4f6;
   cursor: pointer;
-  transition: background 0.15s, color 0.15s, border-color 0.15s;
+  transition: all 0.2s ease;
 }
 
 .sub-tab-btn:hover {
   background: #e5e7eb;
   color: #111827;
+  transform: scale(1.04);
+}
+
+.sub-tab-btn:active {
+  transform: scale(0.97);
 }
 
 .sub-tab-btn.active {
@@ -619,6 +630,7 @@ body {
   border-radius: 16px;
   box-shadow: 0 10px 40px rgba(15, 23, 42, 0.1);
   border: 1px solid #e2e8f0;
+  animation: fadeInUp 0.4s ease both;
 }
 
 .login-gate-icon {
@@ -650,12 +662,17 @@ body {
   border: none;
   cursor: pointer;
   font-size: 0.95rem;
-  transition: background 0.15s ease, transform 0.1s ease;
+  transition: all 0.2s ease;
 }
 
 .login-gate-btn:hover {
   background: #155a9e;
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(25, 108, 192, 0.35);
+}
+
+.login-gate-btn:active {
+  transform: scale(0.97);
 }
 
 .panel {
@@ -718,6 +735,7 @@ body {
   align-items: center;
   justify-content: center;
   padding: 16px;
+  animation: fadeIn 0.25s ease both;
 }
 
 .login-card {
@@ -726,6 +744,7 @@ body {
   border-radius: 14px;
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.32);
   overflow: hidden;
+  animation: scaleIn 0.3s ease both;
 }
 
 .login-card .card-body {
@@ -798,10 +817,17 @@ body {
   border: none;
   background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
   color: #fff;
+  transition: all 0.2s ease;
 }
 
 .login-btn-submit:hover {
   filter: brightness(1.06);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.35);
+}
+
+.login-btn-submit:active {
+  transform: scale(0.97);
 }
 
 .login-btn-submit:disabled {

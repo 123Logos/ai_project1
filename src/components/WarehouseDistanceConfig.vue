@@ -291,6 +291,7 @@ import {
   fetchTlCalculateDistance,
   fetchTlWarehouseLinksList,
   fetchTlWarehousesAll,
+  fetchTlRealtimeSpreadList,
   postTlBatchBindWarehouseLinks,
   postTlBindWarehouseLink,
   putTlUpdateWarehouseLinkTier,
@@ -762,7 +763,42 @@ async function fetchListPage(page: number) {
   listRows.value = r.rows.map(toLinkRow)
   listTotal.value = r.total
   listPage.value = page
-  await loadDistancesForRows(listRows.value)
+  await Promise.all([loadDistancesForRows(listRows.value), loadRealtimeSpreads()])
+}
+
+async function loadRealtimeSpreads() {
+  try {
+    const items = await fetchTlRealtimeSpreadList({
+      from_warehouse_id: filterFromId.value > 0 ? filterFromId.value : undefined,
+      to_warehouse_id: filterToId.value > 0 ? filterToId.value : undefined,
+      page: 1,
+      size: 200,
+    })
+    console.log('[实时价差] 返回条数:', items.length, '首条:', items[0])
+    const spreadMap: Record<string, string> = {}
+    for (const item of items) {
+      const o = item as Record<string, unknown>
+      const fromId = Number(o['源库房id'] ?? 0)
+      const toId = Number(o['对标库房id'] ?? 0)
+      const spread = o['实时价差']
+      console.log(`[实时价差] ${fromId}→${toId}:`, spread)
+      if (fromId > 0 && toId > 0 && spread != null) {
+        spreadMap[`${fromId}-${toId}`] = String(spread)
+      }
+    }
+    console.log('[实时价差] spreadMap:', spreadMap)
+    console.log('[实时价差] listRows keys:', listRows.value.map(r => `${r.fromId}-${r.toId}`))
+    for (const row of listRows.value) {
+      const key = `${row.fromId}-${row.toId}`
+      if (spreadMap[key] != null) {
+        row.realTimeDiff = spreadMap[key]
+      }
+    }
+    console.log('[实时价差] 合并后:', listRows.value.map(r => ({ from: r.fromId, to: r.toId, spread: r.realTimeDiff })))
+  } catch (e) {
+    console.error('[实时价差] 加载失败:', e)
+    /* 实时价差加载失败不影响主列表 */
+  }
 }
 
 const WDC_LOAD_FAIL_HINT = '如果长时间未加载请检查网络或者刷新'
@@ -914,6 +950,7 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 14px;
+  animation: fadeIn 0.25s ease both;
 }
 
 .wdc-head h2 {
@@ -933,6 +970,7 @@ onMounted(async () => {
   border: 1px solid #e5e7eb;
   border-radius: 10px;
   padding: 14px;
+  animation: fadeInUp 0.3s ease both;
 }
 
 .wdc-toolbar {
@@ -1066,6 +1104,14 @@ onMounted(async () => {
   vertical-align: middle;
 }
 
+.wdc-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.wdc-table tbody tr:hover {
+  background: #f0f7ff;
+}
+
 .wdc-td-source {
   vertical-align: middle;
   background: #f8fafc;
@@ -1142,6 +1188,7 @@ onMounted(async () => {
   justify-content: center;
   z-index: 1000;
   padding: 16px;
+  animation: fadeIn 0.2s ease both;
 }
 
 .wdc-modal {
@@ -1151,6 +1198,7 @@ onMounted(async () => {
   width: 100%;
   padding: 18px 20px;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.12);
+  animation: scaleIn 0.25s ease both;
 }
 
 .wdc-modal-title {

@@ -562,3 +562,23 @@ export async function fetchTlCalculateDistance(
     mRaw != null && Number.isFinite(Number(mRaw)) ? Number(mRaw) : undefined
   return { distanceKm, distanceM }
 }
+
+/** GET /tl/get_link_realtime_spread_list — 获取库房关联实时价差 */
+export async function fetchTlRealtimeSpreadList(params?: {
+  warehouse_id?: number
+  from_warehouse_id?: number
+  to_warehouse_id?: number
+  page?: number
+  size?: number
+}): Promise<Record<string, unknown>[]> {
+  const q = buildQueryString({
+    page: params?.page ?? 1,
+    size: params?.size ?? 200,
+    warehouse_id: params?.warehouse_id,
+    from_warehouse_id: params?.from_warehouse_id,
+    to_warehouse_id: params?.to_warehouse_id,
+  })
+  const raw = await tlGetJson(`/tl/get_link_realtime_spread_list?${q}`)
+  assertTlBizCode200(raw, '实时价差')
+  return unwrapList(raw)
+}

@@ -788,6 +788,7 @@ import {
   fetchTlWarehouseLinksOutbound,
   fetchTlWarehouseTypes,
   fetchTlWarehousesAll,
+  fetchTlRealtimeSpreadList,
   postTlGetComparison,
   tlUnwrapComparisonDetails,
   type TlCategoryRow,
@@ -3799,6 +3800,7 @@ function warehouseBindTargetPlainSummary(
   tgt: MapPoint,
   tierDisplay: string,
   freightDisplay: string,
+  realtimeSpread?: string,
 ): string {
   const row = tgt.raw
   const lines: string[] = [tgt.title]
@@ -3809,6 +3811,7 @@ function warehouseBindTargetPlainSummary(
   const addr = addressText(row).trim()
   if (addr) lines.push(`地址：${addr}`)
   lines.push(`阶梯价差：${tierDisplay}`)
+  if (realtimeSpread != null) lines.push(`实时价差：${realtimeSpread}`)
   lines.push(`运费：${freightDisplay}`)
   return lines.join('\n')
 }
@@ -3819,6 +3822,7 @@ function warehouseBindMidpointLabelHtml(
   tgt: MapPoint,
   tierDisplay: string,
   freightDisplay: string,
+  realtimeSpread?: string,
 ): string {
   const row = tgt.raw
   const metaBits: string[] = []
@@ -3832,13 +3836,14 @@ function warehouseBindMidpointLabelHtml(
     metaBits.push(`地址：${escapeHtml(short)}`)
   }
   metaBits.push(`阶梯价差：${escapeHtml(tierDisplay)}`)
+  if (realtimeSpread != null) metaBits.push(`实时价差：${escapeHtml(realtimeSpread)}`)
   metaBits.push(`运费：${escapeHtml(freightDisplay)}`)
   const meta =
     metaBits.length > 0
       ? `<div class="emap-wh-bind-dist-meta">${metaBits.join('<br/>')}</div>`
       : ''
   const titleAttr = escapeHtml(
-    warehouseBindTargetPlainSummary(tgt, tierDisplay, freightDisplay).replace(/\n/g, ' — '),
+    warehouseBindTargetPlainSummary(tgt, tierDisplay, freightDisplay, realtimeSpread).replace(/\n/g, ' — '),
   )
   return `<div class="emap-wh-bind-dist-tip-inner" title="${titleAttr}"><div class="emap-wh-bind-dist-km">${escapeHtml(
     kmStr,
@@ -3867,6 +3872,17 @@ async function drawWarehouseBindingDistanceLines(warehouse: MapPoint) {
   if (!targetIds.size) {
     throw new Error('该库房暂无出库绑定（请先在「库房距离监测配置」中维护）')
   }
+  /* 加载实时价差 */
+  const spreadByTargetId = new Map<number, string>()
+  try {
+    const spreadItems = await fetchTlRealtimeSpreadList({ from_warehouse_id: whId, page: 1, size: 200 })
+    for (const item of spreadItems) {
+      const o = item as Record<string, unknown>
+      const toId = Number(o['对标库房id'] ?? 0)
+      const spread = o['实时价差']
+      if (toId > 0 && spread != null) spreadByTargetId.set(toId, String(spread))
+    }
+  } catch { /* 实时价差加载失败不影响连线 */ }
   const rendererOpt = { renderer: distanceRenderer }
   let drawn = 0
   for (const tid of targetIds) {
@@ -3904,6 +3920,7 @@ async function drawWarehouseBindingDistanceLines(warehouse: MapPoint) {
     const base = emapRankTipBasePixelOffset(dir, comparisonRankTipYOffset())
     const freightLine = freightByTargetId.get(tid) ?? '—'
     const tierLine = tierByTargetId.get(tid) ?? '—'
+    const spreadLine = spreadByTargetId.get(tid)
     L.tooltip({
       permanent: true,
       direction: dir,
@@ -3913,7 +3930,7 @@ async function drawWarehouseBindingDistanceLines(warehouse: MapPoint) {
       opacity: 1,
     })
       .setLatLng([tgt.lat, tgt.lng])
-      .setContent(warehouseBindMidpointLabelHtml(kmStr, tgt, tierLine, freightLine))
+      .setContent(warehouseBindMidpointLabelHtml(kmStr, tgt, tierLine, freightLine, spreadLine))
       .addTo(tipLayer)
     drawn++
   }

@@ -1455,9 +1455,9 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.forecast-page { width: 100%; }
+.forecast-page { width: 100%; animation: fadeIn 0.25s ease both; }
 .query-section { width: 100%; }
-.card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); }
+.card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); animation: fadeInUp 0.3s ease both; }
 
 .menu-search-bar {
   display: flex;
@@ -1717,6 +1717,9 @@ onMounted(async () => {
   transition: all 0.2s;
 }
 
+.btn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12); }
+.btn:active { transform: scale(0.97); }
+
 .btn-primary {
   background-color: #1476db;
   color: white;
@@ -1756,9 +1759,8 @@ onMounted(async () => {
   color: #2c3e50;
 }
 
-.data-table tbody tr:hover {
-  background-color: #F5F7FA;
-}
+.data-table tbody tr { transition: background 0.15s ease, transform 0.15s ease; }
+.data-table tbody tr:hover { background-color: #f0f7ff; transform: scale(1.003); }
 
 .empty-data {
   text-align: center;
@@ -1804,6 +1806,7 @@ onMounted(async () => {
   align-items: center;
   justify-content: center;
   z-index: 2000;
+  animation: fadeIn 0.2s ease both;
 }
 
 .modal-content {
@@ -1813,6 +1816,7 @@ onMounted(async () => {
   max-width: 90%;
   max-height: 80%;
   overflow: auto;
+  animation: scaleIn 0.25s ease both;
 }
 
 .modal-small {

@@ -54,6 +54,7 @@ const activeMenu = ref('historyManage')
 
 #app {
   min-height: 100vh;
+  animation: fadeIn 0.25s ease both;
 }
 
 .nav-bar {
@@ -98,13 +99,18 @@ const activeMenu = ref('historyManage')
   cursor: pointer;
   font-size: 15px;
   font-weight: 500;
-  transition: all 0.2s;
+  transition: all 0.2s ease;
   border-radius: 6px;
 }
 
 .nav-item:hover {
   color: white;
   background-color: rgba(255, 255, 255, 0.2);
+  transform: scale(1.04);
+}
+
+.nav-item:active {
+  transform: scale(0.97);
 }
 
 .nav-item.active {

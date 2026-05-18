@@ -1157,8 +1157,8 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.history-manage-page { width: 100%; }
-.card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); }
+.history-manage-page { width: 100%; animation: fadeIn 0.25s ease both; }
+.card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); animation: fadeInUp 0.3s ease both; }
 .inner-menu { display: flex; gap: 8px; background: #F5F7FA; border-radius: 8px; padding: 4px; }
 .menu-item { padding: 8px 24px; cursor: pointer; font-size: 14px; font-weight: 500; border-radius: 6px; color: #606266; }
 .menu-item:hover { background-color: rgba(74, 122, 156, 0.1); }
@@ -1184,8 +1184,10 @@ onMounted(() => {
 .batch-card { padding: 12px 20px; }
 .batch-bar { display: flex; justify-content: flex-start; }
 .btn { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; }
+.btn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12); }
+.btn:active { transform: scale(0.97); }
 .btn-primary { background-color: #1476db; color: white; }
-.btn-primary:hover { background-color: #1476db; }
+.btn-primary:hover { background-color: #0e65c4; }
 .btn-secondary { background-color: #F5F7FA; color: #606266; border: 1px solid #E5E9F2; }
 .btn-secondary:hover { background-color: #E5E9F2; }
 .btn-sm { padding: 4px 12px; font-size: 12px; }
@@ -1198,7 +1200,8 @@ onMounted(() => {
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .data-table th, .data-table td { padding: 10px 12px; text-align: center; border-bottom: 1px solid #E5E9F2; white-space: nowrap; }
 .data-table th { background-color: #E8F0F8; font-weight: 600; color: #2c3e50; }
-.data-table tbody tr:hover { background-color: #F5F7FA; }
+.data-table tbody tr { transition: background 0.15s ease, transform 0.15s ease; }
+.data-table tbody tr:hover { background-color: #f0f7ff; transform: scale(1.003); }
 .empty-data { text-align: center; padding: 40px; color: #909399; }
 .pagination { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 16px; }
 .pagination button { padding: 4px 12px; border: 1px solid #E5E9F2; background: white; border-radius: 4px; cursor: pointer; }
@@ -1240,8 +1243,8 @@ onMounted(() => {
 .sample-format-note strong { font-weight: 600; }
 
 /* 弹窗样式 */
-.modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 2000; }
-.modal-content { background: white; border-radius: 8px; width: 600px; max-width: 90%; max-height: 80%; overflow: auto; }
+.modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; z-index: 2000; animation: fadeIn 0.2s ease both; }
+.modal-content { background: white; border-radius: 8px; width: 600px; max-width: 90%; max-height: 80%; overflow: auto; animation: scaleIn 0.25s ease both; }
 .modal-small { width: 450px; }
 .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #E5E9F2; }
 .modal-header h3 { font-size: 16px; font-weight: 600; color: #1F2D3D; margin: 0; }

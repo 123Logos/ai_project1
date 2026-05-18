@@ -1545,6 +1545,7 @@ watch(
   background: #fff;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
   padding: 20px;
+  animation: fadeInUp 0.35s ease both;
 }
 
 .home-panel-title {
@@ -1600,8 +1601,12 @@ watch(
 
 .module-card:hover {
   border-color: #1a73e8;
-  box-shadow: 0 2px 12px rgba(26, 115, 232, 0.12);
-  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(26, 115, 232, 0.15);
+  transform: translateY(-3px);
+}
+
+.module-card:active {
+  transform: translateY(-1px) scale(0.99);
 }
 
 .module-icon {
@@ -1635,6 +1640,7 @@ watch(
   width: 100%;
   padding: 20px 24px 0;
   align-self: start;
+  animation: fadeIn 0.25s ease both;
 }
 
 .sub-page-header {
@@ -1676,6 +1682,7 @@ watch(
   border: 1px solid #d8e1ee;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
+  animation: fadeInUp 0.3s ease both;
 }
 
 .content-placeholder {
@@ -1726,11 +1733,17 @@ watch(
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: all 0.2s ease;
 }
 
 .add-btn:hover {
   background: #155a9e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(25, 108, 192, 0.3);
+}
+
+.add-btn:active {
+  transform: scale(0.97);
 }
 
 .add-btn--outline {
@@ -1787,6 +1800,7 @@ watch(
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
   margin-top: 2px;
   overflow: hidden;
+  animation: slideDown 0.2s ease both;
 }
 
 .search-select-search {
@@ -1893,10 +1907,17 @@ watch(
 
 .filter-btn:hover {
   background: #155a9e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(25, 108, 192, 0.3);
+}
+
+.filter-btn:active {
+  transform: scale(0.97);
 }
 
 .table-wrap {
   overflow-x: auto;
+}
 }
 
 .data-table {
@@ -1924,8 +1945,13 @@ watch(
   color: #1e293b;
 }
 
+.data-table tbody tr {
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
 .data-table tbody tr:hover {
-  background: #f8fafc;
+  background: #f0f7ff;
+  transform: scale(1.003);
 }
 
 .col-actions {
@@ -1943,7 +1969,15 @@ watch(
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  transition: background 0.15s;
+  transition: all 0.15s ease;
+}
+
+.action-btn:hover {
+  transform: scale(1.08);
+}
+
+.action-btn:active {
+  transform: scale(0.95);
 }
 
 .action-edit {
@@ -1984,10 +2018,16 @@ watch(
   font-size: 13px;
   cursor: pointer;
   color: #374151;
+  transition: all 0.15s ease;
 }
 
 .page-btn:hover:not(:disabled) {
   background: #f3f4f6;
+  transform: translateY(-1px);
+}
+
+.page-btn:active:not(:disabled) {
+  transform: scale(0.96);
 }
 
 .page-btn:disabled {
@@ -2012,6 +2052,7 @@ watch(
   align-items: center;
   justify-content: center;
   padding: 16px;
+  animation: fadeIn 0.2s ease both;
 }
 
 .form-card {
@@ -2020,6 +2061,7 @@ watch(
   border-radius: 14px;
   box-shadow: 0 18px 50px rgba(15, 23, 42, 0.3);
   overflow: hidden;
+  animation: scaleIn 0.25s ease both;
 }
 
 .form-card-header {
@@ -2108,10 +2150,17 @@ watch(
   padding: 6px 18px;
   font-size: 14px;
   font-weight: 600;
+  transition: all 0.2s ease;
 }
 
 .form-btn-submit:hover {
   background: #155a9e;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(25, 108, 192, 0.3);
+}
+
+.form-btn-submit:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 .form-btn-submit:disabled {

@@ -1294,8 +1294,8 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.history-query-page { width: 100%; }
-.card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); }
+.history-query-page { width: 100%; animation: fadeIn 0.25s ease both; }
+.card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); animation: fadeInUp 0.3s ease both; }
 
 .menu-search-bar {
   display: flex;
@@ -1506,11 +1506,14 @@ onBeforeUnmount(() => {
   transition: all 0.2s;
 }
 
+.btn:hover { transform: translateY(-1px); box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12); }
+.btn:active { transform: scale(0.97); }
+
 .btn-primary {
   background-color: #1476db;
   color: white;
 }
-.btn-primary:hover { background-color: #1a88f0; }
+.btn-primary:hover { background-color: #0e65c4; }
 
 .btn-secondary {
   background-color: #F5F7FA;
@@ -1577,9 +1580,8 @@ onBeforeUnmount(() => {
   color: #2c3e50;
 }
 
-.data-table tbody tr:hover {
-  background-color: #F5F7FA;
-}
+.data-table tbody tr { transition: background 0.15s ease, transform 0.15s ease; }
+.data-table tbody tr:hover { background-color: #f0f7ff; transform: scale(1.003); }
 
 .empty-data {
   text-align: center;
@@ -1630,6 +1632,7 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   z-index: 2000;
+  animation: fadeIn 0.2s ease both;
 }
 
 .modal-content {
@@ -1639,6 +1642,7 @@ onBeforeUnmount(() => {
   max-width: 90%;
   max-height: 80%;
   overflow: auto;
+  animation: scaleIn 0.25s ease both;
 }
 
 .modal-small {
