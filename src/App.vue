@@ -17,6 +17,16 @@
           >
             {{ item.label }}
           </button>
+          <a
+            class="tab-btn tab-btn-primary tab-btn-external"
+            :href="inventorySystemUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            title="在新窗口打开进销存系统"
+          >
+            进销存系统
+            <i class="bi bi-box-arrow-up-right tab-btn-external-icon" aria-hidden="true"></i>
+          </a>
         </div>
         <div class="auth-tools">
           <button v-if="!isLoggedIn" class="auth-btn auth-btn-login" type="button" @click="showLogin = true">
@@ -203,6 +213,9 @@ import {
 } from './composables/useMePermissions'
 
 type SectionKey = 'prediction' | 'map' | 'detect' | 'price' | 'aiPricing' | 'warehouseDistance' | 'users'
+
+/** 新能源材料进销存系统（外链，新窗口打开） */
+const inventorySystemUrl = 'https://redspiderbc.cn/project3/'
 
 const primaryTabs: Array<{ key: SectionKey; label: string }> = [
   { key: 'map', label: '电子地图' },
@@ -553,6 +566,21 @@ body {
 
 .tab-btn--need-login {
   opacity: 0.78;
+}
+
+a.tab-btn {
+  text-decoration: none;
+}
+
+.tab-btn-external {
+  margin-left: auto;
+  flex-shrink: 0;
+  gap: 6px;
+}
+
+.tab-btn-external-icon {
+  font-size: 12px;
+  opacity: 0.9;
 }
 
 .sub-nav {
