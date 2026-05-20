@@ -729,6 +729,179 @@
       </div>
     </div>
 
+    <!-- 库房自有定价分析 -->
+    <div v-else-if="activePage === 'selfPricing'" class="sub-page">
+      <div class="sub-page-header">
+        <button class="back-btn" @click="activePage = ''">
+          <i class="bi bi-arrow-left"></i>
+          返回
+        </button>
+        <h3 class="sub-page-title">库房自有定价分析</h3>
+      </div>
+      <div class="sub-page-body">
+        <div class="table-toolbar">
+          <div class="toolbar-filters">
+            <div class="search-select sp-warehouse-select">
+              <div
+                class="form-control search-select-trigger"
+                @click="toggleSelfPricingWarehouseDropdown()"
+              >
+                <span v-if="selfPricingWarehouseName">{{ selfPricingWarehouseName }}</span>
+                <span v-else-if="spWarehouseLoading" class="text-muted">加载库房列表中…</span>
+                <span v-else class="text-muted">请选择源库房（支持搜索）</span>
+                <i class="bi bi-chevron-down search-select-arrow" :class="{ open: spShowDropdown }"></i>
+              </div>
+              <div v-if="spShowDropdown" class="search-select-dropdown">
+                <div class="search-select-search">
+                  <i class="bi bi-search"></i>
+                  <input
+                    ref="spSearchInputRef"
+                    v-model.trim="spSearchQuery"
+                    class="search-select-search-input"
+                    placeholder="输入名称或编号搜索…"
+                    @mousedown.prevent
+                  />
+                </div>
+                <div class="search-select-options">
+                  <div v-for="w in spFilteredOptions" :key="w.id" class="search-select-item" :class="{ active: w.id === selfPricingWarehouseId }" @mousedown.prevent="selectSelfPricingWarehouse(w)">
+                    {{ w.name }}（{{ w.id }}）
+                  </div>
+                  <div v-if="!spFilteredOptions.length" class="search-select-empty">{{ spSearchQuery ? '无匹配库房' : '请输入关键词搜索' }}</div>
+                </div>
+              </div>
+            </div>
+            <button class="btn filter-btn" :disabled="selfPricingWarehouseId === 0 || selfPricingLoading" @click="loadSelfPricingLinks">
+              <i class="bi bi-arrow-clockwise"></i>
+              刷新
+            </button>
+          </div>
+        </div>
+
+        <!-- 错误提示 -->
+        <div v-if="spErrorMsg" class="alert alert-warning sp-error-msg">
+          <i class="bi bi-exclamation-triangle me-2"></i>{{ spErrorMsg }}
+        </div>
+
+        <div class="sp-layout">
+          <!-- 左侧：对标库房列表 -->
+          <div class="sp-table-panel">
+            <div class="table-wrap">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th>对标库房</th>
+                      <th>库房距离</th>
+                      <th>阶梯价差</th>
+                      <th>实时价差</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-if="selfPricingLoading">
+                      <td colspan="4" class="text-center py-4">
+                        <span class="spinner-border spinner-border-sm me-2"></span>
+                        加载中…
+                      </td>
+                    </tr>
+                    <tr v-else-if="!selfPricingWarehouseId">
+                      <td colspan="4" class="text-center py-4 text-muted">请先选择源库房</td>
+                    </tr>
+                    <tr v-else-if="selfPricingLinks.length === 0">
+                      <td colspan="4" class="text-center py-4 text-muted">该库房暂无对标库房绑定</td>
+                    </tr>
+                    <tr v-for="row in selfPricingLinks" :key="`${row.fromId}-${row.toId}`">
+                      <td>{{ row.toName }}（{{ row.toId }}）</td>
+                      <td>{{ row.distanceText }}</td>
+                      <td>{{ row.tierPriceDiff }}</td>
+                      <td>{{ row.realTimeDiff }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- 右侧：AI 分析 -->
+            <div class="sp-ai-panel">
+              <button
+                type="button"
+                class="btn sp-ai-btn"
+                :disabled="!selfPricingWarehouseId || selfPricingLinks.length === 0 || spAiLoading"
+                @click="runSelfPricingAiAnalysis"
+              >
+                <i class="bi bi-robot me-1"></i>
+                {{ spAiLoading ? '分析中…' : 'AI 分析' }}
+              </button>
+              <div class="sp-ai-result">
+                <div v-if="spAiLoading" class="text-center text-muted py-4">
+                  <span class="spinner-border spinner-border-sm me-2"></span>正在分析…
+                </div>
+                <template v-else-if="spAiSuggestion">
+                  <!-- 与自己的库房比 -->
+                  <div v-if="spAiSuggestion['与自己的库房比']" class="sp-ai-card">
+                    <div class="sp-ai-card-title">
+                      <i class="bi bi-arrow-left-right me-1"></i>与自己的库房比
+                    </div>
+                    <div class="sp-ai-card-body">
+                      <div class="sp-ai-row">
+                        <span class="sp-ai-label">定价是否合理</span>
+                        <span :class="spAiSuggestion['与自己的库房比']['定价是否合理'] ? 'text-success' : 'text-danger'">
+                          {{ spAiSuggestion['与自己的库房比']['定价是否合理'] ? '合理' : '不合理' }}
+                        </span>
+                      </div>
+                      <div v-if="spAiSuggestion['与自己的库房比']['建议定价'] != null" class="sp-ai-row">
+                        <span class="sp-ai-label">建议定价</span>
+                        <span class="sp-ai-value sp-highlight">{{ fmtNum(spAiSuggestion['与自己的库房比']['建议定价'] ?? null) }}</span>
+                      </div>
+                      <div v-if="spAiSuggestion['与自己的库房比']['建议原因']" class="sp-ai-reason">
+                        {{ spAiSuggestion['与自己的库房比']['建议原因'] }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 与竞品库房比 -->
+                  <div v-if="spAiSuggestion['与竞品库房比']" class="sp-ai-card">
+                    <div class="sp-ai-card-title">
+                      <i class="bi bi-bar-chart me-1"></i>与竞品库房比
+                    </div>
+                    <div class="sp-ai-card-body">
+                      <div class="sp-ai-row">
+                        <span class="sp-ai-label">定价是否合理</span>
+                        <span :class="spAiSuggestion['与竞品库房比']['定价是否合理'] ? 'text-success' : 'text-danger'">
+                          {{ spAiSuggestion['与竞品库房比']['定价是否合理'] ? '合理' : '不合理' }}
+                        </span>
+                      </div>
+                      <div v-if="spAiSuggestion['与竞品库房比']['调价建议']" class="sp-ai-row">
+                        <span class="sp-ai-label">调价建议</span>
+                        <span class="sp-ai-value sp-highlight">{{ spAiSuggestion['与竞品库房比']['调价建议'] }}</span>
+                      </div>
+                      <div v-if="spAiSuggestion['与竞品库房比']['建议原因']" class="sp-ai-reason">
+                        {{ spAiSuggestion['与竞品库房比']['建议原因'] }}
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 配置价差比 -->
+                  <div v-if="spAiSuggestion['配置价差比']" class="sp-ai-card">
+                    <div class="sp-ai-card-title">
+                      <i class="bi bi-pie-chart me-1"></i>配置价差比
+                    </div>
+                    <div class="sp-ai-card-body">
+                      <div v-if="spAiSuggestion['配置价差比']['定价总建议']" class="sp-ai-row">
+                        <span class="sp-ai-label">定价总建议</span>
+                        <span class="sp-ai-value sp-highlight">{{ spAiSuggestion['配置价差比']['定价总建议'] }}</span>
+                      </div>
+                      <div v-if="spAiSuggestion['配置价差比']['建议原因']" class="sp-ai-reason">
+                        {{ spAiSuggestion['配置价差比']['建议原因'] }}
+                      </div>
+                    </div>
+                  </div>
+                </template>
+                <p v-else class="text-center text-muted py-4 mb-0">点击「AI 分析」按钮开始分析</p>
+              </div>
+            </div>
+          </div>
+      </div>
+    </div>
+
     <!-- 其他子页面 -->
     <div v-else class="sub-page">
       <div class="sub-page-header">
@@ -770,7 +943,7 @@ import {
   type SmelterPriceRow,
   type SmelterPriceHistoryRow,
 } from '@/api/smelterPriceApi'
-import { fetchTlSmelters, searchTlWarehouses } from '@/api/tlApi'
+import { fetchTlSmelters, searchTlWarehouses, fetchTlWarehousesAll, fetchTlWarehouseLinksOutbound, fetchTlRealtimeSpreadList } from '@/api/tlApi'
 import {
   fetchBenchmarkAnalysis,
   type BenchmarkAnalysisRow,
@@ -1503,6 +1676,232 @@ watch(
     if (showMarginForm.value) void loadMarginBenchmarkCityOptions()
   },
 )
+
+/* ===== 库房自有定价分析 ===== */
+type SelfPricingLink = {
+  fromId: number
+  fromName: string
+  toId: number
+  toName: string
+  distanceText: string
+  tierPriceDiff: string
+  realTimeDiff: string
+}
+
+type AiSuggestion = {
+  与自己的库房比?: { 定价是否合理?: boolean; 建议定价?: number; 建议原因?: string }
+  与竞品库房比?: { 定价是否合理?: boolean; 调价建议?: string; 建议原因?: string }
+  配置价差比?: { 定价总建议?: string; 建议原因?: string }
+}
+
+const selfPricingWarehouseId = ref(0)
+const selfPricingWarehouseOptions = ref<Array<{ id: number; name: string }>>([])
+const selfPricingWarehouseName = ref('')
+const spWarehouseLoading = ref(false)
+const spShowDropdown = ref(false)
+const spSearchQuery = ref('')
+const spSearchInputRef = ref<HTMLInputElement | null>(null)
+
+const spFilteredOptions = computed(() => {
+  const q = spSearchQuery.value.toLowerCase()
+  const list = selfPricingWarehouseOptions.value
+  if (!q) return list.slice(0, 100)
+  return list.filter((w) => w.name.toLowerCase().includes(q) || String(w.id).includes(q)).slice(0, 100)
+})
+
+function toggleSelfPricingWarehouseDropdown() {
+  spShowDropdown.value = !spShowDropdown.value
+  if (spShowDropdown.value) {
+    spSearchQuery.value = ''
+    nextTick(() => spSearchInputRef.value?.focus())
+  }
+}
+
+function selectSelfPricingWarehouse(w: { id: number; name: string }) {
+  selfPricingWarehouseId.value = w.id
+  selfPricingWarehouseName.value = `${w.name}（${w.id}）`
+  spShowDropdown.value = false
+  spSearchQuery.value = ''
+  loadSelfPricingLinks()
+}
+
+function handleSpClickOutside(e: MouseEvent) {
+  const el = (e.target as HTMLElement).closest('.sp-warehouse-select')
+  if (!el) spShowDropdown.value = false
+}
+
+watch(spShowDropdown, (v) => {
+  if (v) {
+    setTimeout(() => document.addEventListener('click', handleSpClickOutside), 0)
+  } else {
+    document.removeEventListener('click', handleSpClickOutside)
+  }
+})
+
+const selfPricingLinks = ref<SelfPricingLink[]>([])
+const selfPricingLoading = ref(false)
+const spAiLoading = ref(false)
+const spAiSuggestion = ref<AiSuggestion | null>(null)
+const spErrorMsg = ref('')
+
+function pickNum2(row: Record<string, unknown>, keys: string[]): number {
+  for (const k of keys) {
+    const v = row[k]
+    if (typeof v === 'number' && Number.isFinite(v)) return v
+    if (typeof v === 'string' && v.trim() !== '') {
+      const n = Number(v)
+      if (Number.isFinite(n)) return n
+    }
+  }
+  return 0
+}
+
+function pickStr2(row: Record<string, unknown>, keys: string[]): string {
+  for (const k of keys) {
+    const v = row[k]
+    if (v == null) continue
+    const s = String(v).trim()
+    if (s) return s
+  }
+  return ''
+}
+
+function fmtNum(v: number | null, decimals = 2): string {
+  return v != null && Number.isFinite(v) ? v.toFixed(decimals) : '—'
+}
+
+async function loadSelfPricingWarehouseOptions() {
+  spWarehouseLoading.value = true
+  try {
+    const rows = await fetchTlWarehousesAll()
+    selfPricingWarehouseOptions.value = rows
+      .map((r) => {
+        const id = pickNum2(r, ['仓库id', '库房id', 'warehouse_id', 'id'])
+        const name = pickStr2(r, ['仓库名', 'warehouse_name', 'name']) || `库房#${id}`
+        return { id, name }
+      })
+      .filter((x) => x.id > 0)
+      .sort((a, b) => a.name.localeCompare(b.name, 'zh-CN'))
+  } catch (e) {
+    console.error('[selfPricing] 加载仓库列表失败:', e)
+    selfPricingWarehouseOptions.value = []
+  } finally {
+    spWarehouseLoading.value = false
+  }
+}
+
+async function loadSelfPricingLinks() {
+  const whId = selfPricingWarehouseId.value
+  if (!whId) return
+  selfPricingLoading.value = true
+  selfPricingLinks.value = []
+  spErrorMsg.value = ''
+  try {
+    const rows = await fetchTlWarehouseLinksOutbound(whId)
+    const srcName = selfPricingWarehouseName.value || `库房#${whId}`
+    const links: SelfPricingLink[] = []
+
+    for (const row of rows) {
+      const o = row as Record<string, unknown>
+      const tgtObj = (o['对标库房'] ?? o['to_warehouse'] ?? o['target_warehouse']) as Record<string, unknown> | undefined
+
+      let toId = pickNum2(o, ['对标库房id', '目标库房id', 'to_warehouse_id', 'target_warehouse_id', 'to_id'])
+      if (!toId && tgtObj) toId = pickNum2(tgtObj, ['仓库id', '库房id', 'warehouse_id', 'id'])
+
+      let toName = pickStr2(o, ['对标库房名', '目标库房名', 'to_warehouse_name', 'target_warehouse_name'])
+      if (!toName && tgtObj) toName = pickStr2(tgtObj, ['仓库名', 'warehouse_name', 'name'])
+      if (!toName) toName = `库房#${toId}`
+
+      let tierPriceDiff = '—'
+      for (const k of ['阶梯价差', 'ladder_price_diff', 'tier_price_diff']) {
+        const v = o[k]
+        if (v != null && v !== '') { tierPriceDiff = String(v); break }
+      }
+
+      let distanceText = '…'
+      for (const k of ['距离千米', 'distance_km', 'distanceKm', 'distance']) {
+        const v = o[k]
+        if (typeof v === 'number' && Number.isFinite(v)) { distanceText = `${v.toFixed(2)} km`; break }
+        if (typeof v === 'string' && v.trim() !== '' && !Number.isNaN(Number(v))) { distanceText = `${Number(v).toFixed(2)} km`; break }
+      }
+
+      let realTimeDiff = '—'
+      for (const k of ['实时价差', 'realtime_spread']) {
+        const v = o[k]
+        if (v != null && v !== '') { realTimeDiff = String(v); break }
+      }
+
+      if (toId > 0) {
+        links.push({ fromId: whId, fromName: srcName, toId, toName, distanceText, tierPriceDiff, realTimeDiff })
+      }
+    }
+
+    selfPricingLinks.value = links
+
+    // 实时价差
+    try {
+      const spreadItems = await fetchTlRealtimeSpreadList({ from_warehouse_id: whId, page: 1, size: 200 })
+      const spreadMap: Record<string, string> = {}
+      for (const item of spreadItems) {
+        const o = item as Record<string, unknown>
+        const fromId = Number(o['源库房id'] ?? 0)
+        const toId = Number(o['对标库房id'] ?? 0)
+        const spread = o['实时价差']
+        if (fromId > 0 && toId > 0 && spread != null) spreadMap[`${fromId}-${toId}`] = String(spread)
+      }
+      for (const link of selfPricingLinks.value) {
+        const key = `${link.fromId}-${link.toId}`
+        if (spreadMap[key] != null) link.realTimeDiff = spreadMap[key]
+      }
+    } catch { /* ignore */ }
+  } catch (e) {
+    spErrorMsg.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    selfPricingLoading.value = false
+  }
+}
+
+async function runSelfPricingAiAnalysis() {
+  const whId = selfPricingWarehouseId.value
+  if (!whId) return
+  spAiLoading.value = true
+  spAiSuggestion.value = null
+  spErrorMsg.value = ''
+  try {
+    const token = localStorage.getItem('api_token')
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const resp = await fetch(`/vertical-warehouse-ai/analysis?warehouse_id=${whId}`, { headers })
+    let body: Record<string, unknown> = {}
+    try { body = await resp.json() } catch { /* ignore */ }
+
+    const hint = body['detail'] ?? body['msg'] ?? body['message']
+    if (typeof hint === 'string' && hint) { spErrorMsg.value = hint; return }
+    if (!resp.ok) { spErrorMsg.value = `请求失败（${resp.status}）`; return }
+
+    const data = (body['data'] && typeof body['data'] === 'object' ? body['data'] : body) as Record<string, unknown>
+    const aiRaw = data['ai建议']
+    if (aiRaw && typeof aiRaw === 'object') spAiSuggestion.value = aiRaw as AiSuggestion
+    else spErrorMsg.value = '该库房暂无 AI 分析结果'
+  } catch (e) {
+    spErrorMsg.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    spAiLoading.value = false
+  }
+}
+
+watch(activePage, (val) => {
+  if (val === 'selfPricing') {
+    selfPricingWarehouseId.value = 0
+    selfPricingWarehouseName.value = ''
+    spShowDropdown.value = false
+    spSearchQuery.value = ''
+    selfPricingLinks.value = []
+    spAiSuggestion.value = null
+    spErrorMsg.value = ''
+    loadSelfPricingWarehouseOptions()
+  }
+})
 </script>
 
 <style scoped>
@@ -2184,5 +2583,182 @@ watch(
   padding: 8px 10px;
   font-size: 13px;
   white-space: nowrap;
+}
+
+/* ===== 库房自有定价分析 ===== */
+.sp-warehouse-select {
+  min-width: 300px;
+  max-width: 420px;
+}
+
+.sp-error-msg {
+  margin: 12px 0;
+  font-size: 14px;
+  border-radius: 8px;
+}
+
+.sp-source-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+}
+
+.sp-source-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 12px;
+}
+
+.sp-source-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px 20px;
+}
+
+.sp-source-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sp-source-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.sp-source-value {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.sp-layout {
+  display: flex;
+  gap: 0;
+  min-height: 400px;
+}
+
+.sp-table-panel {
+  flex: 1;
+  min-width: 0;
+  border-right: 1px solid #e8eef7;
+}
+
+.sp-data-table th,
+.sp-data-table td {
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.sp-ratio-note {
+  color: #6366f1;
+  cursor: help;
+  font-size: 12px;
+}
+
+.sp-ai-panel {
+  width: 380px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  background: #fafbfe;
+}
+
+.sp-ai-btn {
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 14px;
+  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
+}
+
+.sp-ai-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #4f46e5, #7c3aed);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.45);
+}
+
+.sp-ai-btn:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+.sp-ai-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.sp-ai-result {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+
+.sp-ai-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 12px;
+  overflow: hidden;
+}
+
+.sp-ai-card-title {
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #fff;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+}
+
+.sp-ai-card-body {
+  padding: 12px 14px;
+}
+
+.sp-ai-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 13px;
+}
+
+.sp-ai-label {
+  color: #64748b;
+}
+
+.sp-ai-value {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.sp-highlight {
+  color: #6366f1;
+  font-size: 14px;
+}
+
+.sp-ai-reason {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-left: 3px solid #6366f1;
+  border-radius: 0 6px 6px 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #475569;
 }
 </style>

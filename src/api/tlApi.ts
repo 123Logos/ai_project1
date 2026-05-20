@@ -563,6 +563,15 @@ export async function fetchTlCalculateDistance(
   return { distanceKm, distanceM }
 }
 
+/** GET /vertical-warehouse-ai/analysis?warehouse_id= — 库房自有定价 AI 分析 */
+export async function fetchWarehouseAiAnalysis(warehouseId: number): Promise<Record<string, unknown>> {
+  const raw = await tlGetJson(`/vertical-warehouse-ai/analysis?warehouse_id=${warehouseId}`)
+  if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) {
+    return raw as Record<string, unknown>
+  }
+  return { data: raw }
+}
+
 /** GET /tl/get_link_realtime_spread_list — 获取库房关联实时价差 */
 export async function fetchTlRealtimeSpreadList(params?: {
   warehouse_id?: number
