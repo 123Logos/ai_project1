@@ -72,6 +72,15 @@ function buildAiDetectionProxy(env: Record<string, string>): Record<string, Prox
   }
 }
 
+/** 库房 AI 定价分析接口代理 — 独立后端，不走 redspiderbc.cn */
+function buildVerticalWarehouseAiProxy(env: Record<string, string>): Record<string, ProxyOptions> {
+  const raw = (env.VITE_VERTICAL_WAREHOUSE_AI_TARGET || 'http://118.25.96.187:8001').trim()
+  const target = raw.replace(/\/+$/, '')
+  return {
+    '/vertical-warehouse-ai': { target, changeOrigin: true, secure: false },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
@@ -85,6 +94,7 @@ export default defineConfig(({ mode }) => {
     ...buildTlAuthProxy(env),
     ...buildPredictProxy(env),
     ...buildAiDetectionProxy(env),
+    ...buildVerticalWarehouseAiProxy(env),
     ...buildAmapGeocodeProxy(),
   }
   const isProd = mode === 'production'
