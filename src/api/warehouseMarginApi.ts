@@ -9,6 +9,7 @@ export interface WarehouseMarginRow {
   benchmark_city: string
   benchmark_diff: number
   margin: number
+  price: number
 }
 
 export interface WarehouseMarginForm {
@@ -18,6 +19,7 @@ export interface WarehouseMarginForm {
   benchmark_city: string
   benchmark_diff: number
   margin: number
+  price: number
 }
 
 function authHeaders(): HeadersInit {
@@ -45,6 +47,7 @@ function pickRow(r: Record<string, unknown>): WarehouseMarginRow {
     benchmark_city: String(r['对标城市'] ?? r.benchmark_city ?? ''),
     benchmark_diff: Number(r['对标城市差额'] ?? r['对标差额'] ?? r.benchmark_diff ?? 0),
     margin: Number(r['毛利（配置版）'] ?? r['毛利配置版'] ?? r['毛利'] ?? r.margin ?? 0),
+    price: Number(r['库房定价'] ?? r['定价'] ?? r.price ?? 0),
   }
 }
 
@@ -86,6 +89,7 @@ export async function createWarehouseMargin(body: WarehouseMarginForm & { wareho
   if (body.benchmark_city) payload['对标城市'] = body.benchmark_city
   if (body.benchmark_diff != null) payload['对标城市差额'] = body.benchmark_diff
   if (body.margin != null) payload['毛利配置版'] = body.margin
+  if (body.price != null) payload['库房定价'] = body.price
   const { res, data } = await fetchJson(BASE, {
     method: 'POST',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
@@ -100,6 +104,7 @@ export async function updateWarehouseMargin(id: number, body: WarehouseMarginFor
   if (body.benchmark_city) payload['对标城市'] = body.benchmark_city
   if (body.benchmark_diff != null) payload['对标城市差额'] = body.benchmark_diff
   if (body.margin != null) payload['毛利配置版'] = body.margin
+  if (body.price != null) payload['库房定价'] = body.price
   const { res, data } = await fetchJson(`${BASE}/${id}`, {
     method: 'PUT',
     headers: { ...authHeaders(), 'Content-Type': 'application/json' },
