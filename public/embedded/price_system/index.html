@@ -527,6 +527,9 @@
           return
         }
 
+        /** 省市区静态数据（相对 embedded/price_system/ → 站点 base 下的 region/） */
+        const REGION_PCA_JSON = '../../region/p-c-a.json'
+
         /** 库房表单省市区：与 public/region/p-c-a.json 一致 */
         let whPcaData = null
         let whPcaLoadPromise = null
@@ -537,7 +540,7 @@
           if (whPcaData) return
           if (!whPcaLoadPromise) {
             whPcaLoadPromise = (async () => {
-              const r = await fetch('/region/p-c-a.json', { credentials: 'same-origin' })
+              const r = await fetch(REGION_PCA_JSON, { credentials: 'same-origin' })
               if (!r.ok) throw new Error(`加载省市区数据失败（HTTP ${r.status}）`)
               const data = await r.json()
               if (!Array.isArray(data)) throw new Error('省市区数据格式无效')
@@ -1499,7 +1502,7 @@
         let abnormalModalBound = false
         /** 库房类型下拉缓存（/tl/get_warehouse_types） */
         let abnormalWarehouseTypesCache = null
-        /** 省市区树（/region/p-c-a.json） */
+        /** 省市区树（REGION_PCA_JSON） */
         let abnormalPcaData = null
         let abnormalPcaLoadPromise = null
         let abnormalPcdCascadeWired = false
@@ -1980,7 +1983,7 @@
           if (abnormalPcaData) return
           if (!abnormalPcaLoadPromise) {
             abnormalPcaLoadPromise = (async () => {
-              const r = await fetch('/region/p-c-a.json', { credentials: 'same-origin' })
+              const r = await fetch(REGION_PCA_JSON, { credentials: 'same-origin' })
               if (!r.ok) throw new Error(`加载省市区数据失败（HTTP ${r.status}）`)
               const data = await r.json()
               if (!Array.isArray(data)) throw new Error('省市区数据格式无效')
