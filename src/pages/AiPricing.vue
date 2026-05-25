@@ -553,18 +553,19 @@
                 <th>对标城市</th>
                 <th>对标城市差额</th>
                 <th>毛利</th>
+                <th>定价</th>
                 <th class="col-actions">操作</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="marginLoading">
-                <td colspan="7" class="text-center py-4">
+                <td colspan="8" class="text-center py-4">
                   <span class="spinner-border spinner-border-sm me-2"></span>
                   加载中…
                 </td>
               </tr>
               <tr v-else-if="marginData.length === 0">
-                <td colspan="7" class="text-center py-4 text-muted">暂无数据</td>
+                <td colspan="8" class="text-center py-4 text-muted">暂无数据</td>
               </tr>
               <tr v-for="row in marginData" :key="row.id">
                 <td>{{ row.province }}</td>
@@ -573,6 +574,7 @@
                 <td>{{ row.benchmark_city }}</td>
                 <td>{{ row.benchmark_diff.toFixed(2) }}</td>
                 <td>{{ row.margin.toFixed(2) }}</td>
+                <td>{{ row.price.toFixed(2) }}</td>
                 <td class="col-actions">
                   <button class="action-btn action-edit" @click="openMarginEdit(row)">
                     <i class="bi bi-pencil-square"></i>
@@ -682,6 +684,10 @@
             <div class="form-field">
               <label class="form-label">毛利</label>
               <input v-model.number="marginForm.margin" type="number" step="0.01" class="form-control" placeholder="请输入毛利" />
+            </div>
+            <div class="form-field">
+              <label class="form-label">定价</label>
+              <input v-model.number="marginForm.price" type="number" step="0.01" class="form-control" placeholder="请输入定价" />
             </div>
             <div v-if="marginFormError" class="alert alert-warning py-2 mb-2">{{ marginFormError }}</div>
           </div>
@@ -1398,7 +1404,7 @@ const marginEditing = ref<WarehouseMarginRow | null>(null)
 const marginFormLoading = ref(false)
 const marginFormError = ref('')
 const marginForm = ref<WarehouseMarginForm & { warehouse_id?: number }>({
-  province: '', city: '', warehouse_name: '', benchmark_city: '', benchmark_diff: 0, margin: 0, warehouse_id: undefined,
+  province: '', city: '', warehouse_name: '', benchmark_city: '', benchmark_diff: 0, margin: 0, price: 0, warehouse_id: undefined,
 })
 
 /** 对标城市下拉：GET /tl/province_benchmark_prices，有省份时带 province，未选省份不带该参数 */
@@ -1554,7 +1560,7 @@ function changeMarginPage(p: number) {
 async function openMarginAdd() {
   await ensureLoaded()
   marginEditing.value = null
-  marginForm.value = { province: '', city: '', warehouse_name: '', benchmark_city: '', benchmark_diff: 0, margin: 0, warehouse_id: undefined }
+  marginForm.value = { province: '', city: '', warehouse_name: '', benchmark_city: '', benchmark_diff: 0, margin: 0, price: 0, warehouse_id: undefined }
   marginFormError.value = ''
   showMarginForm.value = true
 }
@@ -1564,7 +1570,7 @@ async function openMarginEdit(row: WarehouseMarginRow) {
   marginEditing.value = row
   marginForm.value = {
     province: row.province, city: row.city, warehouse_name: row.warehouse_name,
-    benchmark_city: row.benchmark_city, benchmark_diff: row.benchmark_diff, margin: row.margin,
+    benchmark_city: row.benchmark_city, benchmark_diff: row.benchmark_diff, margin: row.margin, price: row.price,
   }
   marginFormError.value = ''
   showMarginForm.value = true

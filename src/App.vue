@@ -20,12 +20,9 @@
           <a
             class="tab-btn tab-btn-primary tab-btn-external"
             :href="inventorySystemUrl"
-            target="_blank"
-            rel="noopener noreferrer"
-            title="在新窗口打开进销存系统"
+            title="打开进销存系统"
           >
             进销存系统
-            <i class="bi bi-box-arrow-up-right tab-btn-external-icon" aria-hidden="true"></i>
           </a>
         </div>
         <div class="auth-tools">
@@ -214,8 +211,8 @@ import {
 
 type SectionKey = 'prediction' | 'map' | 'detect' | 'price' | 'aiPricing' | 'warehouseDistance' | 'users'
 
-/** 新能源材料进销存系统（外链，新窗口打开） */
-const inventorySystemUrl = 'https://redspiderbc.cn/project3/'
+/** 新能源材料进销存系统（同窗口跳转） */
+const inventorySystemUrl = '/project3/'
 
 const primaryTabs: Array<{ key: SectionKey; label: string }> = [
   { key: 'map', label: '电子地图' },

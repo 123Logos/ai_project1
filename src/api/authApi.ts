@@ -207,6 +207,7 @@ export async function login(username: string, password: string): Promise<string>
   if (!token) throw new Error('登录成功但未返回 token')
   sessionBackfilled = false
   setToken(token)
+  localStorage.setItem('token', token)
   const dataInner =
     obj.data && typeof obj.data === 'object' && !Array.isArray(obj.data)
       ? (obj.data as Record<string, unknown>)
