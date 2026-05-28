@@ -84,6 +84,7 @@
     /* 手动录入报价：冶炼厂点击展开下拉表格 */
     .manual-smelter-dd {
       position: relative;
+      z-index: 30;
     }
     .manual-smelter-combo {
       display: flex;
@@ -95,12 +96,12 @@
       background-color: #fff;
     }
     .manual-smelter-panel {
-      position: absolute;
+      position: fixed;
       left: 0;
-      right: 0;
-      top: 100%;
-      margin-top: 4px;
-      z-index: 200;
+      top: 0;
+      width: 280px;
+      margin-top: 0;
+      z-index: 300;
       border-radius: 8px;
       box-shadow: 0 10px 28px rgba(15, 23, 42, 0.15);
       border: 1px solid #ced4da;
