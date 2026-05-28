@@ -148,11 +148,12 @@ export function collectGrantedFieldNames(detail: Record<string, unknown>): Set<s
   const { permissions } = parseTemplatePermissions(detail)
   const granted = new Set<string>()
   for (const [k, v] of Object.entries(permissions)) {
-    if (v === true) granted.add(k)
+    if (v === true || isPermissionGranted(v)) granted.add(k)
   }
   for (const [k, v] of Object.entries(detail)) {
-    if (k.startsWith('perm_') && isPermissionGranted(v)) granted.add(k)
+    if (PERM_FIELD_RE.test(k) && isPermissionGranted(v)) granted.add(k)
   }
+  collectPermFieldsDeep(detail, granted)
   return granted
 }
 
@@ -187,11 +188,16 @@ function parseTemplatePermissions(obj: Record<string, unknown>): {
 
   if (Array.isArray(permsSrc)) {
     for (const item of permsSrc) {
+      if (typeof item === 'string') {
+        const field = item.trim()
+        if (field.startsWith('perm_')) permissions[field] = true
+        continue
+      }
       if (!item || typeof item !== 'object' || Array.isArray(item)) continue
       const o = item as Record<string, unknown>
       const field = String(o.field ?? o.field_name ?? o.key ?? '').trim()
       if (!field) continue
-      permissions[field] = isPermissionGranted(o.value)
+      permissions[field] = isPermissionGranted(o.value ?? o.granted ?? o.enabled)
       const lab = String(o.label ?? o.name ?? o.title ?? '').trim()
       if (lab) permissionLabels[field] = lab
     }
@@ -206,7 +212,7 @@ function parseTemplatePermissions(obj: Record<string, unknown>): {
           const lab = String(vo.label ?? '').trim()
           if (lab) permissionLabels[k] = lab
         } else {
-          permissions[k] = !!v
+          permissions[k] = isPermissionGranted(v)
         }
       } else {
         permissions[k] = isPermissionGranted(v)
@@ -216,7 +222,49 @@ function parseTemplatePermissions(obj: Record<string, unknown>): {
 
   mergePermissionsWithLabels(permissions, permissionLabels, obj.permissions_with_labels)
 
+  const extraKeys = [
+    'granted_permissions',
+    'enabled_permissions',
+    'granted',
+    'enabled',
+    'permission_codes',
+  ] as const
+  for (const key of extraKeys) {
+    const arr = obj[key]
+    if (!Array.isArray(arr)) continue
+    for (const item of arr) {
+      if (typeof item === 'string' && item.trim().startsWith('perm_')) {
+        permissions[item.trim()] = true
+      }
+    }
+  }
+
   return { permissions, permissionLabels }
+}
+
+const PERM_FIELD_RE = /^perm_/
+
+/** 深度扫描响应体中所有 perm_* 字段（兼容嵌套分组） */
+function collectPermFieldsDeep(node: unknown, granted: Set<string>, depth = 0): void {
+  if (depth > 10 || node == null) return
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      if (typeof item === 'string' && PERM_FIELD_RE.test(item.trim())) {
+        granted.add(item.trim())
+        continue
+      }
+      collectPermFieldsDeep(item, granted, depth + 1)
+    }
+    return
+  }
+  if (typeof node !== 'object') return
+  for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+    if (PERM_FIELD_RE.test(k) && isPermissionGranted(v)) {
+      granted.add(k)
+      continue
+    }
+    if (v && typeof v === 'object') collectPermFieldsDeep(v, granted, depth + 1)
+  }
 }
 
 function templateFromObject(obj: Record<string, unknown>, fallbackRole?: string): RoleTemplateRow | null {

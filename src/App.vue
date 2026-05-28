@@ -6,17 +6,65 @@
           <h1 class="title">废铅蓄电池供应链服务系统</h1>
         </div>
         <div class="module-tabs">
-          <button
-            v-for="item in visiblePrimaryTabs"
-            :key="item.key"
-            class="tab-btn tab-btn-primary"
-            :class="{ active: isLoggedIn && activeSection === item.key, 'tab-btn--need-login': !isLoggedIn }"
-            type="button"
-            :title="!isLoggedIn ? '请先登录' : undefined"
-            @click="onSelectSection(item.key)"
-          >
-            {{ item.label }}
-          </button>
+          <template v-for="item in visiblePrimaryTabs" :key="item.key">
+            <div
+              v-if="item.key === 'prediction'"
+              ref="predictionDropdownEl"
+              class="tab-dropdown"
+            >
+              <button
+                class="tab-btn tab-btn-primary tab-dropdown-trigger"
+                :class="{
+                  active: isLoggedIn && activeSection === 'prediction',
+                  'tab-btn--need-login': !isLoggedIn,
+                }"
+                type="button"
+                :title="!isLoggedIn ? '请先登录' : predictionDropdownTitle"
+                :aria-expanded="predictionDropdownOpen"
+                aria-haspopup="menu"
+                @click.stop="onPredictionTabClick"
+              >
+                {{ item.label }}
+                <span class="tab-dropdown-chevron" :class="{ open: predictionDropdownOpen }" aria-hidden="true">▼</span>
+              </button>
+              <div
+                v-show="predictionDropdownOpen && isLoggedIn"
+                class="tab-dropdown-menu"
+                role="menu"
+                aria-label="AI 预测子模块"
+                @click.stop
+              >
+                <p v-if="predictionPermTip" class="tab-dropdown-tip" role="alert">{{ predictionPermTip }}</p>
+                <button
+                  v-for="sub in predictionSubTabs"
+                  :key="sub.key"
+                  type="button"
+                  class="tab-dropdown-item"
+                  :class="{
+                    active: activeSection === 'prediction' && predictionSubTab === sub.key,
+                    'tab-dropdown-item--denied': !canEnterPredictionSub(sub.key),
+                  }"
+                  role="menuitem"
+                  @click="onSelectPredictionSub(sub.key)"
+                >
+                  {{ sub.label }}
+                </button>
+              </div>
+            </div>
+            <button
+              v-else
+              class="tab-btn tab-btn-primary"
+              :class="{
+                active: isLoggedIn && activeSection === item.key,
+                'tab-btn--need-login': !isLoggedIn,
+              }"
+              type="button"
+              :title="!isLoggedIn ? '请先登录' : undefined"
+              @click="onSelectSection(item.key)"
+            >
+              {{ item.label }}
+            </button>
+          </template>
           <a
             class="tab-btn tab-btn-primary tab-btn-external"
             :href="inventorySystemUrl"
@@ -48,25 +96,6 @@
         </div>
       </div>
     </header>
-
-    <nav
-      v-if="isLoggedIn && navPermissionsReady && activeSection === 'prediction' && visiblePredictionSubTabs.length"
-      class="sub-nav"
-      aria-label="AI 预测子模块"
-    >
-      <div class="sub-nav-inner">
-        <button
-          v-for="item in visiblePredictionSubTabs"
-          :key="item.key"
-          class="sub-tab-btn"
-          :class="{ active: predictionSubTab === item.key }"
-          type="button"
-          @click="predictionSubTab = item.key"
-        >
-          {{ item.label }}
-        </button>
-      </div>
-    </nav>
 
     <main
       v-if="!isLoggedIn"
@@ -108,10 +137,6 @@
     <main
       v-else
       class="page-main"
-      :class="{
-        'has-sub-nav':
-          activeSection === 'prediction' && visiblePredictionSubTabs.length > 0,
-      }"
     >
       <section v-if="activeSection === 'prediction' && predictionSubTab === 'historyManage'" class="panel inner-page">
         <HistoryManage />
@@ -231,6 +256,9 @@ const predictionSubTabs: Array<{ key: PredictionSubKey; label: string }> = [
 
 const activeSection = ref<SectionKey>('map')
 const predictionSubTab = ref<PredictionSubKey>('historyManage')
+const predictionDropdownOpen = ref(false)
+const predictionDropdownEl = ref<HTMLElement | null>(null)
+const predictionPermTip = ref('')
 const baseUrl = import.meta.env.BASE_URL
 const embeddedCacheVersion = `${Date.now()}`
 const isLoggedIn = ref(!!getToken())
@@ -249,6 +277,18 @@ const visiblePrimaryTabs = computed(() => primaryTabs)
 const visiblePredictionSubTabs = computed(() =>
   predictionSubTabs.filter((item) => hasPredictionSubNavPermission(item.key, hasNavPermission)),
 )
+
+const predictionDropdownTitle = computed(() => {
+  if (!isLoggedIn.value) return undefined
+  const cur = predictionSubTabs.find((t) => t.key === predictionSubTab.value)
+  return cur ? `当前：${cur.label}，点击切换` : '点击选择子功能'
+})
+
+function canEnterPredictionSub(key: PredictionSubKey): boolean {
+  if (!navPermissionsReady.value || mePermState.loading.value) return true
+  if (!mePermState.permissionsHydrated.value) return true
+  return hasPredictionSubNavPermission(key, hasNavPermission)
+}
 
 const showUserManageBtn = computed(() => canOpenUserManage(hasNavPermission))
 
@@ -295,7 +335,8 @@ async function refreshNavPermissionsOnPageLoad() {
     navPermissionsReady.value = true
     return
   }
-  navPermissionsReady.value = false
+  const isFirstLoad = !navPermissionsReady.value
+  if (isFirstLoad) navPermissionsReady.value = false
   await loadMePermissions()
   navPermissionsReady.value = true
 }
@@ -304,14 +345,61 @@ function onPageShow(ev: PageTransitionEvent) {
   if (ev.persisted) void refreshNavPermissionsOnPageLoad()
 }
 
+function closePredictionDropdown() {
+  predictionDropdownOpen.value = false
+  predictionPermTip.value = ''
+}
+
+function onDocumentClick(ev: MouseEvent) {
+  if (!predictionDropdownOpen.value) return
+  const root = predictionDropdownEl.value
+  if (root && !root.contains(ev.target as Node)) {
+    closePredictionDropdown()
+  }
+}
+
+function onPredictionTabClick() {
+  if (!isLoggedIn.value) {
+    showLogin.value = true
+    return
+  }
+  if (predictionDropdownOpen.value) {
+    closePredictionDropdown()
+    return
+  }
+  if (activeSection.value !== 'prediction') {
+    activeSection.value = 'prediction'
+  }
+  predictionDropdownOpen.value = true
+}
+
+function onSelectPredictionSub(key: PredictionSubKey) {
+  if (!navPermissionsReady.value || mePermState.loading.value) {
+    predictionPermTip.value = '权限加载中，请稍候再试。'
+    return
+  }
+  if (!canEnterPredictionSub(key)) {
+    predictionPermTip.value = mePermState.loadError.value
+      ? `权限加载异常（${mePermState.loadError.value}），请刷新页面或联系管理员。`
+      : '无权限访问该功能，请联系管理员开通。'
+    return
+  }
+  predictionPermTip.value = ''
+  activeSection.value = 'prediction'
+  predictionSubTab.value = key
+  closePredictionDropdown()
+}
+
 onMounted(() => {
   isLoggedIn.value = !!getToken()
   void refreshNavPermissionsOnPageLoad()
   window.addEventListener('pageshow', onPageShow)
+  document.addEventListener('click', onDocumentClick)
 })
 
 onUnmounted(() => {
   window.removeEventListener('pageshow', onPageShow)
+  document.removeEventListener('click', onDocumentClick)
 })
 
 async function retryLoadPermissions() {
@@ -325,6 +413,7 @@ watch(showLogin, (v) => {
 })
 
 function onSelectSection(key: SectionKey) {
+  closePredictionDropdown()
   if (!isLoggedIn.value) {
     showLogin.value = true
     return
@@ -358,6 +447,7 @@ const activeFrameTitle = computed(() => {
 
 function openUserManage() {
   if (!canOpenUserManage(hasNavPermission)) return
+  closePredictionDropdown()
   activeSection.value = 'users'
 }
 
@@ -366,6 +456,7 @@ function logoutNow() {
   clearMePermissions()
   navPermissionsReady.value = true
   isLoggedIn.value = false
+  closePredictionDropdown()
   activeSection.value = 'map'
   predictionSubTab.value = 'historyManage'
 }
@@ -417,6 +508,7 @@ body {
   position: sticky;
   top: 0;
   z-index: 1100;
+  overflow: visible;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   animation: slideDown 0.3s ease both;
 }
@@ -431,6 +523,7 @@ body {
   gap: 20px;
   min-height: 72px;
   flex-wrap: nowrap;
+  overflow: visible;
 }
 
 .auth-tools {
@@ -520,7 +613,7 @@ body {
   padding: 4px;
   margin: 10px 0;
   max-width: 100%;
-  overflow-x: auto;
+  overflow: visible;
 }
 
 .tab-btn {
@@ -580,53 +673,91 @@ a.tab-btn {
   opacity: 0.9;
 }
 
-.sub-nav {
-  position: sticky;
-  top: 72px;
-  z-index: 1050;
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+.tab-dropdown {
+  position: relative;
+  flex-shrink: 0;
+  z-index: 1200;
 }
 
-.sub-nav-inner {
-  max-width: 1600px;
-  margin: 0 auto;
-  padding: 8px 24px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
+.tab-dropdown-trigger {
+  display: inline-flex;
   align-items: center;
+  gap: 4px;
 }
 
-.sub-tab-btn {
-  border: 1px solid transparent;
-  padding: 0 16px;
-  height: 34px;
+.tab-dropdown-chevron {
+  margin-left: 4px;
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.9;
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.tab-dropdown-chevron.open {
+  transform: rotate(180deg);
+}
+
+.tab-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 168px;
+  padding: 6px;
+  background: #ffffff;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
+  border: 1px solid #e5e7eb;
+}
+
+.tab-dropdown-tip {
+  margin: 0 0 4px;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #b45309;
+  background: #fffbeb;
+  border-radius: 4px;
+  border: 1px solid #fcd34d;
+}
+
+.tab-dropdown-item {
+  display: block;
+  width: 100%;
+  border: none;
+  padding: 0 14px;
+  height: 36px;
   border-radius: 6px;
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;
-  color: #4b5563;
-  background: #f3f4f6;
+  color: #374151;
+  background: transparent;
+  text-align: left;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background 0.15s ease, color 0.15s ease;
+  white-space: nowrap;
 }
 
-.sub-tab-btn:hover {
-  background: #e5e7eb;
+.tab-dropdown-item:hover {
+  background: #f3f4f6;
   color: #111827;
-  transform: scale(1.04);
 }
 
-.sub-tab-btn:active {
-  transform: scale(0.97);
-}
-
-.sub-tab-btn.active {
+.tab-dropdown-item.active {
   color: #196cc0;
   background: rgba(25, 108, 192, 0.1);
-  border-color: rgba(25, 108, 192, 0.35);
+  font-weight: 600;
+}
+
+.tab-dropdown-item--denied {
+  color: #9ca3af;
+}
+
+.tab-dropdown-item--denied:hover {
+  color: #6b7280;
+  background: #fef2f2;
 }
 
 .page-main {
@@ -733,11 +864,6 @@ a.tab-btn {
   flex: 1;
   min-height: 0;
 }
-
-.page-main.has-sub-nav .iframe-panel {
-  height: calc(100vh - 72px - 51px);
-}
-
 
 .embedded-frame {
   flex: 1;
