@@ -1,5 +1,6 @@
 import { fetchJson } from './userApi'
 import { getToken } from './authApi'
+import { warehouseDisplayName } from '@/utils/warehouseDisplayName'
 
 export interface BenchmarkAnalysisRow {
   id: number
@@ -39,7 +40,7 @@ function pickRow(r: Record<string, unknown>, idx: number): BenchmarkAnalysisRow 
     province: String(r['库房省份'] ?? ''),
     city: String(r['库房城市'] ?? ''),
     county: String(r['库房区'] ?? ''),
-    warehouse: String(r['库房名称'] ?? ''),
+    warehouse: warehouseDisplayName(String(r['库房名称'] ?? '')),
     benchmark_city: String(r['对标城市'] ?? ''),
     benchmark_price: Number(r['对标城市定价'] ?? 0),
     benchmark_diff: Number(r['对标城市差额'] ?? 0),

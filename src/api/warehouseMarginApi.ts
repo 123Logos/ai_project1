@@ -1,5 +1,6 @@
 import { fetchJson } from './userApi'
 import { getToken } from './authApi'
+import { warehouseDisplayName } from '@/utils/warehouseDisplayName'
 
 export interface WarehouseMarginRow {
   id: number
@@ -43,7 +44,9 @@ function pickRow(r: Record<string, unknown>): WarehouseMarginRow {
     id: Number(r.config_id ?? r.id ?? 0),
     province: String(r['库房省份'] ?? r['省份'] ?? r.province ?? ''),
     city: String(r['库房城市'] ?? r['城市'] ?? r.city ?? ''),
-    warehouse_name: String(r['库房名称'] ?? r['仓库名称'] ?? r['仓库名'] ?? r.warehouse_name ?? ''),
+    warehouse_name: warehouseDisplayName(
+      String(r['库房名称'] ?? r['仓库名称'] ?? r['仓库名'] ?? r.warehouse_name ?? ''),
+    ),
     benchmark_city: String(r['对标城市'] ?? r.benchmark_city ?? ''),
     benchmark_diff: Number(r['对标城市差额'] ?? r['对标差额'] ?? r.benchmark_diff ?? 0),
     margin: Number(r['毛利（配置版）'] ?? r['毛利配置版'] ?? r['毛利'] ?? r.margin ?? 0),

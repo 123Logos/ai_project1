@@ -15,7 +15,7 @@
             <select id="wdc-filter-from" v-model.number="filterFromId" class="wdc-select">
               <option :value="0">全部</option>
               <option v-for="w in warehouseOptions" :key="`ff-${w.id}`" :value="w.id">
-                {{ w.name }}（{{ w.id }}）
+                {{ w.name }}
               </option>
             </select>
           </div>
@@ -24,7 +24,7 @@
             <select id="wdc-filter-to" v-model.number="filterToId" class="wdc-select">
               <option :value="0">全部</option>
               <option v-for="w in warehouseOptions" :key="`ft-${w.id}`" :value="w.id">
-                {{ w.name }}（{{ w.id }}）
+                {{ w.name }}
               </option>
             </select>
           </div>
@@ -51,7 +51,7 @@
               <th>对标库房</th>
               <th>库房距离</th>
               <th>阶梯价差</th>
-              <th>实时价差</th>
+              <th>实际价差</th>
               <th class="wdc-col-actions">操作</th>
             </tr>
           </thead>
@@ -62,9 +62,9 @@
             <template v-for="grp in groupedTableRows" :key="`grp-${grp.rows[0]?.fromId ?? 0}`">
               <tr v-for="(r, idx) in grp.rows" :key="`edge-${r.fromId}-${r.toId}`">
                 <td v-if="idx === 0" class="wdc-td-source" :rowspan="grp.rows.length">
-                  {{ r.fromName }}（{{ r.fromId }}）
+                  {{ r.fromName }}
                 </td>
-                <td>{{ r.toName }}（{{ r.toId }}）</td>
+                <td>{{ r.toName }}</td>
                 <td class="wdc-td-distance">{{ distanceCellText(r) }}</td>
                 <td class="wdc-td-tier">{{ tierPriceCellText(r) }}</td>
                 <td class="wdc-td-freight">{{ r.realTimeDiff || '—' }}</td>
@@ -75,7 +75,7 @@
                         type="button"
                         class="btn btn-sm btn-outline-success"
                         :disabled="busy"
-                        @click="openAddDialogFromRow(grp.rows[0])"
+                        @click="openAddDialogFromGroup(grp)"
                       >
                         新增对标库房
                       </button>
@@ -155,7 +155,7 @@
                 :aria-selected="dialogFromId === w.id"
                 @click="pickAddDialogFromWarehouse(w)"
               >
-                {{ w.name }}（{{ w.id }}）
+                {{ w.name }}
               </button>
               <p v-if="!dialogFromSelectOptions.length" class="wdc-hint wdc-hint-inline">无匹配库房，请调整关键词</p>
             </div>
@@ -173,7 +173,7 @@
             <div class="wdc-modal-chips">
               <label v-for="w in dialogTargetOptionsFiltered" :key="`add-b-${w.id}`" class="wdc-chip">
                 <input v-model="dialogAddTargetIds" type="checkbox" :value="w.id" />
-                <span>{{ w.name }}（{{ w.id }}）</span>
+                <span>{{ w.name }}</span>
               </label>
               <p v-if="!dialogTargetOptionsFiltered.length" class="wdc-hint wdc-hint-inline">无匹配库房，请调整搜索词或清空搜索框</p>
             </div>
@@ -190,26 +190,26 @@
               @change="onModalPickTargetChange($event)"
             >
               <option v-for="br in dialogEditGroup.rows" :key="`pick-${br.fromId}-${br.toId}`" :value="br.toId">
-                {{ br.toName }}（{{ br.toId }}）
+                {{ br.toName }}
               </option>
             </select>
           </div>
           <p class="wdc-modal-readonly">
-            <span class="wdc-muted">源库房：</span>{{ editingRow?.fromName }}（{{ editingRow?.fromId }}）
+            <span class="wdc-muted">源库房：</span>{{ editingRow?.fromName }}
           </p>
           <p class="wdc-modal-readonly">
-            <span class="wdc-muted">当前对标库房：</span>{{ editingRow?.toName }}（{{ editingRow?.toId }}）
+            <span class="wdc-muted">当前对标库房：</span>{{ editingRow?.toName }}
           </p>
           <div class="wdc-row">
             <label for="wdc-dlg-edit-to">修改为对标库房</label>
             <select id="wdc-dlg-edit-to" v-model.number="dialogToId" class="wdc-select">
-              <option v-for="w in dialogEditTargetOptions" :key="`de-${w.id}`" :value="w.id">{{ w.name }}（{{ w.id }}）</option>
+              <option v-for="w in dialogEditTargetOptions" :key="`de-${w.id}`" :value="w.id">{{ w.name }}</option>
             </select>
           </div>
         </div>
         <div v-else-if="dialogMode === 'delete'" class="wdc-modal-body">
           <p class="wdc-modal-readonly">
-            <span class="wdc-muted">源库房：</span>{{ editingRow?.fromName }}（{{ editingRow?.fromId }}）
+            <span class="wdc-muted">源库房：</span>{{ editingRow?.fromName }}
           </p>
           <div v-if="dialogEditGroup?.rows.length" class="wdc-row">
             <label for="wdc-dlg-pick-del">选择你要删除的对标库房</label>
@@ -220,7 +220,7 @@
               @change="onModalPickTargetChange($event)"
             >
               <option v-for="br in dialogEditGroup.rows" :key="`del-${br.fromId}-${br.toId}`" :value="br.toId">
-                {{ br.toName }}（{{ br.toId }}）
+                {{ br.toName }}
               </option>
             </select>
           </div>
@@ -228,7 +228,7 @@
         </div>
         <div v-else-if="dialogMode === 'edit-tier'" class="wdc-modal-body">
           <p class="wdc-modal-readonly">
-            <span class="wdc-muted">源库房：</span>{{ editingRow?.fromName }}（{{ editingRow?.fromId }}）
+            <span class="wdc-muted">源库房：</span>{{ editingRow?.fromName }}
           </p>
           <div v-if="dialogEditGroup?.rows.length" class="wdc-row">
             <label for="wdc-dlg-pick-tier">对标库房</label>
@@ -239,7 +239,7 @@
               @change="onModalPickTargetChange($event)"
             >
               <option v-for="br in dialogEditGroup.rows" :key="`tier-${br.fromId}-${br.toId}`" :value="br.toId">
-                {{ br.toName }}（{{ br.toId }}）
+                {{ br.toName }}
               </option>
             </select>
           </div>
@@ -286,6 +286,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import { warehouseDisplayName } from '@/utils/warehouseDisplayName'
 import {
   deleteTlUnbindWarehouseLink,
   fetchTlCalculateDistance,
@@ -356,6 +357,8 @@ const dialogMode = ref<'add' | 'edit' | 'delete' | 'edit-tier'>('add')
 const dialogFromId = ref(0)
 const dialogToId = ref(0)
 const dialogAddTargetIds = ref<number[]>([])
+/** 从表格行打开「新增对标库房」时，打开弹窗瞬间已绑定的目标 id（提交时只新增未绑定的项） */
+const dialogAddInitialTargetIds = ref<number[]>([])
 /** 「新增绑定」弹窗内：源库房 / 对标列表搜索关键词 */
 const dialogAddFromSearch = ref('')
 const dialogAddTargetSearch = ref('')
@@ -719,6 +722,7 @@ function toLinkRow(row: Record<string, unknown>): LinkRow {
     fromName = pickStr(srcObj, ['仓库名', 'warehouse_name', 'name', '库房名'])
   }
   if (!fromName) fromName = warehouseNameById(fromId)
+  fromName = warehouseDisplayName(fromName)
 
   let toName = pickStr(row, [
     'to_warehouse_name',
@@ -730,6 +734,7 @@ function toLinkRow(row: Record<string, unknown>): LinkRow {
     toName = pickStr(tgtObj, ['仓库名', 'warehouse_name', 'name', '库房名'])
   }
   if (!toName) toName = warehouseNameById(toId)
+  toName = warehouseDisplayName(toName)
 
   const { num: tierPriceDiff, seed: tierPriceEditSeed } = parseTierFields(row)
 
@@ -742,7 +747,8 @@ async function loadWarehouses() {
   warehouseOptions.value = rows
     .map((r) => {
       const id = pickNum(r, ['仓库id', '库房id', 'warehouse_id', 'id'])
-      const name = pickStr(r, ['仓库名', 'warehouse_name', 'name']) || `库房#${id}`
+      const name =
+        warehouseDisplayName(pickStr(r, ['仓库名', 'warehouse_name', 'name'])) || `库房#${id}`
       const c = pickWarehouseCoord(r)
       if (id > 0 && c) coordMap[id] = c
       return { id, name }
@@ -854,21 +860,28 @@ function openAddDialog() {
   dialogFromId.value = 0
   dialogToId.value = 0
   dialogAddTargetIds.value = []
+  dialogAddInitialTargetIds.value = []
   dialogAddFromSearch.value = ''
   dialogAddTargetSearch.value = ''
+  error.value = ''
   dialogOpen.value = true
 }
 
-/** 以当前行的源库房为 A，打开新增绑定（多选目标） */
-function openAddDialogFromRow(r: LinkRow) {
+/** 以当前分组的源库房打开新增绑定，并对已绑定的对标库房预勾选 */
+function openAddDialogFromGroup(grp: LinkRowGroup) {
+  const first = grp.rows[0]
+  if (!first || first.fromId <= 0) return
   dialogEditGroup.value = null
   dialogMode.value = 'add'
   editingRow.value = null
-  dialogFromId.value = r.fromId
+  dialogFromId.value = first.fromId
   dialogToId.value = 0
-  dialogAddTargetIds.value = []
-  dialogAddFromSearch.value = ''
+  const boundIds = [...new Set(grp.rows.map((r) => r.toId).filter((id) => id > 0 && id !== first.fromId))]
+  dialogAddInitialTargetIds.value = boundIds
+  dialogAddTargetIds.value = [...boundIds]
+  dialogAddFromSearch.value = first.fromName
   dialogAddTargetSearch.value = ''
+  error.value = ''
   dialogOpen.value = true
 }
 
@@ -878,6 +891,7 @@ function closeDialog() {
   editingRow.value = null
   dialogEditGroup.value = null
   dialogAddTargetIds.value = []
+  dialogAddInitialTargetIds.value = []
   dialogAddFromSearch.value = ''
   dialogAddTargetSearch.value = ''
   dialogTierText.value = ''
@@ -914,10 +928,16 @@ async function submitDialog() {
     const src = dialogFromId.value
     const targetIds = [...new Set(dialogAddTargetIds.value)].filter((id) => id > 0 && id !== src)
     if (!targetIds.length) return
+    const initial = new Set(dialogAddInitialTargetIds.value)
+    const newIds = targetIds.filter((id) => !initial.has(id))
+    if (!newIds.length) {
+      error.value = '请至少勾选一个尚未绑定的新对标库房'
+      return
+    }
     await runAction(async () => {
-      await postTlBatchBindWarehouseLinks(src, targetIds)
+      await postTlBatchBindWarehouseLinks(src, newIds)
       await fetchListPage(1)
-    }, `新增绑定成功（${targetIds.length} 条）`)
+    }, `新增绑定成功（${newIds.length} 条）`)
     if (!error.value) closeDialog()
     return
   }

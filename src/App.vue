@@ -42,7 +42,6 @@
                   class="tab-dropdown-item"
                   :class="{
                     active: activeSection === 'prediction' && predictionSubTab === sub.key,
-                    'tab-dropdown-item--denied': !canEnterPredictionSub(sub.key),
                   }"
                   role="menuitem"
                   @click="onSelectPredictionSub(sub.key)"
@@ -118,20 +117,7 @@
       class="page-main page-main--gate"
     >
       <div class="login-gate">
-        <p class="login-gate-text mb-0">正在加载权限…</p>
-      </div>
-    </main>
-    <main
-      v-else-if="isLoggedIn && navPermissionsReady && visiblePrimaryTabs.length === 0 && !showUserManageBtn"
-      class="page-main page-main--gate"
-    >
-      <div class="login-gate">
-        <h2 class="login-gate-title">暂无可用的功能模块</h2>
-        <p class="login-gate-text">
-          当前账号在系统中没有任何为「已开启」的导航权限，请联系管理员在「角色管理」中为您分配权限。
-        </p>
-        <p v-if="mePermLoadError" class="text-danger small mb-3">{{ mePermLoadError }}</p>
-        <button type="button" class="btn login-gate-btn" @click="retryLoadPermissions">重新加载权限</button>
+        <p class="login-gate-text mb-0">正在加载…</p>
       </div>
     </main>
     <main
@@ -223,15 +209,11 @@ import AiPricing from './pages/AiPricing.vue'
 import DetectApp from '../PD_max_fronted/src/App.vue'
 import { clearToken, getToken, login } from './api/authApi'
 import {
-  canOpenUserManage,
-  hasPredictionSubNavPermission,
   type PredictionSubKey,
 } from './constants/navTabPermissionMap'
 import {
   clearMePermissions,
-  hasNavPermission,
   loadMePermissions,
-  useMePermissionsState,
 } from './composables/useMePermissions'
 
 type SectionKey = 'prediction' | 'map' | 'detect' | 'price' | 'aiPricing' | 'warehouseDistance' | 'users'
@@ -262,20 +244,32 @@ const predictionPermTip = ref('')
 const baseUrl = import.meta.env.BASE_URL
 const embeddedCacheVersion = `${Date.now()}`
 const isLoggedIn = ref(!!getToken())
-/** 有 token 时整页刷新会先拉 /auth/permissions/me 再展示导航，避免闪错页 */
-const navPermissionsReady = ref(!getToken())
+/** 登录后不再等待权限接口才展示导航 */
+const navPermissionsReady = ref(true)
 const showLogin = ref(false)
 const loginLoading = ref(false)
 const loginError = ref('')
 const loginForm = ref({ username: '', password: '' })
 
-const mePermState = useMePermissionsState()
-const mePermLoadError = mePermState.loadError
-
 const visiblePrimaryTabs = computed(() => primaryTabs)
 
-const visiblePredictionSubTabs = computed(() =>
-  predictionSubTabs.filter((item) => hasPredictionSubNavPermission(item.key, hasNavPermission)),
+const showUserManageBtn = computed(() => isLoggedIn.value)
+
+function firstVisiblePrimarySection(): SectionKey {
+  return visiblePrimaryTabs.value[0]?.key ?? 'map'
+}
+
+watch(
+  [navPermissionsReady, isLoggedIn, visiblePrimaryTabs],
+  () => {
+    if (!navPermissionsReady.value || !isLoggedIn.value) return
+    const keys = visiblePrimaryTabs.value.map((t) => t.key)
+    const allowed = new Set<SectionKey>([...keys, 'users'])
+    if (!allowed.has(activeSection.value)) {
+      activeSection.value = keys[0]!
+    }
+  },
+  { flush: 'post', immediate: true },
 )
 
 const predictionDropdownTitle = computed(() => {
@@ -284,61 +278,15 @@ const predictionDropdownTitle = computed(() => {
   return cur ? `当前：${cur.label}，点击切换` : '点击选择子功能'
 })
 
-function canEnterPredictionSub(key: PredictionSubKey): boolean {
-  if (!navPermissionsReady.value || mePermState.loading.value) return true
-  if (!mePermState.permissionsHydrated.value) return true
-  return hasPredictionSubNavPermission(key, hasNavPermission)
-}
-
-const showUserManageBtn = computed(() => canOpenUserManage(hasNavPermission))
-
-function firstVisiblePrimarySection(): SectionKey {
-  const t = visiblePrimaryTabs.value[0]
-  if (t) return t.key
-  if (canOpenUserManage(hasNavPermission)) return 'users'
-  return 'map'
-}
-
-watch(
-  [navPermissionsReady, isLoggedIn, visiblePrimaryTabs, visiblePredictionSubTabs],
-  () => {
-    if (!navPermissionsReady.value || !isLoggedIn.value) return
-    const tabs = visiblePrimaryTabs.value
-    const keys = tabs.map((t) => t.key)
-    const allowed = new Set<SectionKey>(keys)
-    if (canOpenUserManage(hasNavPermission)) allowed.add('users')
-
-    if (!tabs.length) {
-      if (canOpenUserManage(hasNavPermission)) {
-        if (activeSection.value !== 'users') activeSection.value = 'users'
-      }
-      return
-    }
-
-    if (!allowed.has(activeSection.value)) {
-      activeSection.value = keys[0]!
-    }
-    if (activeSection.value === 'prediction' && visiblePredictionSubTabs.value.length) {
-      const subs = visiblePredictionSubTabs.value.map((t) => t.key)
-      if (!subs.includes(predictionSubTab.value)) {
-        predictionSubTab.value = subs[0]!
-      }
-    }
-  },
-  { flush: 'post', immediate: true },
-)
-
-/** 整页刷新（F5）或从浏览器往返缓存恢复时：重新请求 /auth/permissions/me 并解析导航权限 */
+/** 整页刷新（F5）或从浏览器往返缓存恢复时：后台拉权限（不再用于隐藏导航） */
 async function refreshNavPermissionsOnPageLoad() {
   if (!getToken()) {
     clearMePermissions()
     navPermissionsReady.value = true
     return
   }
-  const isFirstLoad = !navPermissionsReady.value
-  if (isFirstLoad) navPermissionsReady.value = false
-  await loadMePermissions()
   navPermissionsReady.value = true
+  void loadMePermissions()
 }
 
 function onPageShow(ev: PageTransitionEvent) {
@@ -374,16 +322,6 @@ function onPredictionTabClick() {
 }
 
 function onSelectPredictionSub(key: PredictionSubKey) {
-  if (!navPermissionsReady.value || mePermState.loading.value) {
-    predictionPermTip.value = '权限加载中，请稍候再试。'
-    return
-  }
-  if (!canEnterPredictionSub(key)) {
-    predictionPermTip.value = mePermState.loadError.value
-      ? `权限加载异常（${mePermState.loadError.value}），请刷新页面或联系管理员。`
-      : '无权限访问该功能，请联系管理员开通。'
-    return
-  }
   predictionPermTip.value = ''
   activeSection.value = 'prediction'
   predictionSubTab.value = key
@@ -402,10 +340,6 @@ onUnmounted(() => {
   document.removeEventListener('click', onDocumentClick)
 })
 
-async function retryLoadPermissions() {
-  await refreshNavPermissionsOnPageLoad()
-}
-
 watch(showLogin, (v) => {
   if (!v) return
   loginForm.value = { username: '', password: '' }
@@ -419,7 +353,6 @@ function onSelectSection(key: SectionKey) {
     return
   }
   if (key === 'users') {
-    if (!canOpenUserManage(hasNavPermission)) return
     activeSection.value = 'users'
     return
   }
@@ -446,7 +379,6 @@ const activeFrameTitle = computed(() => {
 })
 
 function openUserManage() {
-  if (!canOpenUserManage(hasNavPermission)) return
   closePredictionDropdown()
   activeSection.value = 'users'
 }
@@ -474,8 +406,7 @@ async function submitLogin() {
     await refreshNavPermissionsOnPageLoad()
     showLogin.value = false
     activeSection.value = firstVisiblePrimarySection()
-    predictionSubTab.value =
-      (visiblePredictionSubTabs.value[0]?.key as PredictionSubKey | undefined) ?? 'historyManage'
+    predictionSubTab.value = 'historyManage'
   } catch (e) {
     loginError.value = e instanceof Error ? e.message : String(e)
   } finally {

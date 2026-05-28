@@ -10,8 +10,9 @@ const permissionsHydrated = ref(false)
 
 let loadSeq = 0
 
-export function hasNavPermission(fieldName: string): boolean {
-  return granted.value.has(fieldName)
+/** 导航展示不再按权限字段隐藏页面；角色/改角色等仍由 UserManage 内 isRegularUserSession 控制 */
+export function hasNavPermission(_fieldName: string): boolean {
+  return true
 }
 
 export function useMePermissionsState() {

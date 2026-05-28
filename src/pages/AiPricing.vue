@@ -4,13 +4,13 @@
     <div v-if="!activePage" class="home-content">
       <div class="modules-grid">
         <!-- AI 定价分析 -->
-        <div v-if="showMainPanel" class="home-panel main-panel">
+        <div class="home-panel main-panel">
           <div class="home-panel-title">
             <i class="bi bi-graph-up-arrow me-1"></i>
             AI 定价分析
           </div>
           <div class="module-cards">
-            <div v-if="hasPerm('perm_nav_ai_pricing_benchmark_analysis')" class="module-card" @click="activePage = 'benchmarkAnalysis'">
+            <div class="module-card" @click="activePage = 'benchmarkAnalysis'">
               <div class="module-icon" style="background: #e8f0fe; color: #1a73e8;">
                 <i class="bi bi-bar-chart-line"></i>
               </div>
@@ -19,7 +19,7 @@
                 <p>基于 AI 算法对库房定价进行多维度对标分析</p>
               </div>
             </div>
-            <div v-if="hasPerm('perm_nav_ai_pricing_self_pricing')" class="module-card" @click="activePage = 'selfPricing'">
+            <div class="module-card" @click="activePage = 'selfPricing'">
               <div class="module-icon" style="background: #fef3e2; color: #e8860c;">
                 <i class="bi bi-calculator"></i>
               </div>
@@ -32,13 +32,13 @@
         </div>
 
         <!-- 基础配置 -->
-        <div v-if="showConfigPanel" class="home-panel config-panel">
+        <div class="home-panel config-panel">
           <div class="home-panel-title">
             <i class="bi bi-gear me-1"></i>
             基础配置
           </div>
           <div class="module-cards">
-            <div v-if="hasPerm('perm_nav_ai_pricing_city_benchmark')" class="module-card" @click="activePage = 'cityBenchmark'">
+            <div class="module-card" @click="activePage = 'cityBenchmark'">
               <div class="module-icon" style="background: #e6f4ea; color: #137333;">
                 <i class="bi bi-geo-alt"></i>
               </div>
@@ -47,7 +47,7 @@
                 <p>配置各对标城市的基准定价数据</p>
               </div>
             </div>
-            <div v-if="hasPerm('perm_nav_ai_pricing_smelter_price')" class="module-card" @click="activePage = 'smelterPrice'">
+            <div class="module-card" @click="activePage = 'smelterPrice'">
               <div class="module-icon" style="background: #fce8e6; color: #c5221f;">
                 <i class="bi bi-building"></i>
               </div>
@@ -56,7 +56,7 @@
                 <p>管理各冶炼厂的标准定价信息</p>
               </div>
             </div>
-            <div v-if="hasPerm('perm_nav_ai_pricing_margin_manage')" class="module-card" @click="activePage = 'marginManage'">
+            <div class="module-card" @click="activePage = 'marginManage'">
               <div class="module-icon" style="background: #f3e8fd; color: #8430ce;">
                 <i class="bi bi-cash-stack"></i>
               </div>
@@ -770,7 +770,7 @@
                 </div>
                 <div class="search-select-options">
                   <div v-for="w in spFilteredOptions" :key="w.id" class="search-select-item" :class="{ active: w.id === selfPricingWarehouseId }" @mousedown.prevent="selectSelfPricingWarehouse(w)">
-                    {{ w.name }}（{{ w.id }}）
+                    {{ w.name }}
                   </div>
                   <div v-if="!spFilteredOptions.length" class="search-select-empty">{{ spSearchQuery ? '无匹配库房' : '请输入关键词搜索' }}</div>
                 </div>
@@ -815,7 +815,7 @@
                       <td colspan="4" class="text-center py-4 text-muted">该库房暂无对标库房绑定</td>
                     </tr>
                     <tr v-for="row in selfPricingLinks" :key="`${row.fromId}-${row.toId}`">
-                      <td>{{ row.toName }}（{{ row.toId }}）</td>
+                      <td>{{ row.toName }}</td>
                       <td>{{ row.distanceText }}</td>
                       <td>{{ row.tierPriceDiff }}</td>
                       <td>{{ row.realTimeDiff }}</td>
@@ -930,7 +930,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, nextTick } from 'vue'
-import { hasNavPermission } from '@/composables/useMePermissions'
+import { warehouseDisplayName } from '@/utils/warehouseDisplayName'
 import { useChinaRegion } from '@/composables/useChinaRegion'
 import {
   fetchCityBenchmarks,
@@ -965,19 +965,6 @@ import {
 } from '@/api/warehouseMarginApi'
 
 const activePage = ref('')
-
-const hasPerm = (field: string) => hasNavPermission(field)
-
-const showMainPanel = computed(() =>
-  hasPerm('perm_nav_ai_pricing_benchmark_analysis') ||
-  hasPerm('perm_nav_ai_pricing_self_pricing'),
-)
-
-const showConfigPanel = computed(() =>
-  hasPerm('perm_nav_ai_pricing_city_benchmark') ||
-  hasPerm('perm_nav_ai_pricing_smelter_price') ||
-  hasPerm('perm_nav_ai_pricing_margin_manage'),
-)
 
 const pageMeta: Record<string, { title: string; icon: string }> = {
   benchmarkAnalysis: { title: '库房AI定价对标分析', icon: 'bi bi-bar-chart-line' },
@@ -1485,7 +1472,8 @@ async function doWarehouseSearch(query: string) {
     const results: Array<{ id: number; name: string }> = []
     const map = new Map<string, { id: number; province: string; city: string }>()
     for (const r of rows) {
-      const name = String(r['仓库名'] ?? r['仓库名称'] ?? r['name'] ?? '').trim()
+      const name =
+        warehouseDisplayName(String(r['仓库名'] ?? r['仓库名称'] ?? r['name'] ?? '').trim())
       const id = Number(r['仓库id'] ?? r['库房id'] ?? r.id ?? 0)
       if (!name) continue
       results.push({ id, name })
@@ -1725,7 +1713,7 @@ function toggleSelfPricingWarehouseDropdown() {
 
 function selectSelfPricingWarehouse(w: { id: number; name: string }) {
   selfPricingWarehouseId.value = w.id
-  selfPricingWarehouseName.value = `${w.name}（${w.id}）`
+  selfPricingWarehouseName.value = w.name
   spShowDropdown.value = false
   spSearchQuery.value = ''
   loadSelfPricingLinks()
@@ -1783,7 +1771,8 @@ async function loadSelfPricingWarehouseOptions() {
     selfPricingWarehouseOptions.value = rows
       .map((r) => {
         const id = pickNum2(r, ['仓库id', '库房id', 'warehouse_id', 'id'])
-        const name = pickStr2(r, ['仓库名', 'warehouse_name', 'name']) || `库房#${id}`
+        const name =
+          warehouseDisplayName(pickStr2(r, ['仓库名', 'warehouse_name', 'name'])) || `库房#${id}`
         return { id, name }
       })
       .filter((x) => x.id > 0)
@@ -1804,7 +1793,7 @@ async function loadSelfPricingLinks() {
   spErrorMsg.value = ''
   try {
     const rows = await fetchTlWarehouseLinksOutbound(whId)
-    const srcName = selfPricingWarehouseName.value || `库房#${whId}`
+    const srcName = warehouseDisplayName(selfPricingWarehouseName.value) || `库房#${whId}`
     const links: SelfPricingLink[] = []
 
     for (const row of rows) {
@@ -1817,6 +1806,7 @@ async function loadSelfPricingLinks() {
       let toName = pickStr2(o, ['对标库房名', '目标库房名', 'to_warehouse_name', 'target_warehouse_name'])
       if (!toName && tgtObj) toName = pickStr2(tgtObj, ['仓库名', 'warehouse_name', 'name'])
       if (!toName) toName = `库房#${toId}`
+      toName = warehouseDisplayName(toName)
 
       let tierPriceDiff = '—'
       for (const k of ['阶梯价差', 'ladder_price_diff', 'tier_price_diff']) {

@@ -1,33 +1,7 @@
 <template>
   <div ref="emapShellRef" class="emap-shell emap-shell--dashboard">
-    <div class="emap-toolbar">
-      <div v-if="toolbarCollapsed" class="emap-toolbar-collapsed">
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-secondary"
-          title="展开比价类型、品类吨数等设置"
-          @click="toggleToolbarCollapse"
-        >
-          <i class="bi bi-chevron-down" aria-hidden="true"></i>
-          展开设置
-        </button>
-        <span class="emap-title emap-title--compact">
-          <i class="bi bi-map"></i>
-          废铅蓄电池供应链服务系统
-        </span>
-        <button
-          type="button"
-          class="btn btn-sm btn-outline-primary ms-auto"
-          :disabled="loading"
-          title="进入页面时会自动同步；点此立即从服务器拉取库房与冶炼厂并更新缓存"
-          @click="onManualRefreshMarkers"
-        >
-          <span v-if="loading" class="spinner-border spinner-border-sm me-1 text-light" role="status" />
-          {{ loading ? '加载中…' : '刷新数据' }}
-        </button>
-      </div>
-      <template v-else>
-        <div class="emap-toolbar-row">
+    <div v-if="!toolbarCollapsed" class="emap-toolbar">
+      <div class="emap-toolbar-row">
           <div class="emap-toolbar-main">
             <div class="emap-toolbar-heading">
               <button
@@ -115,10 +89,41 @@
             </div>
           </div>
         </div>
-      </template>
     </div>
-    <div ref="mapWrapRef" class="emap-map-wrap">
+    <div ref="mapWrapRef" class="emap-map-wrap" :class="{ 'emap-map-wrap--toolbar-collapsed': toolbarCollapsed }">
+      <button
+        v-if="toolbarCollapsed && !comparisonModalVisible && !warehouseDistanceMonitorOn"
+        type="button"
+        class="btn btn-sm btn-outline-secondary emap-toolbar-collapsed-fab"
+        title="展开比价类型、品类吨数等设置"
+        @click="toggleToolbarCollapse"
+      >
+        比价设置
+      </button>
       <div ref="mapElRef" class="emap-map" />
+      <div v-if="selectedWarehouse" class="emap-wh-selection-lock">
+        <span class="emap-wh-selection-lock-label" :title="selectedWarehouse.title">{{
+          selectedWarehouse.title
+        }}</span>
+        <button
+          type="button"
+          class="btn btn-sm emap-wh-selection-lock-btn"
+          :class="warehouseSelectionLocked ? 'btn-warning' : 'btn-outline-secondary'"
+          :title="
+            warehouseSelectionLocked
+              ? '已锁定当前库房，拖拽地图时不会误选其他库房；点击取消锁定'
+              : '锁定当前库房，拖拽地图时避免误选其他库房'
+          "
+          @click="toggleWarehouseSelectionLock"
+        >
+          <i
+            class="bi"
+            :class="warehouseSelectionLocked ? 'bi-lock-fill' : 'bi-lock'"
+            aria-hidden="true"
+          ></i>
+          {{ warehouseSelectionLocked ? '取消锁定' : '锁定库房' }}
+        </button>
+      </div>
       <div v-if="markersSyncing" class="emap-markers-sync-hint" role="status" aria-live="polite">
         <span class="spinner-border spinner-border-sm emap-markers-sync-hint-spin" aria-hidden="true" />
         正在从服务器同步库房与冶炼厂…
@@ -374,28 +379,12 @@
         </p>
         <div class="emap-floating-actions-btns">
           <button
-            type="button"
-            class="btn btn-sm btn-outline-primary"
-            :disabled="compareLoading"
-            @click="runComparisonForWarehouse(selectedWarehouse, { announceMissingPrereq: true })"
-          >
-            {{ compareLoading ? '比价中…' : '重新比价' }}
-          </button>
-          <button
-            type="button"
-            class="btn btn-sm btn-outline-success"
-            :disabled="forecastLoading"
-            @click="runForecastForWarehouse(selectedWarehouse)"
-          >
-            {{ forecastLoading ? '预测中…' : '重新预测送货量' }}
-          </button>
-          <button
             v-if="comparisonRanks.length"
             type="button"
             class="btn btn-sm btn-outline-dark"
             @click="openComparisonModal"
           >
-            查看比价结果
+            查看比价预测结果
           </button>
           <button
             type="button"
@@ -428,7 +417,18 @@
         }"
       >
         <div class="emap-cmp-panel-head">
-          <h4 class="emap-cmp-panel-title">{{ comparisonModalTitle }}</h4>
+          <div class="emap-cmp-panel-head-main">
+            <button
+              v-if="toolbarCollapsed"
+              type="button"
+              class="btn btn-sm btn-outline-secondary emap-cmp-panel-settings-btn"
+              title="展开比价类型、品类吨数等设置"
+              @click="toggleToolbarCollapse"
+            >
+              比价设置
+            </button>
+            <h4 class="emap-cmp-panel-title">{{ comparisonModalTitle }}</h4>
+          </div>
           <div class="emap-cmp-panel-head-actions">
             <button
               v-if="!warehouseDistanceMonitorOn"
@@ -460,7 +460,7 @@
                   <th>对标库房</th>
                   <th class="emap-wh-dist-col-km">库房距离</th>
                   <th>阶梯价差</th>
-                  <th>实时价差</th>
+                  <th>实际价差</th>
                 </tr>
               </thead>
               <tbody>
@@ -516,10 +516,10 @@
                 <th class="emap-cmp-col-smelter">冶炼厂名称</th>
                 <th class="emap-cmp-col-unit">运费单价</th>
                 <th class="emap-cmp-col-cats">各品种单价</th>
-                <th class="emap-cmp-col-money">总回收价</th>
-                <th class="emap-cmp-col-money">总运费</th>
-                <th class="emap-cmp-col-money">货值</th>
-                <th class="emap-cmp-col-money">每吨货值</th>
+                <th class="emap-cmp-col-money">库房回收价</th>
+                <th class="emap-cmp-col-money">运费</th>
+                <th class="emap-cmp-col-money">毛利</th>
+                <th class="emap-cmp-col-money">每吨毛利</th>
               </tr>
             </thead>
             <tbody>
@@ -603,13 +603,13 @@
                     title="点击查看完整内容"
                     @click.stop="
                       openComparisonCellDetail(
-                        '总回收价',
+                        '库房回收价',
                         formatComparisonTotalRecoveryCell(row.totalRecovery),
                       )
                     "
                     @keydown.enter.prevent="
                       openComparisonCellDetail(
-                        '总回收价',
+                        '库房回收价',
                         formatComparisonTotalRecoveryCell(row.totalRecovery),
                       )
                     "
@@ -622,10 +622,10 @@
                     role="button"
                     title="点击查看完整内容"
                     @click.stop="
-                      openComparisonCellDetail('总运费', formatComparisonFreightCell(row.totalFreight))
+                      openComparisonCellDetail('运费', formatComparisonFreightCell(row.totalFreight))
                     "
                     @keydown.enter.prevent="
-                      openComparisonCellDetail('总运费', formatComparisonFreightCell(row.totalFreight))
+                      openComparisonCellDetail('运费', formatComparisonFreightCell(row.totalFreight))
                     "
                     >{{ formatComparisonFreightCell(row.totalFreight) }}</span>
                 </td>
@@ -636,10 +636,10 @@
                     role="button"
                     title="点击查看完整内容"
                     @click.stop="
-                      openComparisonCellDetail('货值', formatComparisonNetProfitCell(row))
+                      openComparisonCellDetail('毛利', formatComparisonNetProfitCell(row))
                     "
                     @keydown.enter.prevent="
-                      openComparisonCellDetail('货值', formatComparisonNetProfitCell(row))
+                      openComparisonCellDetail('毛利', formatComparisonNetProfitCell(row))
                     "
                     >{{ formatComparisonNetProfitCell(row) }}</span>
                 </td>
@@ -650,10 +650,10 @@
                     role="button"
                     title="点击查看完整内容"
                     @click.stop="
-                      openComparisonCellDetail('每吨货值', formatValuePerTonCell(row))
+                      openComparisonCellDetail('每吨毛利', formatValuePerTonCell(row))
                     "
                     @keydown.enter.prevent="
-                      openComparisonCellDetail('每吨货值', formatValuePerTonCell(row))
+                      openComparisonCellDetail('每吨毛利', formatValuePerTonCell(row))
                     "
                     >{{ formatValuePerTonCell(row) }}</span>
                 </td>
@@ -830,6 +830,7 @@ import iconUrl from 'leaflet/dist/images/marker-icon.png'
 import shadowUrl from 'leaflet/dist/images/marker-shadow.png'
 import axios from 'axios'
 import { ApiPaths } from '../api/paths'
+import { warehouseDisplayName } from '@/utils/warehouseDisplayName'
 import {
   fetchTlCalculateDistance,
   fetchTlCategories,
@@ -1115,7 +1116,7 @@ const forecastModalMeta = ref<ForecastChartMeta | null>(null)
 const forecastModalDates = ref<string[]>([])
 const forecastModalValues = ref<number[]>([])
 const comparisonModalVisible = ref(false)
-const comparisonModalTitle = ref('比价结果')
+const comparisonModalTitle = ref('比价预测结果')
 const comparisonSectionCollapsed = ref(false)
 const forecastSectionCollapsed = ref(false)
 /** 比价表单元格点击后展示的完整文案（列标题 + 正文） */
@@ -1267,6 +1268,8 @@ const geoNearestToastMessage = ref('')
 const comparisonPrereqToastVisible = ref(false)
 const comparisonPrereqToastMessage = ref('')
 const selectedWarehouse = ref<MapPoint | null>(null)
+/** 锁定后禁止切换至其他库房（拖拽地图时防误触） */
+const warehouseSelectionLocked = ref(false)
 const comparisonType = ref<'base' | 'tax3'>('base')
 /** 与品类 id 对应：默认全选、吨数默认 1（与智能比价一致可改） */
 const categoryPrefs = reactive<Record<number, { selected: boolean; tons: string }>>({})
@@ -1389,6 +1392,43 @@ function applyWarehouseTypeVisibility() {
   }
 }
 
+function applyGlobalMarkerVisibility() {
+  const markerLayer = markerLayerRef.value
+  if (!markerLayer) return
+  const map = mapRef.value
+  if (!map) return
+  for (const p of allWarehousePoints.value) {
+    const m = warehouseMarkerById.get(p.id)
+    if (!m) continue
+    const isOnMap = map.hasLayer(m)
+    if (hideAllWarehouses.value) {
+      if (isOnMap) m.remove()
+    } else {
+      if (!isOnMap) m.addTo(markerLayer)
+    }
+  }
+  for (const p of allSmelterPoints.value) {
+    const m = smelterMarkerById.get(p.id)
+    if (!m) continue
+    const isOnMap = map.hasLayer(m)
+    if (hideAllSmelters.value) {
+      if (isOnMap) m.remove()
+    } else {
+      if (!isOnMap) m.addTo(markerLayer)
+    }
+  }
+}
+
+function toggleAllWarehousesVisibility() {
+  hideAllWarehouses.value = !hideAllWarehouses.value
+  applyGlobalMarkerVisibility()
+}
+
+function toggleAllSmeltersVisibility() {
+  hideAllSmelters.value = !hideAllSmelters.value
+  applyGlobalMarkerVisibility()
+}
+
 function syncEmapFullscreenFlag() {
   const shell = emapShellRef.value
   const fs =
@@ -1433,6 +1473,10 @@ function onEmapFullscreenChange() {
 const allSmelterPoints = ref<MapPoint[]>([])
 /** 隐藏的库房类型标签集合 */
 const hiddenWarehouseTypes = ref<Set<string>>(new Set())
+/** 全局隐藏所有库房标记 */
+const hideAllWarehouses = ref(false)
+/** 全局隐藏所有冶炼厂标记 */
+const hideAllSmelters = ref(false)
 
 /** 库房 id → 标记，用于选中时把其余库房变浅 */
 const warehouseMarkerById = new Map<string, L.Marker>()
@@ -1534,7 +1578,9 @@ function pickLatLng(row: Record<string, unknown>): [number, number] | null {
 }
 
 function warehouseLabel(row: Record<string, unknown>): string {
-  return pickStr(row, ['仓库名', 'warehouse_name', 'name', '仓库', '库房名', 'title'])
+  return warehouseDisplayName(
+    pickStr(row, ['仓库名', 'warehouse_name', 'name', '仓库', '库房名', 'title']),
+  )
 }
 
 function smelterLabel(row: Record<string, unknown>): string {
@@ -1699,10 +1745,47 @@ function setMapViewWithWarehouseLeftPanelBias(
   map.setView(centerLL, z, { animate })
 }
 
+function toggleWarehouseSelectionLock() {
+  warehouseSelectionLocked.value = !warehouseSelectionLocked.value
+  refreshWarehouseMarkerLockInteractivity()
+}
+
+/** 锁定库房时禁用其他库房图钉的指针事件，避免拖拽地图误触 */
+function refreshWarehouseMarkerLockInteractivity() {
+  const locked = warehouseSelectionLocked.value
+  const lockedId =
+    selectedWarehouse.value?.kind === 'warehouse' ? selectedWarehouse.value.id : null
+  warehouseMarkerById.forEach((marker, id) => {
+    const el = marker.getElement() as HTMLElement | null
+    if (!el) return
+    const block = locked && lockedId != null && id !== lockedId
+    el.style.pointerEvents = block ? 'none' : ''
+    if (block) {
+      marker.closeTooltip()
+      if (marker.isPopupOpen()) marker.closePopup()
+    }
+  })
+}
+
+function isWarehouseSelectionChangeBlocked(p: MapPoint): boolean {
+  return (
+    p.kind === 'warehouse' &&
+    warehouseSelectionLocked.value &&
+    selectedWarehouse.value?.kind === 'warehouse' &&
+    selectedWarehouse.value.id !== p.id
+  )
+}
+
 function focusMapPointFromSearch(p: MapPoint, opts?: { silent?: boolean }) {
   const map = mapRef.value
   if (!map) {
     emapSearchFeedback.value = '地图尚未就绪'
+    return
+  }
+  if (isWarehouseSelectionChangeBlocked(p)) {
+    if (!opts?.silent) {
+      emapSearchFeedback.value = '已锁定当前库房，请先取消锁定再切换'
+    }
     return
   }
   const nMatch = emapPointSearchCandidates.value.length
@@ -1805,39 +1888,66 @@ function resolveWarehousePinColor(
   return DEFAULT_WAREHOUSE_COLOR
 }
 
-/** 库房弹窗 HTML：「类型」用「库房类型颜色配置」着色 */
-function warehousePopupHtml(p: MapPoint): string {
-  const row = p.raw
-  const typeName = pickStr(row, ['类型', 'type', 'warehouse_type_name', '类型名'])
-  const typeColorRaw = pickStr(row, ['库房类型颜色配置', '类型颜色配置'])
-  const typeColor = typeColorRaw
-    ? safeCssColor(typeColorRaw, '#4b5563')
-    : '#4b5563'
-  const typeBlock =
-    typeName !== ''
-      ? `<div class="emap-popup-type"><span class="emap-popup-type-label">类型：</span><span class="emap-popup-type-value" style="color:${escapeHtml(
-          typeColor,
-        )}">${escapeHtml(typeName)}</span></div>`
-      : ''
-  return `<div class="emap-popup emap-popup--warehouse"><strong>${escapeHtml(p.title)}</strong><br/>${typeBlock}<span class="emap-popup-subtitle text-muted small">${escapeHtml(
-    p.subtitle,
-  )}</span></div>`
+/** 解析库房→冶炼厂运费列表（/tl/get_warehouses 字段「库房到冶炼厂运费」） */
+function pickWarehouseSmelterFreights(
+  raw: Record<string, unknown>,
+): { smelter: string; freight: number | null }[] {
+  const arr = raw['库房到冶炼厂运费']
+  if (!Array.isArray(arr) || !arr.length) return []
+  const out: { smelter: string; freight: number | null }[] = []
+  for (const item of arr) {
+    if (!item || typeof item !== 'object') continue
+    const o = item as Record<string, unknown>
+    const smelter = pickStr(o, [
+      '目标冶炼厂',
+      '冶炼厂',
+      '冶炼厂名',
+      'factory_name',
+      '目标冶炼厂名',
+      'smelter_name',
+    ])
+    const freight = pickNumber(o, ['运费', 'freight', 'freight_rate'])
+    if (!smelter && freight === null) continue
+    out.push({ smelter: smelter || '—', freight })
+  }
+  return out
 }
 
-/** 库房鼠标悬浮：多字段完整展示，换行包裹不撑破框（点击弹窗仍用 warehousePopupHtml） */
+function warehouseSmelterFreightBlockHtml(
+  freights: { smelter: string; freight: number | null }[],
+): string {
+  if (!freights.length) {
+    return `<div class="emap-wh-hover-row"><span class="emap-wh-hover-k">运费</span><span class="emap-wh-hover-v">—</span></div>`
+  }
+  const items = freights
+    .map((f) => {
+      const val = f.freight === null ? '—' : `${f.freight} 元/吨`
+      return `<div class="emap-wh-hover-freight-item"><span class="emap-wh-hover-freight-smelter">${escapeHtml(
+        f.smelter,
+      )}</span><span class="emap-wh-hover-freight-val">${escapeHtml(val)}</span></div>`
+    })
+    .join('')
+  return `<div class="emap-wh-hover-freight"><div class="emap-wh-hover-freight-head">运费</div><div class="emap-wh-hover-freight-scroll">${items}</div></div>`
+}
+
+/** 库房信息卡片 HTML：悬浮 tooltip 与点击弹窗共用 */
 function warehouseHoverTooltipHtml(p: MapPoint): string {
   const raw = p.raw
   const name =
-    pickStr(raw, ['仓库名', 'warehouse_name', 'name', '仓库', '库房名', 'title']) || p.title
+    warehouseDisplayName(
+      pickStr(raw, ['仓库名', 'warehouse_name', 'name', '仓库', '库房名', 'title']) || p.title,
+    )
+  const typeName =
+    pickStr(raw, ['类型', 'type', 'warehouse_type_name', '类型名']).trim() || '—'
   const addr = addressText(raw)
   const contact = pickStr(raw, ['库房联系人', '联系人', 'contact', '联络人'])
   const phone = pickStr(raw, ['电话', '手机', '联系电话', 'mobile', 'tel'])
   const haz = pickNumber(raw, ['危废经营许可数量', 'hazard_license_count', '危废许可数量'])
   const monthly = pickNumber(raw, ['月均收货', 'monthly_avg_receipt', '月均采购'])
-  const freight = pickNumber(raw, ['运费', 'freight', 'shipping_fee'])
+  const smelterFreights = pickWarehouseSmelterFreights(raw)
   const hazText = haz === null ? '—' : String(haz)
   const monthlyText = monthly === null ? '—' : String(monthly)
-  const freightText = freight === null ? '—' : String(freight)
+  const freightBlock = warehouseSmelterFreightBlockHtml(smelterFreights)
   const tipRow = (label: string, value: string) =>
     `<div class="emap-wh-hover-row"><span class="emap-wh-hover-k">${escapeHtml(
       label,
@@ -1848,12 +1958,15 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
     )}</span><span class="emap-wh-hover-v">${escapeHtml(value)}</span></div>`
   const dual = (a: string, b: string) => `<div class="emap-wh-hover-dual">${a}${b}</div>`
   return `<div class="emap-wh-hover-tip"><div class="emap-wh-hover-inner">${tipRow('库房名称', name)}${tipRow(
+    '库房类型',
+    typeName,
+  )}${tipRow(
     '地址',
     addr || '—',
   )}${dual(metric('联系人', contact || '—'), metric('电话', phone || '—'))}${dual(
     metric('危废经营许可数量', hazText),
     metric('月均收货', monthlyText),
-  )}${tipRow('运费', freightText)}</div></div>`
+  )}${freightBlock}</div></div>`
 }
 
 function smelterPopupHtml(p: MapPoint): string {
@@ -1938,8 +2051,9 @@ function initMap() {
       const lng = evt.latlng.lng.toFixed(6)
       lastClickedCoordText.value = `坐标：${lat}, ${lng}`
     }
-    // 点击地图空白区域：取消当前仓库选中并清空比价/距离线覆盖物
+    // 点击地图空白区域：取消当前仓库选中并清空比价/距离线覆盖物（锁定时不取消）
     if (selectedWarehouse.value?.kind === 'warehouse') {
+      if (warehouseSelectionLocked.value) return
       selectedWarehouse.value = null
       clearComparisonOverlays()
     }
@@ -2134,12 +2248,18 @@ function refreshAllMarkerVisualState() {
   }
 }
 
-watch(selectedWarehouse, () => {
+watch(selectedWarehouse, (wh) => {
+  if (!wh) warehouseSelectionLocked.value = false
   if (warehouseDistanceMonitorOn.value) {
     exitWarehouseDistanceMonitorMode(false)
     comparisonModalVisible.value = false
   }
   refreshAllMarkerVisualState()
+  refreshWarehouseMarkerLockInteractivity()
+})
+
+watch(warehouseSelectionLocked, () => {
+  refreshWarehouseMarkerLockInteractivity()
 })
 
 watch([comparisonRanks, warehouseDistanceMonitorOn, compareLoading], () => {
@@ -2232,7 +2352,7 @@ function smelterIcon(dimmed = false, large = false): L.DivIcon {
   })
 }
 
-function renderMarkers(points: MapPoint[]) {
+function renderMarkers(points: MapPoint[], options?: { preserveMapView?: boolean }) {
   const map = mapRef.value
   const markerLayer = markerLayerRef.value
   if (!map || !markerLayer) return
@@ -2252,10 +2372,9 @@ function renderMarkers(points: MapPoint[]) {
     const marker = L.marker([p.lat, p.lng], { icon })
     const popupHtml =
       p.kind === 'warehouse'
-        ? warehousePopupHtml(p)
+        ? warehouseHoverTooltipHtml(p)
         : smelterPopupHtml(p)
-    const tooltipHtml =
-      p.kind === 'warehouse' ? warehouseHoverTooltipHtml(p) : popupHtml
+    const tooltipHtml = popupHtml
     marker.bindPopup(popupHtml)
     marker.bindTooltip(tooltipHtml, {
       sticky: false,
@@ -2271,6 +2390,7 @@ function renderMarkers(points: MapPoint[]) {
     })
     if (p.kind === 'warehouse') {
       marker.on('click', () => {
+        if (isWarehouseSelectionChangeBlocked(p)) return
         selectedWarehouse.value = p
         forecastError.value = ''
         if (enableAutoZoomOnPointClick.value) {
@@ -2294,6 +2414,9 @@ function renderMarkers(points: MapPoint[]) {
 
   refreshAllMarkerVisualState()
   applyWarehouseTypeVisibility()
+  refreshWarehouseMarkerLockInteractivity()
+
+  if (options?.preserveMapView) return
 
   const bounds = L.latLngBounds([])
   for (const p of points) bounds.extend([p.lat, p.lng])
@@ -2334,7 +2457,7 @@ function comparisonRankTipHtml(row: ComparisonRankItem): string {
   const rk = escapeHtml(String(row.rank))
   const name = escapeHtml(row.smelter)
   const badgeCls = comparisonRankBadgeClass(row.rank)
-  return `<div class="emap-rank-tip-inner"><span class="${badgeCls}">${rk}</span><div class="emap-rank-tip-body"><div class="emap-rank-tip-name">${name}</div><div>货值: ${formatNum(row.netProfit)}</div><div>总价: ${formatNum(row.totalRecovery)}</div><div>总运费: ${formatNum(row.totalFreight)}</div></div></div>`
+  return `<div class="emap-rank-tip-inner"><span class="${badgeCls}">${rk}</span><div class="emap-rank-tip-body"><div class="emap-rank-tip-name">${name}</div><div>毛利: ${formatNum(row.netProfit)}</div><div>库房回收价: ${formatNum(row.totalRecovery)}</div><div>运费: ${formatNum(row.totalFreight)}</div></div></div>`
 }
 
 /** 比价常驻 tip：方向轮询 + 像素防重叠 */
@@ -2735,6 +2858,20 @@ function pickNumberComparisonDetail(row: Record<string, unknown>, keys: string[]
   return null
 }
 
+/** 库房回收价：优先接口明细行顶层「总回收价」，再回退含循融宝等口径下的总价 */
+function pickDetailTotalRecovery(row: Record<string, unknown>): number | null {
+  const direct = pickNumber(row, ['总回收价', 'total_recovery'])
+  if (direct != null && Number.isFinite(direct)) return direct
+  return pickNumberComparisonDetail(row, [
+    '总回收价',
+    'total_recovery',
+    '总价',
+    '报价金额',
+    '物料总价',
+    'material_sum',
+  ])
+}
+
 /** 与嵌入页 Ut() 一致：明细行取价口径（循融宝厂优先 `含循融宝`） */
 function pickDetailUnitPrice(row: Record<string, unknown>, priceMode: 'base' | 'tax3'): number | null {
   if (priceMode === 'tax3') {
@@ -2922,7 +3059,9 @@ function buildExcludedComparisonRankFromDetails(
     const qty = pickNumber(row, ['吨数', 'quantity', 'qty', '需求吨数', 'weight']) ?? 0
     const qtyEff = Math.max(0, qty)
     const up = pickNumber(ex, ['单价', '基准价', '含3%税价', '报价', 'unit_price', '最优价'])
-    const tot = pickNumber(ex, ['总价', '报价金额', '物料总价', 'total_recovery', 'material_sum'])
+    const tot =
+      pickNumber(ex, ['总回收价', 'total_recovery']) ??
+      pickNumber(ex, ['总价', '报价金额', '物料总价', 'material_sum'])
     const tf = pickNumber(ex, ['总运费', '运费合计'])
     if (tot != null && Number.isFinite(tot)) totalRecovery += tot
     else if (up != null && qty > 0) totalRecovery += up * qty
@@ -3343,8 +3482,8 @@ function parseSmelterProfitRankArray(
     const netProfit = pickProfitFromSmelterRankRow(row, priceMode)
     const totalRecovery =
       pickNumber(row, [
-        '总价合计',
         '总回收价',
+        '总价合计',
         '回收额',
         'totalRecovery',
         'materialSum',
@@ -3424,13 +3563,7 @@ function mergeComparisonRanksWithDetailRows(
         'unit_price',
         '最优价',
       ])
-      const tot = pickNumberComparisonDetail(row, [
-        '总价',
-        '报价金额',
-        '物料总价',
-        'total_recovery',
-        'material_sum',
-      ])
+      const tot = pickDetailTotalRecovery(row)
       const tf = pickNumberComparisonDetail(row, ['总运费', '运费合计'])
       if (tot != null && Number.isFinite(tot)) totalRecovery += tot
       else if (up != null && qty > 0) totalRecovery += up * qty
@@ -3531,15 +3664,7 @@ function parseRankRowsLoose(
     fallback += 1
     const rank = pickNumber(row, ['排名', '排行', '排序', 'rank', '名次']) ?? fallback
     const netProfit = netProfitRaw
-    const totalRecovery =
-      pickNumberComparisonDetail(row, [
-        '总价',
-        '总回收价',
-        '回收额',
-        '物料总价',
-        'total_recovery',
-        'material_sum',
-      ]) ?? 0
+    const totalRecovery = pickDetailTotalRecovery(row) ?? 0
     const totalFreight =
       pickNumberComparisonDetail(row, [
         '总运费',
@@ -3682,7 +3807,9 @@ function aggregateComparisonRows(
     const upLine = pickDetailUnitPrice(row, priceMode)
     g.categoryPrices[cat] = upLine != null && Number.isFinite(upLine) ? upLine : null
     const qtyEff = Math.max(0, qty)
-    g.materialSum += unitPrice * qtyEff
+    const lineRecovery = pickDetailTotalRecovery(row)
+    if (lineRecovery != null && Number.isFinite(lineRecovery)) g.materialSum += lineRecovery
+    else g.materialSum += unitPrice * qtyEff
     g.freightSum += freight
     g.freightCount += 1
     if (lineTotalFreight != null && Number.isFinite(lineTotalFreight)) g.totalFreightSum += lineTotalFreight
@@ -3815,8 +3942,8 @@ function linkOutboundTargetName(row: Record<string, unknown>, toId: number): str
     }
   }
   const tgt = findWarehousePointByNumericId(toId)
-  if (tgt?.title) return tgt.title
-  return toName || `库房 #${toId}`
+  if (tgt?.title) return warehouseDisplayName(tgt.title)
+  return warehouseDisplayName(toName) || `库房 #${toId}`
 }
 
 async function buildWarehouseDistanceTableRows(
@@ -4077,7 +4204,7 @@ function exitWarehouseDistanceMonitorMode(restoreComparisonOverlay = true) {
   const wh = selectedWarehouse.value
   if (restoreComparisonOverlay && wh && comparisonRanks.value.length) {
     const title = wh.title?.trim()
-    comparisonModalTitle.value = title ? `比价结果：${title}` : '比价结果'
+    comparisonModalTitle.value = title ? `比价预测结果：${title}` : '比价预测结果'
     void renderComparisonOverlay(wh, comparisonRanks.value)
   }
 }
@@ -4362,7 +4489,7 @@ function openComparisonModal() {
     exitWarehouseDistanceMonitorMode(false)
   }
   const wh = selectedWarehouse.value?.title?.trim()
-  comparisonModalTitle.value = wh ? `比价结果：${wh}` : '比价结果'
+  comparisonModalTitle.value = wh ? `比价预测结果：${wh}` : '比价预测结果'
   comparisonSectionCollapsed.value = false
   forecastSectionCollapsed.value = false
   comparisonModalVisible.value = true
@@ -4630,7 +4757,9 @@ function reviveMapPointFromCache(p: unknown): MapPoint | null {
     o.raw != null && typeof o.raw === 'object' && !Array.isArray(o.raw)
       ? (o.raw as Record<string, unknown>)
       : {}
-  const title = typeof o.title === 'string' ? o.title : String(o.title ?? '')
+  const titleRaw = typeof o.title === 'string' ? o.title : String(o.title ?? '')
+  const title =
+    o.kind === 'warehouse' ? warehouseDisplayName(titleRaw) : titleRaw
   const cachedSubtitle = typeof o.subtitle === 'string' ? o.subtitle : String(o.subtitle ?? '')
   const subtitle = mapPointSubtitleForDisplay(raw, cachedSubtitle)
   if (o.kind === 'warehouse') {
@@ -4713,6 +4842,17 @@ type MarkersLoadUi = 'full' | 'silent'
 async function loadAndPlot(ui: MarkersLoadUi = 'full') {
   const seq = ++markersLoadSeq
   loadError.value = ''
+  const preserveWarehouseContext =
+    ui === 'full' && selectedWarehouse.value?.kind === 'warehouse'
+  const savedWhId = preserveWarehouseContext ? selectedWarehouse.value!.id : null
+  const shouldRerunComparison =
+    preserveWarehouseContext &&
+    (comparisonRanks.value.length > 0 || comparisonModalVisible.value)
+  const mapBefore = mapRef.value
+  const savedCenter =
+    preserveWarehouseContext && mapBefore ? mapBefore.getCenter() : null
+  const savedZoom =
+    preserveWarehouseContext && mapBefore ? mapBefore.getZoom() : null
   if (ui === 'full') {
     loading.value = true
     markersSyncing.value = false
@@ -4771,8 +4911,25 @@ async function loadAndPlot(ui: MarkersLoadUi = 'full') {
     if (!points.length) {
       loadError.value = '接口未返回可打点的库房或冶炼厂经纬度，请在业务系统补全坐标后刷新。'
     }
-    renderMarkers(points)
+    renderMarkers(points, { preserveMapView: preserveWarehouseContext })
     writeEmapMarkersCache(points)
+
+    if (savedWhId) {
+      const wh = allWarehousePoints.value.find(
+        (p) => p.kind === 'warehouse' && p.id === savedWhId,
+      )
+      if (wh) {
+        selectedWarehouse.value = wh
+        if (savedCenter != null && savedZoom != null && mapRef.value) {
+          mapRef.value.setView(savedCenter, savedZoom, { animate: false })
+        }
+        refreshAllMarkerVisualState()
+        refreshWarehouseMarkerLockInteractivity()
+        if (shouldRerunComparison) {
+          void runComparisonAndForecastForWarehouse(wh)
+        }
+      }
+    }
   } catch (e) {
     if (seq !== markersLoadSeq) return
     loadError.value = e instanceof Error ? e.message : String(e)
@@ -4874,17 +5031,19 @@ onBeforeUnmount(() => {
     0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
-.emap-toolbar-collapsed {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+.emap-toolbar-collapsed-fab {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 1002;
+  backdrop-filter: blur(8px);
+  background: rgba(6, 18, 40, 0.9);
+  border-color: rgba(34, 211, 238, 0.38);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
-.emap-title--compact {
-  flex: 1;
-  min-width: 0;
-  margin-bottom: 0;
+.emap-map-wrap--toolbar-collapsed :deep(.leaflet-top.leaflet-left) {
+  top: 48px;
 }
 
 .emap-toolbar-heading {
@@ -5106,6 +5265,42 @@ onBeforeUnmount(() => {
   width: 100%;
   height: 100%;
   background: #0a1628;
+}
+
+.emap-wh-selection-lock {
+  position: absolute;
+  top: 10px;
+  right: 56px;
+  left: auto;
+  transform: none;
+  z-index: 1001;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(420px, calc(100% - 24px));
+  padding: 4px 8px 4px 10px;
+  background: rgba(6, 18, 40, 0.92);
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  pointer-events: auto;
+}
+
+.emap-wh-selection-lock-label {
+  font-size: 12px;
+  color: #cbd5e1;
+  max-width: min(200px, 42vw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.emap-wh-selection-lock-btn {
+  font-size: 11px;
+  padding: 2px 8px;
+  line-height: 1.35;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .emap-floating-actions {
@@ -5829,6 +6024,21 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 10px;
   margin-bottom: 10px;
+}
+
+.emap-cmp-panel-head-main {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.emap-cmp-panel-settings-btn {
+  flex-shrink: 0;
+  backdrop-filter: blur(8px);
+  background: rgba(6, 18, 40, 0.9);
+  border-color: rgba(34, 211, 238, 0.38);
 }
 
 .emap-cmp-panel-title {
@@ -7099,7 +7309,7 @@ onBeforeUnmount(() => {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
 }
 
-/* 仓库/冶炼厂悬浮：横向卡片；过长用省略号，不撑出框（与点击弹窗区分开） */
+/* 仓库/冶炼厂悬浮与点击弹窗：横向卡片；过长用省略号，不撑出框 */
 .leaflet-tooltip.emap-marker-hover-tip {
   background: rgba(6, 18, 40, 0.96) !important;
   color: #e2e8f0 !important;
@@ -7121,8 +7331,9 @@ onBeforeUnmount(() => {
   padding: 6px 8px !important;
 }
 
-/* 库房悬浮：宽度定标，高度不超过 16:9 对应高度（内容少则盒子变矮）；同行标签+值、双列指标提高利用率 */
-.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-tip {
+/* 库房信息卡片：宽度定标，高度不超过 16:9 对应高度（内容少则盒子变矮）；同行标签+值、双列指标提高利用率 */
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-tip,
+.leaflet-popup-content .emap-wh-hover-tip {
   --emap-wh-w: min(420px, calc(100vw - 36px));
   box-sizing: border-box;
   width: var(--emap-wh-w);
@@ -7130,7 +7341,8 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-inner {
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-inner,
+.leaflet-popup-content .emap-wh-hover-inner {
   box-sizing: border-box;
   padding: 6px 8px;
   max-height: calc(var(--emap-wh-w) * 9 / 16);
@@ -7140,7 +7352,8 @@ onBeforeUnmount(() => {
   gap: 2px 0;
 }
 
-.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-row {
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-row,
+.leaflet-popup-content .emap-wh-hover-row {
   display: grid;
   grid-template-columns: minmax(5em, max-content) minmax(0, 1fr);
   column-gap: 6px;
@@ -7150,14 +7363,16 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-dual {
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-dual,
+.leaflet-popup-content .emap-wh-hover-dual {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 2px 10px;
   min-width: 0;
 }
 
-.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-metric {
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-metric,
+.leaflet-popup-content .emap-wh-hover-metric {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
   column-gap: 4px;
@@ -7167,20 +7382,82 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-k {
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-k,
+.leaflet-popup-content .emap-wh-hover-k {
   color: #94a3b8;
   flex-shrink: 0;
 }
 
-.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-k::after {
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-k::after,
+.leaflet-popup-content .emap-wh-hover-k::after {
   content: '：';
   color: #64748b;
 }
 
-.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-v {
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-v,
+.leaflet-popup-content .emap-wh-hover-v {
   color: #e2e8f0;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight,
+.leaflet-popup-content .emap-wh-hover-freight {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex-shrink: 1;
+  min-height: 0;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-head,
+.leaflet-popup-content .emap-wh-hover-freight-head {
+  font-size: 11px;
+  line-height: 1.35;
+  color: #94a3b8;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-head::after,
+.leaflet-popup-content .emap-wh-hover-freight-head::after {
+  content: '：';
+  color: #64748b;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-scroll,
+.leaflet-popup-content .emap-wh-hover-freight-scroll {
+  max-height: 72px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-item,
+.leaflet-popup-content .emap-wh-hover-freight-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: 8px;
+  align-items: start;
+  font-size: 11px;
+  line-height: 1.35;
+  min-width: 0;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-smelter,
+.leaflet-popup-content .emap-wh-hover-freight-smelter {
+  color: #e2e8f0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-val,
+.leaflet-popup-content .emap-wh-hover-freight-val {
+  color: #cbd5e1;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .leaflet-tooltip.emap-marker-hover-tip .leaflet-tooltip-content {
@@ -7250,6 +7527,16 @@ onBeforeUnmount(() => {
   margin: 10px 14px;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.emap-shell--dashboard .leaflet-popup-content:has(.emap-wh-hover-tip) {
+  max-width: min(420px, calc(100vw - 48px));
+  margin: 0;
+  padding: 0;
+}
+
+.emap-shell--dashboard .leaflet-popup-content-wrapper:has(.emap-wh-hover-tip) {
+  max-width: min(420px, calc(100vw - 32px));
 }
 
 .emap-shell--dashboard .leaflet-popup-tip {
