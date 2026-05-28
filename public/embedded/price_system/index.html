@@ -539,8 +539,93 @@
         /** 库房表单省市区：与 public/region/p-c-a.json 一致 */
         let whPcaData = null
         let whPcaLoadPromise = null
-        let whPcdCascadeWired = false
         let whRegionFillSeq = 0
+        let whRegionUserTouched = false
+        let whRegionModalKey = ''
+
+        /** 当前可见库房弹窗（避免 #modal-template 内重复 id 被 getElementById 误读） */
+        function getActiveWarehouseModalOverlay() {
+          const overlays = document.querySelectorAll('body > .modal-overlay')
+          for (let i = overlays.length - 1; i >= 0; i--) {
+            if (overlays[i].querySelector('#warehouse-name')) return overlays[i]
+          }
+          return null
+        }
+
+        function getWarehouseFormEl() {
+          const ov = getActiveWarehouseModalOverlay()
+          return ov ? ov.querySelector('#warehouse-form') : document.getElementById('warehouse-form')
+        }
+
+        function getWarehouseModalTitle() {
+          const ov = getActiveWarehouseModalOverlay()
+          if (!ov) return ''
+          const h = ov.querySelector('.modal-header h3') || ov.querySelector('#modal-title')
+          return (h?.textContent || '').trim()
+        }
+
+        function qWhRegion(id) {
+          const form = getWarehouseFormEl()
+          return form ? form.querySelector(`#${id}`) : document.getElementById(id)
+        }
+
+        function resetWarehouseRegionSessionForAdd() {
+          state.currentWarehouseEditId = null
+          whRegionUserTouched = false
+          whRegionModalKey = 'add-wh-new'
+          cancelWarehouseRegionScheduledFill()
+        }
+
+        const WH_REGION_NETWORK_HINT =
+          '省市区加载失败，可能是网络问题，请刷新页面后再试。'
+        let whRegionNetworkHintAt = 0
+        let whRegionReadyCheckTimer = null
+
+        function alertWhRegionNetworkError() {
+          const now = Date.now()
+          if (now - whRegionNetworkHintAt < 8000) return
+          whRegionNetworkHintAt = now
+          alert(WH_REGION_NETWORK_HINT)
+        }
+
+        function warehouseRegionInputsReady() {
+          const form = getWarehouseFormEl()
+          return !!(form && form.querySelector('#warehouse-province'))
+        }
+
+        function showWarehouseRegionNetworkTipInForm() {
+          const form = getWarehouseFormEl()
+          if (!form || warehouseRegionInputsReady()) return
+          let tip = form.querySelector('#warehouse-region-network-tip')
+          if (!tip) {
+            tip = document.createElement('p')
+            tip.id = 'warehouse-region-network-tip'
+            tip.className = 'region-missing-tip'
+            tip.style.marginTop = '6px'
+            form.appendChild(tip)
+          }
+          tip.textContent = WH_REGION_NETWORK_HINT
+          tip.style.display = 'block'
+        }
+
+        function hideWarehouseRegionNetworkTipInForm() {
+          const tip = getWarehouseFormEl()?.querySelector('#warehouse-region-network-tip')
+          if (tip) tip.style.display = 'none'
+        }
+
+        function scheduleWarehouseRegionReadyCheck() {
+          if (whRegionReadyCheckTimer) clearTimeout(whRegionReadyCheckTimer)
+          whRegionReadyCheckTimer = setTimeout(() => {
+            whRegionReadyCheckTimer = null
+            if (!getActiveWarehouseModalOverlay()) return
+            if (warehouseRegionInputsReady()) {
+              hideWarehouseRegionNetworkTipInForm()
+              return
+            }
+            showWarehouseRegionNetworkTipInForm()
+            alertWhRegionNetworkError()
+          }, 10000)
+        }
 
         async function ensureWhPcaLoaded() {
           if (whPcaData) return
@@ -611,10 +696,10 @@
         }
 
         function updateWarehouseRegionConflictUi() {
-          const sp = document.getElementById('warehouse-province')
-          const sc = document.getElementById('warehouse-city')
-          const sd = document.getElementById('warehouse-district')
-          const tip = document.getElementById('warehouse-region-pcd-conflict-tip')
+          const sp = qWhRegion('warehouse-province')
+          const sc = qWhRegion('warehouse-city')
+          const sd = qWhRegion('warehouse-district')
+          const tip = qWhRegion('warehouse-region-pcd-conflict-tip')
           if (!sp || !sc || !sd) return
           const pv = (sp.value || '').trim()
           const cv = (sc.value || '').trim()
@@ -648,64 +733,119 @@
           sel.value = cur
         }
 
+        function cancelWarehouseRegionScheduledFill() {
+          whRegionFillSeq++
+          if (warehouseRegionHydrateTimer) {
+            clearTimeout(warehouseRegionHydrateTimer)
+            warehouseRegionHydrateTimer = null
+          }
+        }
+
+        function syncWarehouseRegionFromForm() {
+          const sp = qWhRegion('warehouse-province')
+          const sc = qWhRegion('warehouse-city')
+          const sd = qWhRegion('warehouse-district')
+          if (!sp || !sc || !sd) return null
+          const region = {
+            province: (sp.value || '').trim(),
+            city: (sc.value || '').trim(),
+            district: (sd.value || '').trim(),
+          }
+          const wf = getWarehouseFormEl()
+          if (wf) {
+            wf.dataset.wProv = region.province
+            wf.dataset.wCity = region.city
+            wf.dataset.wDist = region.district
+          }
+          const id = state.currentWarehouseEditId
+          if (id != null && Number.isFinite(id) && id > 0) {
+            state.warehouseRegionMap.set(id, region)
+          }
+          return region
+        }
+
+        function onWarehouseRegionUserChange() {
+          whRegionUserTouched = true
+          cancelWarehouseRegionScheduledFill()
+          syncWarehouseRegionFromForm()
+        }
+
         function refreshWhRegionSelects(prefix, region) {
-          const sp = document.getElementById(`${prefix}-province`)
-          const sc = document.getElementById(`${prefix}-city`)
-          const sd = document.getElementById(`${prefix}-district`)
+          const sp =
+            prefix === 'warehouse' ? qWhRegion(`${prefix}-province`) : document.getElementById(`${prefix}-province`)
+          const sc =
+            prefix === 'warehouse' ? qWhRegion(`${prefix}-city`) : document.getElementById(`${prefix}-city`)
+          const sd =
+            prefix === 'warehouse' ? qWhRegion(`${prefix}-district`) : document.getElementById(`${prefix}-district`)
           if (!sp || !sc || !sd || !whPcaData) return
           const r = region || {}
-          const pcdProv = (r.province || '').trim()
-          const pcdCity = (r.city || '').trim()
-          const pcdDist = (r.district || '').trim()
+          let pcdProv = (r.province || '').trim()
+          let pcdCity = (r.city || '').trim()
+          let pcdDist = (r.district || '').trim()
           const provNames = whPcaData.map((p) => p.name).filter(Boolean)
           whFillSelectOptions(sp, '请选择省份', provNames, pcdProv)
           const pv = pcdProv || (sp.value || '').trim()
           const provNode = findWhProvinceNode(pv)
+          if (pcdCity && !getWhCityNodeExact(provNode, pcdCity)) pcdCity = ''
           const cityNames =
             provNode && Array.isArray(provNode.children) ? provNode.children.map((c) => c.name) : []
           whFillSelectOptions(sc, '请选择市', cityNames, pcdCity)
           const cv = pcdCity || (sc.value || '').trim()
           const cityNode = findWhCityNode(provNode, cv)
+          if (pcdDist && !isWhDistStandard(pv, cv, pcdDist)) pcdDist = ''
           const distNames =
             cityNode && Array.isArray(cityNode.children) ? cityNode.children.map((d) => d.name) : []
           whFillSelectOptions(sd, '请选择区/县', distNames, pcdDist)
           updateWarehouseRegionConflictUi()
         }
 
-        function wireWhPcdCascadesOnce(prefix) {
-          if (whPcdCascadeWired) return
-          whPcdCascadeWired = true
-          const sp = document.getElementById(`${prefix}-province`)
-          const sc = document.getElementById(`${prefix}-city`)
-          const sd = document.getElementById(`${prefix}-district`)
-          if (!sp || !sc || !sd) return
-          sp.addEventListener('change', () => {
-            if (!whPcaData) return
-            const provNode = findWhProvinceNode(sp.value)
-            const cityNames =
-              provNode && Array.isArray(provNode.children) ? provNode.children.map((c) => c.name) : []
-            whFillSelectOptions(sc, '请选择市', cityNames, '')
-            whFillSelectOptions(sd, '请选择区/县', [], '')
-            updateWarehouseRegionConflictUi()
-          })
-          sc.addEventListener('change', () => {
-            if (!whPcaData) return
-            const provNode = findWhProvinceNode(sp.value)
-            const cityNode = findWhCityNode(provNode, sc.value)
-            const distNames =
-              cityNode && Array.isArray(cityNode.children) ? cityNode.children.map((d) => d.name) : []
-            whFillSelectOptions(sd, '请选择区/县', distNames, '')
-            updateWarehouseRegionConflictUi()
-          })
-          sd.addEventListener('change', () => {
-            updateWarehouseRegionConflictUi()
+        /** 每次弹窗新建 #warehouse-form 时重新绑定（避免 whPcdCascadeWired 导致二次打开无级联） */
+        function wireWhPcdCascadesForForm() {
+          const form = getWarehouseFormEl()
+          if (!form || form.dataset.pcdCascadeWired === '1') return
+          form.dataset.pcdCascadeWired = '1'
+          form.addEventListener('change', (evt) => {
+            const t = evt.target
+            if (!t || t.tagName !== 'SELECT' || !whPcaData) return
+            const sp = qWhRegion('warehouse-province')
+            const sc = qWhRegion('warehouse-city')
+            const sd = qWhRegion('warehouse-district')
+            if (!sp || !sc || !sd) return
+            if (t.id === 'warehouse-province') {
+              onWarehouseRegionUserChange()
+              const provNode = findWhProvinceNode(sp.value)
+              const cityNames =
+                provNode && Array.isArray(provNode.children)
+                  ? provNode.children.map((c) => c.name)
+                  : []
+              whFillSelectOptions(sc, '请选择市', cityNames, '')
+              whFillSelectOptions(sd, '请选择区/县', [], '')
+              updateWarehouseRegionConflictUi()
+              return
+            }
+            if (t.id === 'warehouse-city') {
+              onWarehouseRegionUserChange()
+              const provNode = findWhProvinceNode(sp.value)
+              const cityNode = findWhCityNode(provNode, sc.value)
+              const distNames =
+                cityNode && Array.isArray(cityNode.children)
+                  ? cityNode.children.map((d) => d.name)
+                  : []
+              whFillSelectOptions(sd, '请选择区/县', distNames, '')
+              updateWarehouseRegionConflictUi()
+              return
+            }
+            if (t.id === 'warehouse-district') {
+              onWarehouseRegionUserChange()
+              updateWarehouseRegionConflictUi()
+            }
           })
         }
 
         function ensureRegionInputs(prefix) {
-          if (document.getElementById(`${prefix}-province`)) return
-          const form = document.getElementById(`${prefix}-form`)
+          const form = prefix === 'warehouse' ? getWarehouseFormEl() : document.getElementById(`${prefix}-form`)
           if (!form) return
+          if (form.querySelector(`#${prefix}-province`)) return
           const block = document.createElement('div')
           block.innerHTML = `
             <div class="form-group">
@@ -726,12 +866,17 @@
             
           `
           form.appendChild(block)
-          if (prefix === 'warehouse') wireWhPcdCascadesOnce(prefix)
+          if (prefix === 'warehouse') wireWhPcdCascadesForForm()
         }
 
         async function fillRegionInputsAsync(prefix, region) {
           const reg = region || { province: '', city: '', district: '' }
-          if (!document.getElementById(`${prefix}-province`)) return
+          if (prefix === 'warehouse') {
+            const form = getWarehouseFormEl()
+            if (!form || !form.querySelector('#warehouse-province')) return
+          } else if (!document.getElementById(`${prefix}-province`)) {
+            return
+          }
           if (prefix !== 'warehouse') {
             const p = document.getElementById(`${prefix}-province`)
             const c = document.getElementById(`${prefix}-city`)
@@ -746,12 +891,14 @@
             await ensureWhPcaLoaded()
           } catch (e) {
             console.error(e)
-            alert(e instanceof Error ? e.message : String(e))
+            showWarehouseRegionNetworkTipInForm()
+            alertWhRegionNetworkError()
             return
           }
           if (mySeq !== whRegionFillSeq) return
           refreshWhRegionSelects(prefix, reg)
           updateWarehouseRegionConflictUi()
+          hideWarehouseRegionNetworkTipInForm()
         }
 
         function fillRegionInputs(prefix, region) {
@@ -780,15 +927,26 @@
           }
         }
 
-        /** 库房弹窗：优先 warehouseRegionMap；其次 #warehouse-form 上内嵌脚本写入的 data-w-prov 等（dataset + getAttribute 双读） */
+        /** 库房弹窗：优先当前下拉选中值；其次 map / data-w-prov（内嵌脚本写入） */
         function buildWarehouseRegionForFill() {
+          const sp = qWhRegion('warehouse-province')
+          const sc = qWhRegion('warehouse-city')
+          const sd = qWhRegion('warehouse-district')
+          if (sp && sc && sd) {
+            const live = {
+              province: (sp.value || '').trim(),
+              city: (sc.value || '').trim(),
+              district: (sd.value || '').trim(),
+            }
+            if (whRegionUserTouched || live.province || live.city || live.district) return live
+          }
           const id = state.currentWarehouseEditId
           const fromMap =
             id != null && Number.isFinite(id) && state.warehouseRegionMap.has(id)
               ? state.warehouseRegionMap.get(id)
               : null
           if (fromMap && fromMap.province && fromMap.city && fromMap.district) return fromMap
-          const wf = document.getElementById('warehouse-form')
+          const wf = getWarehouseFormEl()
           if (!wf) return fromMap || { province: '', city: '', district: '' }
           const pv = String(
             (wf.dataset && wf.dataset.wProv) || wf.getAttribute('data-w-prov') || '',
@@ -819,11 +977,12 @@
         }
 
         async function hydrateWarehouseRegionFromApi() {
+          if (whRegionUserTouched) return
           const seq = ++warehouseRegionHydrateSeq
           const id = state.currentWarehouseEditId
-          const title = (document.getElementById('modal-title')?.textContent || '').trim()
+          const title = getWarehouseModalTitle()
           if (!Number.isFinite(id) || id <= 0) return
-          if (!document.getElementById('warehouse-name')) return
+          if (!getActiveWarehouseModalOverlay()) return
           const isAddWarehouse = /新增/.test(title) && /库房/.test(title) && !/类型/.test(title)
           if (isAddWarehouse) return
           const paths = ['/tl/get_warehouses?include_inactive=true', '/tl/get_warehouses']
@@ -841,29 +1000,35 @@
               if (!(region.province || region.city || region.district)) continue
               state.warehouseRegionMap.set(id, region)
               if (seq !== warehouseRegionHydrateSeq) return
-              if (!document.getElementById('warehouse-name')) return
+              if (whRegionUserTouched) return
+              if (!getActiveWarehouseModalOverlay()) return
               ensureRegionInputs('warehouse')
+              wireWhPcdCascadesForForm()
               fillRegionInputs('warehouse', region)
               return
             } catch (_) {}
           }
         }
 
-        function scheduleWarehouseRegionFill() {
+        function scheduleWarehouseRegionFill(force) {
+          if (whRegionUserTouched && !force) return
           if (warehouseRegionHydrateTimer) clearTimeout(warehouseRegionHydrateTimer)
           const run = () => {
+            if (whRegionUserTouched && !force) return
             ensureRegionInputs('warehouse')
+            wireWhPcdCascadesForForm()
             fillRegionInputs('warehouse', buildWarehouseRegionForFill())
           }
           run()
           requestAnimationFrame(() => {
+            if (whRegionUserTouched && !force) return
             run()
             setTimeout(run, 0)
             setTimeout(run, 80)
-            setTimeout(run, 250)
           })
           warehouseRegionHydrateTimer = setTimeout(() => {
             warehouseRegionHydrateTimer = null
+            if (whRegionUserTouched && !force) return
             void hydrateWarehouseRegionFromApi()
           }, 120)
         }
@@ -1055,9 +1220,9 @@
         }
 
         async function handleCustomSave() {
-          const title = (document.getElementById('modal-title')?.textContent || '').trim()
+          const title = getWarehouseModalTitle() || (document.getElementById('modal-title')?.textContent || '').trim()
           const hasSmelterForm = !!document.getElementById('smelter-name')
-          const hasWarehouseForm = !!document.getElementById('warehouse-name')
+          const hasWarehouseForm = !!getActiveWarehouseModalOverlay()
           if (!(title || hasSmelterForm || hasWarehouseForm)) {
             lastInterceptedModalConfirmBtn = null
             return false
@@ -1117,9 +1282,9 @@
             const name = (document.getElementById('warehouse-name')?.value || '').trim()
             const address = (document.getElementById('warehouse-address')?.value || '').trim()
             const parsed = splitCnAddress(address)
-            const province = (document.getElementById('warehouse-province')?.value || '').trim() || parsed.province
-            const city = (document.getElementById('warehouse-city')?.value || '').trim() || parsed.city
-            const district = (document.getElementById('warehouse-district')?.value || '').trim() || parsed.district
+            const province = (qWhRegion('warehouse-province')?.value || '').trim() || parsed.province
+            const city = (qWhRegion('warehouse-city')?.value || '').trim() || parsed.city
+            const district = (qWhRegion('warehouse-district')?.value || '').trim() || parsed.district
             const typeSel = document.getElementById('warehouse-type-select')
             const typeId = Number(typeSel?.value || '')
             const typeName = (typeSel?.selectedOptions?.[0]?.textContent || '')
@@ -1147,7 +1312,7 @@
             }
             // 拦截确认后内嵌脚本的 tt(id) 不会执行，必须在此区分新增/编辑；id 以 state 为准并回退到表单 data-tl-warehouse-id
             const isAddWarehouseTitle = /新增/.test(title) && /库房/.test(title) && !/类型/.test(title)
-            const wfEl = document.getElementById('warehouse-form')
+            const wfEl = getWarehouseFormEl()
             const widFromDataset = wfEl?.dataset?.tlWarehouseId != null ? Number(wfEl.dataset.tlWarehouseId) : NaN
             const widFromState =
               Number.isFinite(state.currentWarehouseEditId) && state.currentWarehouseEditId > 0
@@ -1203,6 +1368,10 @@
         document.addEventListener(
           'click',
           (evt) => {
+            const whAdd = evt.target.closest('#add-warehouse-btn')
+            if (whAdd) {
+              resetWarehouseRegionSessionForAdd()
+            }
             const smEdit = evt.target.closest('#smelter-table-body .edit-btn')
             if (smEdit) {
               const id = Number(smEdit.getAttribute('data-id'))
@@ -1212,6 +1381,9 @@
             if (whEdit) {
               const id = Number(whEdit.getAttribute('data-id'))
               state.currentWarehouseEditId = Number.isFinite(id) && id > 0 ? id : null
+              whRegionUserTouched = false
+              whRegionModalKey = `edit-wh-${id}`
+              cancelWarehouseRegionScheduledFill()
             }
           },
           true,
@@ -1274,10 +1446,10 @@
         )
 
         const mo = new MutationObserver((mutations) => {
-          const title = (document.getElementById('modal-title')?.textContent || '').trim()
+          const title = getWarehouseModalTitle()
           const hasSmelterForm = !!document.getElementById('smelter-name')
-          const hasWarehouseForm = !!document.getElementById('warehouse-name')
-          const wf = document.getElementById('warehouse-form')
+          const hasWarehouseForm = !!getActiveWarehouseModalOverlay()
+          const wf = getWarehouseFormEl()
           const sf = document.getElementById('smelter-form')
           const isAddWarehouseTitle = /新增/.test(title) && /库房/.test(title) && !/类型/.test(title)
           const isAddSmelterTitle = /新增/.test(title) && /冶炼厂/.test(title)
@@ -1306,8 +1478,15 @@
           }
           const skipWarehouseRegionSchedule = mutationsLookLikeOnlyWarehouseRegionSelectRebuild(mutations)
           if ((title.includes('库房') || hasWarehouseForm) && !skipWarehouseRegionSchedule) {
+            const modalKey = `${title}|${state.currentWarehouseEditId || 'new'}`
+            if (modalKey !== whRegionModalKey) {
+              whRegionModalKey = modalKey
+              whRegionUserTouched = false
+              cancelWarehouseRegionScheduledFill()
+            }
             scheduleWarehouseRegionFill()
           }
+          if (hasWarehouseForm) scheduleWarehouseRegionReadyCheck()
           markMissingRows()
           schedulePatchSmelterTableShipColumn()
         })
