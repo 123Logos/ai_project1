@@ -630,14 +630,50 @@ function normalizeV3SubmitJson(json: unknown): V3SubmitBody {
   }
 }
 
+export type DetectSubmitOpts = {
+  signal?: AbortSignal
+  /** 单据/回单时间（如付款截图交易时间），有业务需要时随 FormData 提交 */
+  document_time?: string | null
+}
+
+function appendDocumentTime(fd: FormData, documentTime?: string | null): void {
+  const t = typeof documentTime === 'string' ? documentTime.trim() : ''
+  if (t) fd.append('document_time', t)
+}
+
+export type TimestampAnomaly =
+  | string
+  | {
+      code?: string
+      reason?: string
+      [key: string]: unknown
+    }
+
+export type TimestampCheck = {
+  passed?: boolean
+  anomalies?: TimestampAnomaly[]
+  reason?: string
+  [key: string]: unknown
+}
+
+export type BboxOverlapCheck = {
+  passed?: boolean
+  overlap_score?: number | null
+  reason?: string
+  [key: string]: unknown
+}
+
+export type HardTamperFlags = string[] | Record<string, unknown> | null
+
 export async function submitV3Detect(
   file: File,
   bbox?: BboxXYXY | null,
-  opts?: { signal?: AbortSignal },
+  opts?: DetectSubmitOpts,
 ): Promise<V3SubmitBody> {
   const fd = new FormData()
   fd.append('file', file)
   if (bbox != null) fd.append('bbox', JSON.stringify(bbox))
+  appendDocumentTime(fd, opts?.document_time)
   const res = await fetch(aiDetectionUrl('/api/v3/detect'), {
     method: 'POST',
     body: fd,
@@ -716,7 +752,7 @@ function normalizeV1SyncJson(json: unknown): V1SyncDetectBody {
 export async function submitV1ImageDetectSync(
   file: File,
   bbox: BboxXYXY,
-  opts?: { signal?: AbortSignal },
+  opts?: DetectSubmitOpts,
 ): Promise<V1SyncDetectBody> {
   if (useMockOnly()) {
     return runMockDetect(file, bbox, opts?.signal)
@@ -724,6 +760,7 @@ export async function submitV1ImageDetectSync(
   const fd = new FormData()
   fd.append('file', file)
   fd.append('bbox', JSON.stringify(bbox))
+  appendDocumentTime(fd, opts?.document_time)
   const res = await fetch(aiDetectionUrl('/api/v1/image-detection/detect'), {
     method: 'POST',
     body: fd,
@@ -748,6 +785,10 @@ export interface V3ResultItem {
   flags?: string | null
   ocr_confidence?: number | null
   amount_score?: number | null
+  pixel_overlap_score?: number | null
+  timestamp_check?: TimestampCheck | null
+  bbox_overlap_check?: BboxOverlapCheck | null
+  hard_tamper_flags?: HardTamperFlags
 }
 
 export interface V3PollBody {

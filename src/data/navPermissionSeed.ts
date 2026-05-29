@@ -46,9 +46,6 @@ export const NAV_PERMISSION_SEED: NavPermissionSeedRow[] = [
     label: '库房距离监测配置',
     field_name: 'perm_nav_map_supply_warehouse_distance_config',
   },
-  { category: 'map_supply', label: '数据维护', field_name: 'perm_nav_map_supply_data_maintain' },
-  { category: 'map_supply', label: '当前库存维护', field_name: 'perm_nav_map_supply_current_stock' },
-  { category: 'map_supply', label: '收货价格维护', field_name: 'perm_nav_map_supply_receive_price' },
 
   { category: 'ai_prediction', label: 'AI 预测', field_name: 'perm_nav_ai_prediction' },
   { category: 'ai_prediction', label: '历史数据管理', field_name: 'perm_nav_ai_prediction_history_manage' },

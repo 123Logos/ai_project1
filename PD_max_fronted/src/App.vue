@@ -14,6 +14,10 @@ import {
   mapApiRecordToEntry,
   type DetectionHistoryEntry,
 } from './detectionHistory'
+import {
+  buildExtendedDisplayLines,
+  hasExtendedDetectionFields,
+} from './detectionExtendedDisplay'
 const files = ref<File[]>([])
 const filePreviews = ref<string[]>([])
 const selectedUploadIndex = ref(0)
@@ -23,6 +27,8 @@ const imgRef = ref<HTMLImageElement | null>(null)
 const imageNatural = ref({ w: 0, h: 0 })
 
 const v3SpecifyBbox = ref(false)
+/** 单据时间（可选）：付款截图等场景供后端时间校验 */
+const documentTime = ref('')
 const drawing = ref(false)
 const drawStart = ref<{ x: number; y: number } | null>(null)
 const drawCurrent = ref<{ x: number; y: number } | null>(null)
@@ -160,6 +166,11 @@ function isDetectionMockMode(): boolean {
   return String(import.meta.env.VITE_USE_MOCK ?? '').trim() === '1'
 }
 
+function detectSubmitOpts(signal: AbortSignal) {
+  const t = documentTime.value.trim()
+  return { signal, document_time: t || null }
+}
+
 /** 单张/批量共用：v3 异步提交 → 等待 → 拉取结果（与多张单步逻辑一致） */
 async function runV3AsyncOne(
   file: File,
@@ -168,7 +179,7 @@ async function runV3AsyncOne(
   signal: AbortSignal,
 ): Promise<{ taskId: string; payload: V3ViewPayload }> {
   pollStatus.value = `${progressPrefix}：提交任务…`
-  const submit = await submitV3Detect(file, bbox, { signal })
+  const submit = await submitV3Detect(file, bbox, detectSubmitOpts(signal))
   const taskId = submit.task_id?.trim()
   if (!taskId) throw new Error(`${progressPrefix}：未返回任务 ID`)
   await waitWithCountdown(
@@ -419,6 +430,18 @@ const reportMultiDetailRows = computed(() => {
   return out
 })
 
+const summaryExtendedLines = computed(() =>
+  buildExtendedDisplayLines(v3Payload.value?.result ?? null),
+)
+
+function extendedLinesForItem(item: V3ResultItem) {
+  return buildExtendedDisplayLines(item)
+}
+
+function itemShowsExtended(item: V3ResultItem) {
+  return hasExtendedDetectionFields(item)
+}
+
 const regionLabelMetrics = computed(() => {
   const w = imageNatural.value.w || 800
   const fs = Math.max(12, Math.min(24, w * 0.022))
@@ -662,7 +685,7 @@ async function runV3() {
     pollStatus.value = ''
     try {
       pollStatus.value = '正在提交检测…'
-      const data = await submitV1ImageDetectSync(one, bbox, { signal: ac.signal })
+      const data = await submitV1ImageDetectSync(one, bbox, detectSubmitOpts(ac.signal))
       if (data.error_msg?.trim() && !data.result && !(data.multi?.length)) {
         throw new Error(data.error_msg)
       }
@@ -920,6 +943,20 @@ onUnmounted(() => {
           </div>
 
           <div class="option-row">
+            <label class="field-label" for="document-time-input">单据时间（可选）</label>
+            <input
+              id="document-time-input"
+              v-model="documentTime"
+              type="datetime-local"
+              class="field-input"
+              :disabled="busy"
+            />
+            <p class="option-hint">
+              付款截图、回单等若需校验状态栏与交易时间，可填写或核对单据上的时间；不填则由系统自动识别。
+            </p>
+          </div>
+
+          <div class="option-row">
             <label class="switch-label">
               <input v-model="v3SpecifyBbox" type="checkbox" class="switch-input" />
               <span class="switch-ui" />
@@ -1168,6 +1205,15 @@ onUnmounted(() => {
                 </div>
               </div>
               <p class="report-reason">{{ v3Payload.result.reason || '—' }}</p>
+              <div v-if="summaryExtendedLines.length" class="detect-ext-block">
+                <h4 class="detect-ext-title">增强检测项</h4>
+                <dl class="detect-ext-dl">
+                  <template v-for="row in summaryExtendedLines" :key="'sum-' + row.label">
+                    <dt>{{ row.label }}</dt>
+                    <dd>{{ row.value }}</dd>
+                  </template>
+                </dl>
+              </div>
             </template>
 
             <div v-if="reportMultiDetailRows.length" class="multi-block">
@@ -1185,6 +1231,18 @@ onUnmounted(() => {
                       >
                     </div>
                     <p class="multi-reason">{{ row.item.reason }}</p>
+                    <dl
+                      v-if="itemShowsExtended(row.item)"
+                      class="detect-ext-dl compact"
+                    >
+                      <template
+                        v-for="ext in extendedLinesForItem(row.item)"
+                        :key="'m' + row.regionNo + ext.label"
+                      >
+                        <dt>{{ ext.label }}</dt>
+                        <dd>{{ ext.value }}</dd>
+                      </template>
+                    </dl>
                   </li>
                 </ul>
               </div>
@@ -2287,6 +2345,69 @@ onUnmounted(() => {
   font-size: 0.95rem;
   line-height: 1.6;
   color: var(--text);
+}
+
+.detect-ext-block {
+  margin-top: 0.85rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.detect-ext-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.detect-ext-dl {
+  margin: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.detect-ext-dl dt {
+  margin: 0;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.detect-ext-dl dd {
+  margin: 0;
+  color: var(--text);
+}
+
+.detect-ext-dl.compact {
+  margin-top: 0.35rem;
+  font-size: 0.75rem;
+}
+
+.field-label {
+  display: block;
+  margin-bottom: 0.35rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.field-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.field-input:disabled {
+  opacity: 0.6;
 }
 
 .report-foot {

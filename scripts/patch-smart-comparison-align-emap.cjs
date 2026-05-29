@@ -1,69 +1,19 @@
 /**
- * 与 src/pages/ElectronicMap.vue 中比价排行逻辑对齐（rankingsFromComparisonResponse 管线）。
- * 嵌入页在 app-BZHDhlyu.js 的 Ht() 中调用；修改地图侧时请同步更新本文件。
- * 表头/列展示（净货款、每吨净值、毛利等）与电子地图比价弹窗一致，见 index-e7CRb-gt.js + app-BZHDhlyu.js。
+ * 智能比价：比价结果字段与调用参数与电子地图对齐
+ * Run: node scripts/patch-smart-comparison-align-emap.cjs
  */
-;(function (global) {
-  'use strict'
+const fs = require('fs')
+const path = require('path')
 
-  function toDisplayNum(n) {
-    var x = Number(n)
-    if (!Number.isFinite(x)) return 0
-    return Math.round(x * 100) / 100
-  }
+const root = path.join(__dirname, '..')
+const rankingPath = path.join(root, 'public/embedded/price_system/assets/tl-comparison-ranking.js')
+const appPath = path.join(root, 'public/embedded/price_system/assets/app-BZHDhlyu.js')
+const indexPath = path.join(root, 'public/embedded/price_system/assets/index-e7CRb-gt.js')
 
-  function pickStr(row, keys) {
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i]
-      var v = row[k]
-      if (v != null && String(v).trim() !== '') return String(v).trim()
-    }
-    return ''
-  }
+// --- tl-comparison-ranking.js: insert field pickers after pickNumberComparisonDetail ---
+let ranking = fs.readFileSync(rankingPath, 'utf8')
 
-  function pickNumber(row, keys) {
-    for (var i = 0; i < keys.length; i++) {
-      var k = keys[i]
-      var v = row[k]
-      if (v == null || v === '') continue
-      var n = Number(v)
-      if (!Number.isNaN(n)) return n
-    }
-    return null
-  }
-
-  function detailRowXunRongBaoOn(row) {
-    var v = row['冶炼厂循融宝发货']
-    return v === 1 || v === '1'
-  }
-
-  function detailRowXunRongBaoSurcharge(row) {
-    return pickNumber(row, ['循融宝加价元每吨'])
-  }
-
-  function comparisonDetailValueSource(row) {
-    if (!detailRowXunRongBaoOn(row)) return row
-    var branch = row['含循融宝']
-    if (branch != null && typeof branch === 'object' && !Array.isArray(branch)) return branch
-    return row
-  }
-
-  function comparisonDetailExcludedValueSource(row) {
-    if (!detailRowXunRongBaoOn(row)) return null
-    var branch = row['不含循融宝']
-    if (branch != null && typeof branch === 'object' && !Array.isArray(branch)) return branch
-    return null
-  }
-
-  function pickNumberComparisonDetail(row, keys) {
-    var src = comparisonDetailValueSource(row)
-    var a = pickNumber(src, keys)
-    if (a != null && Number.isFinite(a)) return a
-    if (src !== row) return pickNumber(row, keys)
-    return null
-  }
-
-
+const pickHelpers = `
   function pickComparisonTotalGoods(row) {
     var top = pickNumber(row, ['总货款'])
     if (top != null && Number.isFinite(top)) return top
@@ -172,78 +122,23 @@
       qtySum: qtySum,
     }
   }
+`
 
-  function pickDetailUnitPrice(row, priceMode) {
-    if (priceMode === 'tax3') {
-      return pickNumberComparisonDetail(row, [
-        '含3%税价',
-        '3%含税价',
-        '含税价',
-        '单价',
-        '基准价',
-        '报价',
-        'unit_price',
-        '最优价',
-        '3pct_price',
-      ])
-    }
-    return pickNumberComparisonDetail(row, [
-      '单价',
-      '基准价',
-      '报价',
-      'unit_price',
-      '最优价',
-      '不含税价',
-      'base_price',
-    ])
-  }
+if (!ranking.includes('function pickComparisonTotalGoods')) {
+  ranking = ranking.replace(
+    '  function pickDetailUnitPrice(row, priceMode) {',
+    pickHelpers + '\n  function pickDetailUnitPrice(row, priceMode) {',
+  )
+}
 
-  function pickDetailUnitPriceExcluded(row, priceMode) {
-    var ex = comparisonDetailExcludedValueSource(row)
-    if (!ex) return null
-    if (priceMode === 'tax3') {
-      return pickNumber(ex, [
-        '含3%税价',
-        '3%含税价',
-        '含税价',
-        '单价',
-        '基准价',
-        '报价',
-        'unit_price',
-        '最优价',
-        '3pct_price',
-      ])
-    }
-    return pickNumber(ex, [
-      '单价',
-      '基准价',
-      '报价',
-      'unit_price',
-      '最优价',
-      '不含税价',
-      'base_price',
-    ])
-  }
-
-  function pickProfitFromSmelterRankRow(row, priceMode) {
-    var nested = row['最优价口径合计']
-    var nestObj =
-      nested && typeof nested === 'object' && !Array.isArray(nested) ? nested : null
-    if (priceMode === 'tax3') {
-      var n =
-        pickNumber(row, ['利润_含3%合计', '利润_含3%']) ??
-        (nestObj ? pickNumber(nestObj, ['3pct', 'tax3']) : null) ??
-        pickNumber(row, ['利润'])
-      return n ?? 0
-    }
-    var n2 =
-      pickNumber(row, ['利润_基准合计', '利润_基准']) ??
-      (nestObj ? pickNumber(nestObj, ['base']) : null) ??
-      pickNumber(row, ['利润'])
-    return n2 ?? 0
-  }
-
-  function parseSmelterProfitRankArray(arr, priceMode) {
+// parseSmelterProfitRankArray
+const oldParseSmelter = ranking.match(
+  /function parseSmelterProfitRankArray\(arr, priceMode\) \{[\s\S]*?return out\n  \}/,
+)
+if (oldParseSmelter && !ranking.includes('pickComparisonNetGoods(row)')) {
+  ranking = ranking.replace(
+    oldParseSmelter[0],
+    `function parseSmelterProfitRankArray(arr, priceMode) {
     if (!Array.isArray(arr)) return []
     var out = []
     var fallback = 0
@@ -263,18 +158,10 @@
       if (!smelter) continue
       fallback += 1
       var rank = pickNumber(row, ['rank', '名次', '排序', '排行', '排名']) ?? fallback
-      var netProfit = pickProfitFromSmelterRankRow(row, priceMode)
-      var totalRecovery =
-        pickNumber(row, [
-          '总价合计',
-          '总回收价',
-          '回收额',
-          'totalRecovery',
-          'materialSum',
-          '物料总价',
-          'total_recovery',
-        ]) ?? 0
-      var totalFreight = pickNumber(row, ['总运费合计', '总运费', '估算运费', '运费合计']) ?? 0
+      var netProfit =
+        pickComparisonNetGoods(row) ?? pickProfitFromSmelterRankRow(row, priceMode)
+      var totalRecovery = pickComparisonTotalGoods(row) ?? 0
+      var totalFreight = pickComparisonFreight(row) ?? 0
       var qtySum = pickNumber(row, ['吨数', 'quantity', 'qtySum', 'qty', '需求吨数']) ?? 0
       var unitPriceRaw = pickNumber(row, [
         '单价',
@@ -286,23 +173,37 @@
         '3%含税价',
       ])
       var unitPrice = unitPriceRaw != null ? unitPriceRaw : qtySum > 0 ? totalRecovery / qtySum : 0
+      var vpt = pickComparisonValuePerTon(row)
+      var gp = pickComparisonGrossProfit(row)
+      var gpt = pickComparisonGrossProfitPerTon(row)
       out.push({
         rank: rank,
         smelter: smelter,
         unitPrice: toDisplayNum(unitPrice),
-        netProfit: toDisplayNum(netProfit),
+        netProfit: toDisplayNum(netProfit ?? 0),
         totalRecovery: toDisplayNum(totalRecovery),
         totalFreight: toDisplayNum(totalFreight),
         qtySum: toDisplayNum(qtySum),
+        valuePerTon: vpt != null ? toDisplayNum(vpt) : null,
+        grossProfit: gp != null ? toDisplayNum(gp) : gp,
+        grossProfitPerTon: gpt != null ? toDisplayNum(gpt) : gpt,
       })
     }
     out.sort(function (a, b) {
       return a.rank - b.rank
     })
     return out
-  }
+  }`,
+  )
+}
 
-  function mergeComparisonRanksWithDetailRows(ranks, detailRows, priceMode) {
+// mergeComparisonRanksWithDetailRows - replace body that uses old accumulation
+const mergeStart = ranking.indexOf('function mergeComparisonRanksWithDetailRows')
+const mergeEnd = ranking.indexOf('  function pickComparisonPayload', mergeStart)
+if (mergeStart >= 0 && mergeEnd > mergeStart && !ranking.slice(mergeStart, mergeEnd).includes('accumulateComparisonMoneyFromRows')) {
+  ranking =
+    ranking.slice(0, mergeStart) +
+    `function mergeComparisonRanksWithDetailRows(ranks, detailRows, priceMode) {
     if (!detailRows.length) return ranks
     return ranks.map(function (r) {
       var rows = detailRows.filter(function (row) {
@@ -402,44 +303,17 @@
     })
   }
 
-  function pickComparisonPayload(raw) {
-    var data = raw['data']
-    if (data != null && typeof data === 'object' && !Array.isArray(data)) return data
-    return null
-  }
+` +
+    ranking.slice(mergeEnd)
+}
 
-  function walkObjectArraysDeep(input, depth) {
-    if (depth === void 0) depth = 0
-    if (depth > 4 || input == null) return []
-    var out = []
-    if (Array.isArray(input)) {
-      var rows = input.filter(function (x) {
-        return !!x && typeof x === 'object'
-      })
-      if (rows.length) out.push(rows)
-      return out
-    }
-    if (typeof input !== 'object') return out
-    var obj = input
-    var vals = Object.values(obj)
-    for (var i = 0; i < vals.length; i++) {
-      var v = vals[i]
-      if (Array.isArray(v)) {
-        var rows2 = v.filter(function (x) {
-          return !!x && typeof x === 'object'
-        })
-        if (rows2.length) out.push(rows2)
-        continue
-      }
-      if (v && typeof v === 'object') {
-        var sub = walkObjectArraysDeep(v, depth + 1)
-        for (var j = 0; j < sub.length; j++) out.push(sub[j])
-      }
-    }
-    return out
-  }
-
-  function parseRankRowsLoose(rows, priceMode) {
+// parseRankRowsLoose
+const looseStart = ranking.indexOf('function parseRankRowsLoose')
+const looseEnd = ranking.indexOf('  function detailRowsForSmelterName', looseStart)
+if (looseStart >= 0 && looseEnd > looseStart && !ranking.slice(looseStart, looseEnd).includes('pickComparisonTotalGoods')) {
+  ranking =
+    ranking.slice(0, looseStart) +
+    `function parseRankRowsLoose(rows, priceMode) {
     var out = []
     var fallback = 0
     for (var i = 0; i < rows.length; i++) {
@@ -504,24 +378,17 @@
     return out
   }
 
-  function detailRowsForSmelterName(smelter, detailRows) {
-    var s = smelter.trim()
-    if (!s) return []
-    return detailRows.filter(function (row) {
-      var name = pickStr(row, [
-        '冶炼厂',
-        'smelter',
-        'smelter_name',
-        '冶炼厂名',
-        'factory_name',
-        'name',
-      ])
-      if (!name) return false
-      return name === s || name.includes(s) || s.includes(name)
-    })
-  }
+` +
+    ranking.slice(looseEnd)
+}
 
-  function buildExcludedComparisonRankFromDetails(base, detailRows, priceMode) {
+// buildExcludedComparisonRankFromDetails
+const exStart = ranking.indexOf('function buildExcludedComparisonRankFromDetails')
+const exEnd = ranking.indexOf('  function expandComparisonRanksWithXunRongBaoExcludedRows', exStart)
+if (exStart >= 0 && exEnd > exStart && !ranking.slice(exStart, exEnd).includes('netGoods')) {
+  ranking =
+    ranking.slice(0, exStart) +
+    `function buildExcludedComparisonRankFromDetails(base, detailRows, priceMode) {
     var rows = detailRowsForSmelterName(base.smelter, detailRows)
     if (!rows.length) return null
     if (!rows.some(detailRowXunRongBaoOn)) return null
@@ -655,40 +522,17 @@
     }
   }
 
-  function expandComparisonRanksWithXunRongBaoExcludedRows(ranks, detailRows, priceMode) {
-    if (!detailRows.length) return ranks
-    var out = []
-    for (var i = 0; i < ranks.length; i++) {
-      var r = ranks[i]
-      if (r.xunRongBaoExcludedPricing) {
-        out.push(r)
-        continue
-      }
-      var exRow = buildExcludedComparisonRankFromDetails(r, detailRows, priceMode)
-      if (exRow) {
-        out.push(r.xunRongBao ? r : Object.assign({}, r, { xunRongBao: true }))
-        out.push(exRow)
-        continue
-      }
-      out.push(r)
-    }
-    return out
-  }
+` +
+    ranking.slice(exEnd)
+}
 
-  function rerankComparisonByProfitDesc(items) {
-    var sorted = items.slice().sort(function (a, b) {
-      if (b.netProfit !== a.netProfit) return b.netProfit - a.netProfit
-      var aw = a.xunRongBao ? 1 : 0
-      var bw = b.xunRongBao ? 1 : 0
-      if (bw !== aw) return bw - aw
-      return a.rank - b.rank
-    })
-    return sorted.map(function (x, i) {
-      return Object.assign({}, x, { rank: i + 1 })
-    })
-  }
-
-  function aggregateComparisonRows(rows, priceMode) {
+// aggregateComparisonRows
+const aggStart = ranking.indexOf('function aggregateComparisonRows')
+const aggEnd = ranking.indexOf('  function rankingsFromComparisonResponse', aggStart)
+if (aggStart >= 0 && aggEnd > aggStart && !ranking.slice(aggStart, aggEnd).includes('accumulateComparisonMoneyFromRows')) {
+  ranking =
+    ranking.slice(0, aggStart) +
+    `function aggregateComparisonRows(rows, priceMode) {
     var grouped = new Map()
     for (var i = 0; i < rows.length; i++) {
       var row = rows[i]
@@ -818,48 +662,86 @@
       })
   }
 
-  function rankingsFromComparisonResponse(raw, detailRows, priceMode) {
-    var payload = pickComparisonPayload(raw)
-    var fromApi = parseSmelterProfitRankArray(
-      raw['冶炼厂利润排行'] ?? payload?.['冶炼厂利润排行'] ?? payload?.['smelter_profit_rank'],
-      priceMode,
-    )
-    if (fromApi.length) {
-      var mergedTop = mergeComparisonRanksWithDetailRows(fromApi, detailRows, priceMode)
-      if (!detailRows.length) return rerankComparisonByProfitDesc(mergedTop)
-      var allFromDetail = aggregateComparisonRows(detailRows, priceMode)
-      var existed = new Set(mergedTop.map(function (x) {
-        return x.smelter.trim()
-      }))
-      var extras = allFromDetail.filter(function (x) {
-        return !existed.has(x.smelter.trim())
-      })
-      var combined = mergedTop.concat(extras)
-      return rerankComparisonByProfitDesc(
-        expandComparisonRanksWithXunRongBaoExcludedRows(combined, detailRows, priceMode),
-      )
-    }
-    var looseArrays = walkObjectArraysDeep(payload ?? raw)
-    for (var i = 0; i < looseArrays.length; i++) {
-      var parsed = parseRankRowsLoose(looseArrays[i], priceMode)
-      if (parsed.length) {
-        var merged = mergeComparisonRanksWithDetailRows(parsed, detailRows, priceMode)
-        return rerankComparisonByProfitDesc(
-          expandComparisonRanksWithXunRongBaoExcludedRows(merged, detailRows, priceMode),
-        )
-      }
-    }
-    return rerankComparisonByProfitDesc(
-      expandComparisonRanksWithXunRongBaoExcludedRows(
-        aggregateComparisonRows(detailRows, priceMode),
-        detailRows,
-        priceMode,
-      ),
-    )
-  }
+` +
+    ranking.slice(aggEnd)
+}
 
-  global.TlComparisonRanking = {
-    rankingsFromComparisonResponse: rankingsFromComparisonResponse,
-    toDisplayNum: toDisplayNum,
-  }
-})(typeof window !== 'undefined' ? window : globalThis)
+ranking = ranking.replace(
+  ' * 表头/列展示（货值、每吨货值等）与电子地图比价弹窗一致',
+  ' * 表头/列展示（净货款、每吨净值、毛利等）与电子地图比价弹窗一致',
+)
+
+fs.writeFileSync(rankingPath, ranking, 'utf8')
+console.log('patched tl-comparison-ranking.js')
+
+// --- index: table headers + summary label ---
+let idx = fs.readFileSync(indexPath, 'utf8')
+
+const oldHead =
+  '<th data-v-4b5a159b>排名</th><th data-v-4b5a159b>冶炼厂名称</th><th data-v-4b5a159b>运费单价</th><th data-v-4b5a159b>各品种单价</th><th data-v-4b5a159b>总回收价</th><th data-v-4b5a159b>总运费</th><th data-v-4b5a159b>货值</th><th data-v-4b5a159b>每吨货值</th>'
+const newHead =
+  '<th data-v-4b5a159b>排名</th><th data-v-4b5a159b>冶炼厂</th><th data-v-4b5a159b>运费单价</th><th data-v-4b5a159b>冶炼厂回收单价</th><th data-v-4b5a159b>总货款</th><th data-v-4b5a159b>总运费</th><th data-v-4b5a159b>净货款</th><th data-v-4b5a159b>每吨净值</th><th data-v-4b5a159b>毛利</th><th data-v-4b5a159b>每吨毛利</th>'
+
+if (idx.includes(oldHead)) {
+  idx = idx.split(oldHead).join(newHead)
+} else if (!idx.includes('每吨毛利')) {
+  console.warn('index: table header anchor not found')
+}
+
+if (idx.includes('>总货值</span>')) {
+  idx = idx.split('>总货值</span>').join('>净货款</span>')
+}
+
+fs.writeFileSync(indexPath, idx, 'utf8')
+console.log('patched index-e7CRb-gt.js')
+
+// --- app: Ut() rendering ---
+let app = fs.readFileSync(appPath, 'utf8')
+
+const utOld = `function Ut(e){function o0(n){return Math.round(Number(n||0)*100)/100}function f0(n){return o0(n).toLocaleString(\`zh-CN\`,{maximumFractionDigits:2})}function optYen(x){if(x===void 0||x===null||!Number.isFinite(x))return\`\`;return\`¥\`+Number(x).toLocaleString(void 0,{minimumFractionDigits:2,maximumFractionDigits:2})}`
+
+const utNew = `function Ut(e){function o0(n){return Math.round(Number(n||0)*100)/100}function f0(n){return o0(n).toLocaleString(\`zh-CN\`,{maximumFractionDigits:2})}function optYen(x){if(x===void 0||x===null||!Number.isFinite(x))return\`\`;return\`¥\`+Number(x).toLocaleString(void 0,{minimumFractionDigits:2,maximumFractionDigits:2})}function fmtMoney(n){if(n==null||!Number.isFinite(n))return\`—\`;return\`¥\`+f0(n)}function fmtGross(n){if(n==null||!Number.isFinite(n))return\`—\`;return\`¥\`+f0(n)}function fmtVpt(row){if(row.valuePerTon!=null&&Number.isFinite(row.valuePerTon))return fmtMoney(row.valuePerTon);if(!row.qtySum||row.qtySum<=0||!Number.isFinite(row.netProfit))return\`—\`;return fmtMoney(row.netProfit/row.qtySum)}`
+
+if (app.includes(utOld) && !app.includes('function fmtGross')) {
+  app = app.replace(utOld, utNew)
+}
+
+const summaryOld = 'i&&(i.textContent=first?`¥ `+f0(first.netProfit):`-`),a&&(second?a.textContent=`¥ `+f0(first.netProfit-second.netProfit):a.textContent=`-`)'
+const summaryNew = 'i&&(i.textContent=first?fmtMoney(first.netProfit):`-`),a&&(second?a.textContent=fmtMoney(first.netProfit-second.netProfit):a.textContent=`-`)'
+if (app.includes(summaryOld)) {
+  app = app.replace(summaryOld, summaryNew)
+}
+
+const rowOld = `var rec=e.totalRecovery==null?NaN:Number(e.totalRecovery),recCell=!isFinite(rec)||rec===0?\`—\`:\`¥\`+rec.toLocaleString(\`zh-CN\`);var vptCell=!e.qtySum||e.qtySum<=0||!Number.isFinite(e.netProfit)?\`—\`:\`¥ \`+f0(e.netProfit/e.qtySum);var xrb=e.xunRongBao&&!e.xunRongBaoExcludedPricing?\`<span class="ps-cmp-xrb" title="\`+M(xrbTitle(e))+\`">循</span>\`:\`\`;var tr=document.createElement(\`tr\`);tr.innerHTML=\`
+            <td><span class="ps-cmp-rank-wrap"><span class="ps-cmp-rank-num">\${e.rank}</span>\${xrb}</span></td>
+            <td>\${M(e.smelter)}</td>
+            <td>\${M(optYen(e.freightUnitPrice))}</td>
+            <td>\${html}</td>
+            <td>\${recCell}</td>
+            <td>¥\${Number(e.totalFreight||0).toLocaleString(void 0,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            <td>¥ \${f0(e.netProfit)}</td>
+            <td>\${vptCell}</td>
+        \`,n.appendChild(tr)});var pc=document.getElementById(\`purchase-suggestion-box\`);pc&&(pc.style.display=e.length?\`block\`:\`none\`)}`
+
+const rowNew = `var rec=e.totalRecovery==null?NaN:Number(e.totalRecovery),recCell=!isFinite(rec)||rec===0?\`—\`:fmtMoney(rec);var vptCell=fmtVpt(e);var gpCell=fmtGross(e.grossProfit);var gptCell=fmtGross(e.grossProfitPerTon);var xrb=e.xunRongBao&&!e.xunRongBaoExcludedPricing?\`<span class="ps-cmp-xrb" title="\`+M(xrbTitle(e))+\`">循</span>\`:\`\`;var tr=document.createElement(\`tr\`);tr.innerHTML=\`
+            <td><span class="ps-cmp-rank-wrap"><span class="ps-cmp-rank-num">\${e.rank}</span>\${xrb}</span></td>
+            <td>\${M(e.smelter)}</td>
+            <td>\${M(optYen(e.freightUnitPrice))}</td>
+            <td>\${html}</td>
+            <td>\${recCell}</td>
+            <td>¥\${Number(e.totalFreight||0).toLocaleString(void 0,{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+            <td>\${fmtMoney(e.netProfit)}</td>
+            <td>\${vptCell}</td>
+            <td>\${gpCell}</td>
+            <td>\${gptCell}</td>
+        \`,n.appendChild(tr)});var pc=document.getElementById(\`purchase-suggestion-box\`);pc&&(pc.style.display=e.length?\`block\`:\`none\`)}`
+
+if (app.includes(rowOld)) {
+  app = app.replace(rowOld, rowNew)
+} else if (!app.includes('grossProfitPerTon')) {
+  console.warn('app: Ut row render anchor not found')
+}
+
+fs.writeFileSync(appPath, app, 'utf8')
+console.log('patched app-BZHDhlyu.js')
+console.log('done')

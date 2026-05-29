@@ -91,15 +91,22 @@
         </div>
     </div>
     <div ref="mapWrapRef" class="emap-map-wrap" :class="{ 'emap-map-wrap--toolbar-collapsed': toolbarCollapsed }">
-      <button
+      <div
         v-if="toolbarCollapsed && !comparisonModalVisible && !warehouseDistanceMonitorOn"
-        type="button"
-        class="btn btn-sm btn-outline-secondary emap-toolbar-collapsed-fab"
-        title="展开比价类型、品类吨数等设置"
-        @click="toggleToolbarCollapse"
+        class="emap-map-tools-bubble emap-cmp-settings-bubble"
       >
-        比价设置
-      </button>
+        <span class="emap-map-tools-drag-hint" aria-hidden="true">
+          <i class="bi bi-sliders2" aria-hidden="true"></i>
+        </span>
+        <button
+          type="button"
+          class="emap-map-tools-tab"
+          title="展开比价类型、品类吨数等设置"
+          @click="toggleToolbarCollapse"
+        >
+          比价设置
+        </button>
+      </div>
       <div ref="mapElRef" class="emap-map" />
       <div v-if="selectedWarehouse" class="emap-wh-selection-lock">
         <span class="emap-wh-selection-lock-label" :title="selectedWarehouse.title">{{
@@ -418,15 +425,22 @@
       >
         <div class="emap-cmp-panel-head">
           <div class="emap-cmp-panel-head-main">
-            <button
+            <div
               v-if="toolbarCollapsed"
-              type="button"
-              class="btn btn-sm btn-outline-secondary emap-cmp-panel-settings-btn"
-              title="展开比价类型、品类吨数等设置"
-              @click="toggleToolbarCollapse"
+              class="emap-map-tools-bubble emap-cmp-settings-bubble emap-cmp-settings-bubble--head"
             >
-              比价设置
-            </button>
+              <span class="emap-map-tools-drag-hint" aria-hidden="true">
+                <i class="bi bi-sliders2" aria-hidden="true"></i>
+              </span>
+              <button
+                type="button"
+                class="emap-cmp-settings-head-btn"
+                title="展开比价类型、品类吨数等设置"
+                @click="toggleToolbarCollapse"
+              >
+                比价设置
+              </button>
+            </div>
             <h4 class="emap-cmp-panel-title">{{ comparisonModalTitle }}</h4>
           </div>
           <div class="emap-cmp-panel-head-actions">
@@ -500,7 +514,7 @@
             <div class="emap-cmp-summary-value">{{ comparisonSummary.bestSmelter || '-' }}</div>
           </div>
           <div class="emap-cmp-summary-card">
-            <div class="emap-cmp-summary-label">总货值</div>
+            <div class="emap-cmp-summary-label">净货款</div>
             <div class="emap-cmp-summary-value">¥ {{ formatNum(comparisonSummary.bestProfit) }}</div>
           </div>
           <div class="emap-cmp-summary-card">
@@ -515,16 +529,18 @@
                 <th class="emap-cmp-col-rank">排名</th>
                 <th class="emap-cmp-col-smelter">冶炼厂名称</th>
                 <th class="emap-cmp-col-unit">运费单价</th>
-                <th class="emap-cmp-col-cats">各品种单价</th>
-                <th class="emap-cmp-col-money">库房回收价</th>
-                <th class="emap-cmp-col-money">运费</th>
+                <th class="emap-cmp-col-cats">冶炼厂回收单价</th>
+                <th class="emap-cmp-col-money">总货款</th>
+                <th class="emap-cmp-col-money">总运费</th>
+                <th class="emap-cmp-col-money">净货款</th>
+                <th class="emap-cmp-col-money">每吨净值</th>
                 <th class="emap-cmp-col-money">毛利</th>
                 <th class="emap-cmp-col-money">每吨毛利</th>
               </tr>
             </thead>
             <tbody>
               <tr v-if="!comparisonRanks.length">
-                <td colspan="8" class="text-center text-muted py-3 emap-cmp-table-empty">
+                <td colspan="10" class="text-center text-muted py-3 emap-cmp-table-empty">
                   暂无比价明细
                 </td>
               </tr>
@@ -582,13 +598,13 @@
                     title="点击查看全部品类单价"
                     @click.stop="
                       openComparisonCellDetail(
-                        '各品种单价',
+                        '冶炼厂回收单价',
                         formatComparisonCategoryPricesPlain(row),
                       )
                     "
                     @keydown.enter.prevent="
                       openComparisonCellDetail(
-                        '各品种单价',
+                        '冶炼厂回收单价',
                         formatComparisonCategoryPricesPlain(row),
                       )
                     "
@@ -603,13 +619,13 @@
                     title="点击查看完整内容"
                     @click.stop="
                       openComparisonCellDetail(
-                        '库房回收价',
+                        '总货款',
                         formatComparisonTotalRecoveryCell(row.totalRecovery),
                       )
                     "
                     @keydown.enter.prevent="
                       openComparisonCellDetail(
-                        '库房回收价',
+                        '总货款',
                         formatComparisonTotalRecoveryCell(row.totalRecovery),
                       )
                     "
@@ -622,10 +638,10 @@
                     role="button"
                     title="点击查看完整内容"
                     @click.stop="
-                      openComparisonCellDetail('运费', formatComparisonFreightCell(row.totalFreight))
+                      openComparisonCellDetail('总运费', formatComparisonFreightCell(row.totalFreight))
                     "
                     @keydown.enter.prevent="
-                      openComparisonCellDetail('运费', formatComparisonFreightCell(row.totalFreight))
+                      openComparisonCellDetail('总运费', formatComparisonFreightCell(row.totalFreight))
                     "
                     >{{ formatComparisonFreightCell(row.totalFreight) }}</span>
                 </td>
@@ -636,10 +652,10 @@
                     role="button"
                     title="点击查看完整内容"
                     @click.stop="
-                      openComparisonCellDetail('毛利', formatComparisonNetProfitCell(row))
+                      openComparisonCellDetail('净货款', formatComparisonNetProfitCell(row))
                     "
                     @keydown.enter.prevent="
-                      openComparisonCellDetail('毛利', formatComparisonNetProfitCell(row))
+                      openComparisonCellDetail('净货款', formatComparisonNetProfitCell(row))
                     "
                     >{{ formatComparisonNetProfitCell(row) }}</span>
                 </td>
@@ -650,12 +666,46 @@
                     role="button"
                     title="点击查看完整内容"
                     @click.stop="
-                      openComparisonCellDetail('每吨毛利', formatValuePerTonCell(row))
+                      openComparisonCellDetail('每吨净值', formatValuePerTonCell(row))
                     "
                     @keydown.enter.prevent="
-                      openComparisonCellDetail('每吨毛利', formatValuePerTonCell(row))
+                      openComparisonCellDetail('每吨净值', formatValuePerTonCell(row))
                     "
                     >{{ formatValuePerTonCell(row) }}</span>
+                </td>
+                <td class="emap-cmp-col-money">
+                  <span
+                    class="emap-cmp-cell-truncate"
+                    tabindex="0"
+                    role="button"
+                    title="点击查看完整内容"
+                    @click.stop="
+                      openComparisonCellDetail('毛利', formatComparisonGrossProfitCell(row.grossProfit))
+                    "
+                    @keydown.enter.prevent="
+                      openComparisonCellDetail('毛利', formatComparisonGrossProfitCell(row.grossProfit))
+                    "
+                    >{{ formatComparisonGrossProfitCell(row.grossProfit) }}</span>
+                </td>
+                <td class="emap-cmp-col-money">
+                  <span
+                    class="emap-cmp-cell-truncate"
+                    tabindex="0"
+                    role="button"
+                    title="点击查看完整内容"
+                    @click.stop="
+                      openComparisonCellDetail(
+                        '每吨毛利',
+                        formatComparisonGrossProfitCell(row.grossProfitPerTon),
+                      )
+                    "
+                    @keydown.enter.prevent="
+                      openComparisonCellDetail(
+                        '每吨毛利',
+                        formatComparisonGrossProfitCell(row.grossProfitPerTon),
+                      )
+                    "
+                    >{{ formatComparisonGrossProfitCell(row.grossProfitPerTon) }}</span>
                 </td>
               </tr>
             </tbody>
@@ -862,9 +912,15 @@ type ComparisonRankItem = {
   unitPrice: number
   netProfit: number
   totalRecovery: number
-  /** 后端「总运费」；无明细时由旧逻辑推算 */
+  /** 后端「运费」/「总运费」；无明细时由旧逻辑推算 */
   totalFreight: number
   qtySum: number
+  /** 接口「每吨净值」；无则回退净货款/吨数 */
+  valuePerTon?: number | null
+  /** 接口「毛利」；可为 null */
+  grossProfit?: number | null
+  /** 接口「每吨毛利」；可为 null */
+  grossProfitPerTon?: number | null
   /** 与嵌入页「智能比价」各品种单价列一致：品类名 → 单价 */
   categoryPrices?: Record<string, number | null>
   /** 明细字段「单价」按吨数加权；无非空值时不展示 */
@@ -1058,7 +1114,7 @@ const provinceOutlineLayerRef = shallowRef<L.GeoJSON | null>(null)
 const flowPathSvgRendererRef = shallowRef<L.SVG | null>(null)
 const distanceLinePaneName = 'emap-distance-line-pane'
 const distanceLabelPaneName = 'emap-distance-label-pane'
-/** 高于 Leaflet 默认 popupPane(~700)，使比价冶炼厂常驻卡片盖在库房弹窗之上 */
+/** 低于 Leaflet 默认 popupPane(~700)，库房信息弹窗保持在比价冶炼厂常驻卡片之上 */
 const emapRankComparisonTipPaneName = 'emap-rank-comparison-tip-pane'
 /** 高于 markerPane(~600)，使比价流向线画在库房/冶炼厂打点之上 */
 const emapComparisonFlowPaneName = 'emap-comparison-flow-pane'
@@ -1270,6 +1326,9 @@ const comparisonPrereqToastMessage = ref('')
 const selectedWarehouse = ref<MapPoint | null>(null)
 /** 锁定后禁止切换至其他库房（拖拽地图时防误触） */
 const warehouseSelectionLocked = ref(false)
+/** 用户点击弹窗关闭按钮时，锁定期间不再自动重开 */
+let lockedWarehousePopupDismissedByUser = false
+let emapMapPopupCloseCaptureOff: (() => void) | null = null
 const comparisonType = ref<'base' | 'tax3'>('base')
 /** 与品类 id 对应：默认全选、吨数默认 1（与智能比价一致可改） */
 const categoryPrefs = reactive<Record<number, { selected: boolean; tons: string }>>({})
@@ -1707,6 +1766,7 @@ function setMapViewWithWarehouseLeftPanelBias(
 function toggleWarehouseSelectionLock() {
   warehouseSelectionLocked.value = !warehouseSelectionLocked.value
   refreshWarehouseMarkerLockInteractivity()
+  syncLockedWarehousePopupPin()
 }
 
 /** 锁定库房时禁用其他库房图钉的指针事件，避免拖拽地图误触 */
@@ -1723,6 +1783,101 @@ function refreshWarehouseMarkerLockInteractivity() {
       marker.closeTooltip()
       if (marker.isPopupOpen()) marker.closePopup()
     }
+  })
+}
+
+/** 锁定后固定当前库房信息卡片：不被其它点位/地图点击顶掉，用户可点弹窗关闭按钮自行关掉 */
+function syncLockedWarehousePopupPin() {
+  const pinned = { autoClose: false, closeOnClick: false }
+  const normal = { autoClose: true, closeOnClick: true }
+  const locked =
+    warehouseSelectionLocked.value && selectedWarehouse.value?.kind === 'warehouse'
+  const lockedId = locked ? selectedWarehouse.value!.id : null
+  const map = mapRef.value
+
+  if (map) {
+    // Leaflet 地图级 closePopupOnClick 会在点击空白处时关掉弹窗，仅改 popup.closeOnClick 不够
+    map.options.closePopupOnClick = !locked
+  }
+
+  const applyPopupOpts = (marker: L.Marker, isPinned: boolean) => {
+    const popup = marker.getPopup()
+    if (!popup) return
+    const o = isPinned ? pinned : normal
+    popup.options.autoClose = o.autoClose
+    popup.options.closeOnClick = o.closeOnClick
+  }
+
+  warehouseMarkerById.forEach((marker, id) => {
+    applyPopupOpts(marker, lockedId != null && id === lockedId)
+  })
+  smelterMarkerById.forEach((marker) => applyPopupOpts(marker, false))
+
+  if (lockedId != null) {
+    lockedWarehousePopupDismissedByUser = false
+    const lockedMarker = warehouseMarkerById.get(lockedId)
+    if (lockedMarker && !lockedMarker.isPopupOpen()) lockedMarker.openPopup()
+    ensureComparisonOverlayWhenLocked()
+  }
+}
+
+/** 锁定期间若比价冶炼厂常驻卡片被意外清掉，按当前排行补回 */
+function ensureComparisonOverlayWhenLocked() {
+  const wh = selectedWarehouse.value
+  if (!warehouseSelectionLocked.value || !wh || wh.kind !== 'warehouse') return
+  if (!comparisonRanks.value.length || warehouseDistanceMonitorOn.value) return
+  const tipLayer = topTipLayerRef.value
+  if (!tipLayer) return
+  let tipCount = 0
+  tipLayer.eachLayer(() => {
+    tipCount += 1
+  })
+  if (tipCount === 0) renderComparisonOverlay(wh, comparisonRanks.value)
+}
+
+function onLockedWarehousePopupClosed(e: L.LeafletEvent) {
+  if (!warehouseSelectionLocked.value) return
+  const wh = selectedWarehouse.value
+  if (!wh || wh.kind !== 'warehouse') return
+  const lockedMarker = warehouseMarkerById.get(wh.id)
+  if (!lockedMarker) return
+
+  const pop = (e as unknown as { popup?: L.Popup }).popup
+  if (!pop) return
+  const source = (pop as unknown as { _source?: L.Marker })._source
+  if (source !== lockedMarker) return
+
+  if (lockedWarehousePopupDismissedByUser) {
+    lockedWarehousePopupDismissedByUser = false
+    return
+  }
+  requestAnimationFrame(() => {
+    if (
+      warehouseSelectionLocked.value &&
+      selectedWarehouse.value?.id === wh.id &&
+      !lockedMarker.isPopupOpen()
+    ) {
+      lockedMarker.openPopup()
+    }
+  })
+}
+
+/** 锁定期间若其它点位弹窗被打开，关掉并恢复当前库房卡片 */
+function guardLockedWarehousePopupOpen(e: L.LeafletEvent) {
+  if (!warehouseSelectionLocked.value) return
+  const wh = selectedWarehouse.value
+  if (!wh || wh.kind !== 'warehouse') return
+  const lockedMarker = warehouseMarkerById.get(wh.id)
+  if (!lockedMarker) return
+
+  const pop = (e as unknown as { popup?: L.Popup }).popup
+  if (!pop) return
+  const source = (pop as unknown as { _source?: L.Marker })._source
+  if (source === lockedMarker) return
+
+  requestAnimationFrame(() => {
+    pop.close()
+    if (!lockedMarker.isPopupOpen()) lockedMarker.openPopup()
   })
 }
 
@@ -1872,6 +2027,59 @@ function pickWarehouseSmelterFreights(
   return out
 }
 
+/** 解析库房收货价格按品种（/tl/get_warehouses 字段「收货价格按品种」） */
+function pickWarehouseReceiptPricesByCategory(
+  raw: Record<string, unknown>,
+): { category: string; price: number | null }[] {
+  const arr = raw['收货价格按品种']
+  if (!Array.isArray(arr) || !arr.length) return []
+  const out: { category: string; price: number | null }[] = []
+  for (const item of arr) {
+    if (!item || typeof item !== 'object') continue
+    const o = item as Record<string, unknown>
+    const category = pickStr(o, [
+      '品类',
+      '品类名',
+      '品种',
+      'category',
+      'category_name',
+      '回收品种',
+    ])
+    const price = pickNumber(o, ['价格', '收货价格', 'price', 'receive_price'])
+    if (!category && price === null) continue
+    out.push({ category: category || '—', price })
+  }
+  return out
+}
+
+function warehouseReceiptPriceBlockHtml(
+  prices: { category: string; price: number | null }[],
+): string {
+  if (!prices.length) {
+    return `<div class="emap-wh-hover-row"><span class="emap-wh-hover-k">收货价格</span><span class="emap-wh-hover-v">—</span></div>`
+  }
+  const items = prices
+    .map((p) => {
+      const val =
+        p.price === null
+          ? '—'
+          : `${p.price.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} 元/吨`
+      return `<div class="emap-wh-hover-freight-item"><span class="emap-wh-hover-freight-smelter">${escapeHtml(
+        p.category,
+      )}</span><span class="emap-wh-hover-freight-val">${escapeHtml(val)}</span></div>`
+    })
+    .join('')
+  return `<div class="emap-wh-hover-freight"><div class="emap-wh-hover-freight-head">收货价格</div><div class="emap-wh-hover-freight-scroll">${items}</div></div>`
+}
+
+function formatWarehouseCurrentStock(raw: Record<string, unknown>): string {
+  const stock = pickNumber(raw, ['当前库存', 'current_stock', 'stock'])
+  if (stock === null) return '—'
+  const date = pickStr(raw, ['库存日期', 'inventory_date'])
+  const base = `${stock.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 吨`
+  return date ? `${base}（${date}）` : base
+}
+
 function warehouseSmelterFreightBlockHtml(
   freights: { smelter: string; freight: number | null }[],
 ): string {
@@ -1913,9 +2121,12 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
   const phone = pickStr(raw, ['电话', '手机', '联系电话', 'mobile', 'tel'])
   const haz = pickNumber(raw, ['危废经营许可数量', 'hazard_license_count', '危废许可数量'])
   const monthly = pickNumber(raw, ['月均收货', 'monthly_avg_receipt', '月均采购'])
+  const stockText = formatWarehouseCurrentStock(raw)
   const smelterFreights = pickWarehouseSmelterFreights(raw)
+  const receiptPrices = pickWarehouseReceiptPricesByCategory(raw)
   const hazText = formatHazardLicenseQty(haz)
   const monthlyText = monthly === null ? '—' : String(monthly)
+  const receiptBlock = warehouseReceiptPriceBlockHtml(receiptPrices)
   const freightBlock = warehouseSmelterFreightBlockHtml(smelterFreights)
   const tipRow = (label: string, value: string) =>
     `<div class="emap-wh-hover-row"><span class="emap-wh-hover-k">${escapeHtml(
@@ -1935,7 +2146,7 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
   )}${dual(metric('联系人', contact || '—'), metric('电话', phone || '—'))}${dual(
     metric('危废经营许可数量', hazText),
     metric('月均收货', monthlyText),
-  )}${freightBlock}</div></div>`
+  )}${tipRow('当前库存', stockText)}${receiptBlock}${freightBlock}</div></div>`
 }
 
 function smelterPopupHtml(p: MapPoint): string {
@@ -1988,7 +2199,7 @@ function initMap() {
   }
   if (!map.getPane(emapRankComparisonTipPaneName)) {
     const p = map.createPane(emapRankComparisonTipPaneName)
-    p.style.zIndex = '2200'
+    p.style.zIndex = '680'
     p.style.pointerEvents = 'none'
   }
   if (!map.getPane(emapComparisonFlowPaneName)) {
@@ -2022,13 +2233,31 @@ function initMap() {
     }
     // 点击地图空白区域：取消当前仓库选中并清空比价/距离线覆盖物（锁定时不取消）
     if (selectedWarehouse.value?.kind === 'warehouse') {
-      if (warehouseSelectionLocked.value) return
+      if (warehouseSelectionLocked.value) {
+        requestAnimationFrame(() => syncLockedWarehousePopupPin())
+        return
+      }
       selectedWarehouse.value = null
       clearComparisonOverlays()
     }
   })
 
+  const onMapContainerCaptureClick = (ev: MouseEvent) => {
+    const el = ev.target as HTMLElement | null
+    if (el?.closest?.('.leaflet-popup-close-button')) {
+      lockedWarehousePopupDismissedByUser = true
+    }
+  }
+  map.getContainer().addEventListener('click', onMapContainerCaptureClick, true)
+  emapMapPopupCloseCaptureOff = () => {
+    map.getContainer().removeEventListener('click', onMapContainerCaptureClick, true)
+    emapMapPopupCloseCaptureOff = null
+  }
+
+  map.on('popupclose', onLockedWarehousePopupClosed)
+
   map.on('popupopen', (e: L.LeafletEvent) => {
+    guardLockedWarehousePopupOpen(e)
     const pop = (e as unknown as { popup?: L.Popup }).popup
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
@@ -2225,10 +2454,12 @@ watch(selectedWarehouse, (wh) => {
   }
   refreshAllMarkerVisualState()
   refreshWarehouseMarkerLockInteractivity()
+  syncLockedWarehousePopupPin()
 })
 
 watch(warehouseSelectionLocked, () => {
   refreshWarehouseMarkerLockInteractivity()
+  syncLockedWarehousePopupPin()
 })
 
 watch([comparisonRanks, warehouseDistanceMonitorOn, compareLoading], () => {
@@ -2384,6 +2615,7 @@ function renderMarkers(points: MapPoint[], options?: { preserveMapView?: boolean
   refreshAllMarkerVisualState()
   applyWarehouseTypeVisibility()
   refreshWarehouseMarkerLockInteractivity()
+  syncLockedWarehousePopupPin()
 
   if (options?.preserveMapView) return
 
@@ -2426,7 +2658,7 @@ function comparisonRankTipHtml(row: ComparisonRankItem): string {
   const rk = escapeHtml(String(row.rank))
   const name = escapeHtml(row.smelter)
   const badgeCls = comparisonRankBadgeClass(row.rank)
-  return `<div class="emap-rank-tip-inner"><span class="${badgeCls}">${rk}</span><div class="emap-rank-tip-body"><div class="emap-rank-tip-name">${name}</div><div>毛利: ${formatNum(row.netProfit)}</div><div>库房回收价: ${formatNum(row.totalRecovery)}</div><div>运费: ${formatNum(row.totalFreight)}</div></div></div>`
+  return `<div class="emap-rank-tip-inner"><span class="${badgeCls}">${rk}</span><div class="emap-rank-tip-body"><div class="emap-rank-tip-name">${name}</div><div>净货款: ${formatNum(row.netProfit)}</div><div>总货款: ${formatNum(row.totalRecovery)}</div><div>总运费: ${formatNum(row.totalFreight)}</div></div></div>`
 }
 
 /** 比价常驻 tip：方向轮询 + 像素防重叠 */
@@ -2841,6 +3073,125 @@ function pickDetailTotalRecovery(row: Record<string, unknown>): number | null {
   ])
 }
 
+/** 比价表「总货款」：优先顶层/含循融宝「总货款」 */
+function pickComparisonTotalGoods(row: Record<string, unknown>): number | null {
+  const top = pickNumber(row, ['总货款'])
+  if (top != null && Number.isFinite(top)) return top
+  return pickNumberComparisonDetail(row, [
+    '总货款',
+    '总价',
+    '总回收价',
+    'total_recovery',
+    '报价金额',
+    '物料总价',
+    'material_sum',
+  ])
+}
+
+/** 比价表「总运费」：优先「运费」，再回退「总运费」 */
+function pickComparisonFreight(row: Record<string, unknown>): number | null {
+  const top = pickNumber(row, ['运费'])
+  if (top != null && Number.isFinite(top)) return top
+  return pickNumberComparisonDetail(row, ['运费', '总运费', '运费合计'])
+}
+
+/** 比价表「净货款」 */
+function pickComparisonNetGoods(row: Record<string, unknown>): number | null {
+  const top = pickNumber(row, ['净货款'])
+  if (top != null && Number.isFinite(top)) return top
+  return pickNumberComparisonDetail(row, ['净货款', '利润_基准', '利润_含3%', '利润'])
+}
+
+function pickComparisonValuePerTon(row: Record<string, unknown>): number | null {
+  const top = pickNumber(row, ['每吨净值'])
+  if (top != null && Number.isFinite(top)) return top
+  return pickNumberComparisonDetail(row, ['每吨净值'])
+}
+
+function pickComparisonGrossProfit(row: Record<string, unknown>): number | null {
+  const src = comparisonDetailValueSource(row)
+  if (Object.prototype.hasOwnProperty.call(src, '毛利') && src['毛利'] == null) return null
+  const v = pickNumber(src, ['毛利', 'gross_profit'])
+  if (v != null && Number.isFinite(v)) return v
+  if (src !== row) {
+    if (Object.prototype.hasOwnProperty.call(row, '毛利') && row['毛利'] == null) return null
+    return pickNumber(row, ['毛利', 'gross_profit'])
+  }
+  return null
+}
+
+function pickComparisonGrossProfitPerTon(row: Record<string, unknown>): number | null {
+  const src = comparisonDetailValueSource(row)
+  if (Object.prototype.hasOwnProperty.call(src, '每吨毛利') && src['每吨毛利'] == null) return null
+  const v = pickNumber(src, ['每吨毛利', 'gross_profit_per_ton'])
+  if (v != null && Number.isFinite(v)) return v
+  if (src !== row) {
+    if (Object.prototype.hasOwnProperty.call(row, '每吨毛利') && row['每吨毛利'] == null) return null
+    return pickNumber(row, ['每吨毛利', 'gross_profit_per_ton'])
+  }
+  return null
+}
+
+function accumulateComparisonMoneyFromRows(rows: Record<string, unknown>[]): {
+  totalGoods: number
+  freight: number
+  netGoods: number
+  grossProfit: number | null
+  valuePerTon: number | null
+  grossProfitPerTon: number | null
+  qtySum: number
+} {
+  let totalGoods = 0
+  let freight = 0
+  let netGoods = 0
+  let grossProfitSum = 0
+  let grossProfitAny = false
+  let grossProfitAllNull = true
+  let vptNum = 0
+  let vptDen = 0
+  let gptNum = 0
+  let gptDen = 0
+  let qtySum = 0
+  for (const row of rows) {
+    const qty = pickNumber(row, ['吨数', 'quantity', 'qty', '需求吨数', 'weight']) ?? 0
+    const qtyEff = Math.max(0, qty)
+    qtySum += qtyEff
+    const tg = pickComparisonTotalGoods(row)
+    const fr = pickComparisonFreight(row)
+    const ng = pickComparisonNetGoods(row)
+    const gp = pickComparisonGrossProfit(row)
+    const vpt = pickComparisonValuePerTon(row)
+    const gpt = pickComparisonGrossProfitPerTon(row)
+    if (tg != null && Number.isFinite(tg)) totalGoods += tg
+    if (fr != null && Number.isFinite(fr)) freight += fr
+    if (ng != null && Number.isFinite(ng)) netGoods += ng
+    if (gp != null && Number.isFinite(gp)) {
+      grossProfitSum += gp
+      grossProfitAny = true
+      grossProfitAllNull = false
+    } else if (!Object.prototype.hasOwnProperty.call(row, '毛利') || row['毛利'] != null) {
+      grossProfitAllNull = false
+    }
+    if (vpt != null && Number.isFinite(vpt) && qtyEff > 0) {
+      vptNum += vpt * qtyEff
+      vptDen += qtyEff
+    }
+    if (gpt != null && Number.isFinite(gpt) && qtyEff > 0) {
+      gptNum += gpt * qtyEff
+      gptDen += qtyEff
+    }
+  }
+  return {
+    totalGoods,
+    freight,
+    netGoods,
+    grossProfit: grossProfitAny ? grossProfitSum : grossProfitAllNull ? null : grossProfitSum,
+    valuePerTon: vptDen > 0 ? vptNum / vptDen : null,
+    grossProfitPerTon: gptDen > 0 ? gptNum / gptDen : null,
+    qtySum,
+  }
+}
+
 /** 与嵌入页 Ut() 一致：明细行取价口径（循融宝厂优先 `含循融宝`） */
 function pickDetailUnitPrice(row: Record<string, unknown>, priceMode: 'base' | 'tax3'): number | null {
   if (priceMode === 'tax3') {
@@ -2955,13 +3306,21 @@ function formatComparisonCategoryPricesPlain(row: ComparisonRankItem): string {
 }
 
 function formatComparisonNetProfitCell(row: ComparisonRankItem): string {
-  return `¥ ${toDisplayNum(row.netProfit).toLocaleString('zh-CN')}`
+  return `¥${toDisplayNum(row.netProfit).toLocaleString('zh-CN')}`
+}
+
+function formatComparisonGrossProfitCell(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return '—'
+  return `¥${toDisplayNum(n).toLocaleString('zh-CN')}`
 }
 
 function formatValuePerTonCell(row: ComparisonRankItem): string {
+  if (row.valuePerTon != null && Number.isFinite(row.valuePerTon)) {
+    return `¥${toDisplayNum(row.valuePerTon).toLocaleString('zh-CN')}`
+  }
   if (!row.qtySum || row.qtySum <= 0 || !Number.isFinite(row.netProfit)) return '—'
   const perTon = row.netProfit / row.qtySum
-  return `¥ ${toDisplayNum(perTon).toLocaleString('zh-CN')}`
+  return `¥${toDisplayNum(perTon).toLocaleString('zh-CN')}`
 }
 
 function comparisonXunRongBaoTitle(row: ComparisonRankItem): string {
@@ -3010,6 +3369,14 @@ function buildExcludedComparisonRankFromDetails(
   const categoryPrices: Record<string, number | null> = {}
   let totalRecovery = 0
   let totalFreight = 0
+  let netGoods = 0
+  let grossProfitSum = 0
+  let grossProfitAny = false
+  let grossProfitAllNull = true
+  let vptNum = 0
+  let vptDen = 0
+  let gptNum = 0
+  let gptDen = 0
   let qtySum = 0
   let unitNum = 0
   let unitDen = 0
@@ -3029,12 +3396,33 @@ function buildExcludedComparisonRankFromDetails(
     const qtyEff = Math.max(0, qty)
     const up = pickNumber(ex, ['单价', '基准价', '含3%税价', '报价', 'unit_price', '最优价'])
     const tot =
+      pickNumber(ex, ['总货款']) ??
       pickNumber(ex, ['总回收价', 'total_recovery']) ??
       pickNumber(ex, ['总价', '报价金额', '物料总价', 'material_sum'])
-    const tf = pickNumber(ex, ['总运费', '运费合计'])
+    const tf = pickNumber(ex, ['运费', '总运费', '运费合计'])
+    const ng = pickNumber(ex, ['净货款', '利润_基准', '利润_含3%', '利润'])
+    const gp = pickNumber(ex, ['毛利'])
+    const vpt = pickNumber(ex, ['每吨净值'])
+    const gpt = pickNumber(ex, ['每吨毛利'])
     if (tot != null && Number.isFinite(tot)) totalRecovery += tot
     else if (up != null && qty > 0) totalRecovery += up * qty
     if (tf != null && Number.isFinite(tf)) totalFreight += tf
+    if (ng != null && Number.isFinite(ng)) netGoods += ng
+    if (gp != null && Number.isFinite(gp)) {
+      grossProfitSum += gp
+      grossProfitAny = true
+      grossProfitAllNull = false
+    } else if (!Object.prototype.hasOwnProperty.call(ex, '毛利') || ex['毛利'] != null) {
+      grossProfitAllNull = false
+    }
+    if (vpt != null && Number.isFinite(vpt) && qtyEff > 0) {
+      vptNum += vpt * qtyEff
+      vptDen += qtyEff
+    }
+    if (gpt != null && Number.isFinite(gpt) && qtyEff > 0) {
+      gptNum += gpt * qtyEff
+      gptDen += qtyEff
+    }
     qtySum += qtyEff
     if (up != null && qty > 0) {
       unitNum += up * qty
@@ -3054,16 +3442,18 @@ function buildExcludedComparisonRankFromDetails(
 
   if (qtySum <= 0 && totalRecovery <= 0 && strictLineDen <= 0) return null
 
-  const firstExRow = rows.find((r) => detailRowXunRongBaoOn(r) && comparisonDetailExcludedValueSource(r))
-  let netProfit = totalRecovery - totalFreight
-  if (firstExRow) {
-    const ex0 = comparisonDetailExcludedValueSource(firstExRow)
-    if (ex0) {
-      const p =
-        priceMode === 'tax3'
-          ? pickNumber(ex0, ['利润_含3%', '利润'])
-          : pickNumber(ex0, ['利润_基准', '利润'])
-      if (p != null && Number.isFinite(p)) netProfit = p
+  let netProfit = netGoods > 0 ? netGoods : totalRecovery - totalFreight
+  if (netGoods <= 0) {
+    const firstExRow = rows.find((r) => detailRowXunRongBaoOn(r) && comparisonDetailExcludedValueSource(r))
+    if (firstExRow) {
+      const ex0 = comparisonDetailExcludedValueSource(firstExRow)
+      if (ex0) {
+        const p =
+          priceMode === 'tax3'
+            ? pickNumber(ex0, ['利润_含3%', '利润', '净货款'])
+            : pickNumber(ex0, ['利润_基准', '利润', '净货款'])
+        if (p != null && Number.isFinite(p)) netProfit = p
+      }
     }
   }
 
@@ -3084,6 +3474,9 @@ function buildExcludedComparisonRankFromDetails(
     totalRecovery: toDisplayNum(totalRecovery),
     totalFreight: toDisplayNum(totalFreight),
     qtySum: toDisplayNum(qtySum),
+    valuePerTon: vptDen > 0 ? toDisplayNum(vptNum / vptDen) : null,
+    grossProfit: grossProfitAny ? toDisplayNum(grossProfitSum) : grossProfitAllNull ? null : toDisplayNum(grossProfitSum),
+    grossProfitPerTon: gptDen > 0 ? toDisplayNum(gptNum / gptDen) : null,
     categoryPrices,
     lineUnitPrice: strictLineDen > 0 ? toDisplayNum(strictLineNum / strictLineDen) : undefined,
     freightUnitPrice: strictFpuDen > 0 ? toDisplayNum(strictFpuNum / strictFpuDen) : undefined,
@@ -3448,19 +3841,11 @@ function parseSmelterProfitRankArray(
     if (!smelter) continue
     fallback += 1
     const rank = pickNumber(row, ['rank', '名次', '排序', '排行', '排名']) ?? fallback
-    const netProfit = pickProfitFromSmelterRankRow(row, priceMode)
-    const totalRecovery =
-      pickNumber(row, [
-        '总回收价',
-        '总价合计',
-        '回收额',
-        'totalRecovery',
-        'materialSum',
-        '物料总价',
-        'total_recovery',
-      ]) ?? 0
-    const totalFreight =
-      pickNumber(row, ['总运费合计', '总运费', '估算运费', '运费合计']) ?? 0
+    const netProfit =
+      pickComparisonNetGoods(row) ??
+      pickProfitFromSmelterRankRow(row, priceMode)
+    const totalRecovery = pickComparisonTotalGoods(row) ?? 0
+    const totalFreight = pickComparisonFreight(row) ?? 0
     const qtySum = pickNumber(row, ['吨数', 'quantity', 'qtySum', 'qty', '需求吨数']) ?? 0
     const unitPriceRaw = pickNumber(row, [
       '单价',
@@ -3476,10 +3861,22 @@ function parseSmelterProfitRankArray(
       rank,
       smelter,
       unitPrice: toDisplayNum(unitPrice),
-      netProfit: toDisplayNum(netProfit),
+      netProfit: toDisplayNum(netProfit ?? 0),
       totalRecovery: toDisplayNum(totalRecovery),
       totalFreight: toDisplayNum(totalFreight),
       qtySum: toDisplayNum(qtySum),
+      valuePerTon:
+        pickComparisonValuePerTon(row) != null
+          ? toDisplayNum(pickComparisonValuePerTon(row)!)
+          : null,
+      grossProfit:
+        pickComparisonGrossProfit(row) != null
+          ? toDisplayNum(pickComparisonGrossProfit(row)!)
+          : pickComparisonGrossProfit(row),
+      grossProfitPerTon:
+        pickComparisonGrossProfitPerTon(row) != null
+          ? toDisplayNum(pickComparisonGrossProfitPerTon(row)!)
+          : pickComparisonGrossProfitPerTon(row),
     })
   }
   return out.sort((a, b) => a.rank - b.rank)
@@ -3507,9 +3904,6 @@ function mergeComparisonRanksWithDetailRows(
     })
     if (!rows.length) return r
     const categoryPrices: Record<string, number | null> = {}
-    let totalRecovery = 0
-    let totalFreight = 0
-    let qtySum = 0
     let unitNum = 0
     let unitDen = 0
     let strictLineNum = 0
@@ -3532,12 +3926,6 @@ function mergeComparisonRanksWithDetailRows(
         'unit_price',
         '最优价',
       ])
-      const tot = pickDetailTotalRecovery(row)
-      const tf = pickNumberComparisonDetail(row, ['总运费', '运费合计'])
-      if (tot != null && Number.isFinite(tot)) totalRecovery += tot
-      else if (up != null && qty > 0) totalRecovery += up * qty
-      if (tf != null && Number.isFinite(tf)) totalFreight += tf
-      qtySum += qtyEff
       if (up != null && qty > 0) {
         unitNum += up * qty
         unitDen += qty
@@ -3560,17 +3948,30 @@ function mergeComparisonRanksWithDetailRows(
         }
       }
     }
+    const money = accumulateComparisonMoneyFromRows(rows)
     const unitPrice =
       unitDen > 0
         ? unitNum / unitDen
         : (pickNumberComparisonDetail(rows[0] as Record<string, unknown>, ['单价', '基准价', '报价']) ?? 0)
+    const netProfit =
+      money.netGoods > 0 ? money.netGoods : money.totalGoods - money.freight > 0 ? money.totalGoods - money.freight : r.netProfit
     return {
       ...r,
       categoryPrices,
       unitPrice: toDisplayNum(unitPrice),
-      totalRecovery: toDisplayNum(totalRecovery),
-      totalFreight: toDisplayNum(totalFreight),
-      qtySum: toDisplayNum(qtySum),
+      totalRecovery: toDisplayNum(money.totalGoods > 0 ? money.totalGoods : r.totalRecovery),
+      totalFreight: toDisplayNum(money.freight > 0 ? money.freight : r.totalFreight),
+      netProfit: toDisplayNum(netProfit),
+      qtySum: toDisplayNum(money.qtySum > 0 ? money.qtySum : r.qtySum),
+      valuePerTon: money.valuePerTon != null ? toDisplayNum(money.valuePerTon) : null,
+      grossProfit:
+        money.grossProfit != null && Number.isFinite(money.grossProfit)
+          ? toDisplayNum(money.grossProfit)
+          : money.grossProfit,
+      grossProfitPerTon:
+        money.grossProfitPerTon != null && Number.isFinite(money.grossProfitPerTon)
+          ? toDisplayNum(money.grossProfitPerTon)
+          : money.grossProfitPerTon,
       lineUnitPrice: strictLineDen > 0 ? toDisplayNum(strictLineNum / strictLineDen) : undefined,
       freightUnitPrice: strictFpuDen > 0 ? toDisplayNum(strictFpuNum / strictFpuDen) : undefined,
       ...(xunRongBao ? { xunRongBao: true, xunRongBaoSurchargeYuanPerTon } : {}),
@@ -3624,26 +4025,19 @@ function parseRankRowsLoose(
       'name',
     ])
     const netProfitRaw =
-      priceMode === 'tax3'
+      pickComparisonNetGoods(row) ??
+      (priceMode === 'tax3'
         ? (pickNumberComparisonDetail(row, ['利润_含3%', '利润']) ?? 0)
-        : (pickNumberComparisonDetail(row, ['利润_基准', '利润']) ?? 0)
+        : (pickNumberComparisonDetail(row, ['利润_基准', '利润']) ?? 0))
     const hasProfitLike =
+      pickComparisonNetGoods(row) != null ||
       pickNumberComparisonDetail(row, ['利润', '利润_基准', '利润_含3%', '净收益', 'profit']) != null
     if (!smelter || !hasProfitLike) continue
     fallback += 1
     const rank = pickNumber(row, ['排名', '排行', '排序', 'rank', '名次']) ?? fallback
     const netProfit = netProfitRaw
-    const totalRecovery = pickDetailTotalRecovery(row) ?? 0
-    const totalFreight =
-      pickNumberComparisonDetail(row, [
-        '总运费',
-        '运费合计',
-        '估算运费',
-        '运费单价',
-        '运费/吨',
-        'freight_per_ton',
-        'freight',
-      ]) ?? 0
+    const totalRecovery = pickComparisonTotalGoods(row) ?? 0
+    const totalFreight = pickComparisonFreight(row) ?? 0
     const qtySum = pickNumber(row, ['吨数', 'quantity', 'qty', '需求吨数']) ?? 0
     const unitPriceRaw = pickNumberComparisonDetail(row, [
       '单价',
@@ -3669,6 +4063,18 @@ function parseRankRowsLoose(
         strictLineUp != null && Number.isFinite(strictLineUp) ? toDisplayNum(strictLineUp) : undefined,
       freightUnitPrice:
         strictFpu != null && Number.isFinite(strictFpu) ? toDisplayNum(strictFpu) : undefined,
+      valuePerTon:
+        pickComparisonValuePerTon(row) != null
+          ? toDisplayNum(pickComparisonValuePerTon(row)!)
+          : null,
+      grossProfit:
+        pickComparisonGrossProfit(row) != null
+          ? toDisplayNum(pickComparisonGrossProfit(row)!)
+          : pickComparisonGrossProfit(row),
+      grossProfitPerTon:
+        pickComparisonGrossProfitPerTon(row) != null
+          ? toDisplayNum(pickComparisonGrossProfitPerTon(row)!)
+          : pickComparisonGrossProfitPerTon(row),
     })
   }
   return out.sort((a, b) => a.rank - b.rank)
@@ -3751,7 +4157,7 @@ function aggregateComparisonRows(
         '3pct_price',
       ]) ?? 0
     const freight = pickNumberComparisonDetail(row, ['freight_per_ton', '运费单价', 'freight', '运费每吨']) ?? 0
-    const lineTotalFreight = pickNumberComparisonDetail(row, ['总运费', '运费合计'])
+    const lineTotalFreight = pickComparisonFreight(row)
     const qty = pickNumber(row, ['quantity', '吨数', '数量', 'qty', 'weight', '需求吨数']) ?? 1
     const key = smelter
     if (!grouped.has(key)) {
@@ -3776,7 +4182,7 @@ function aggregateComparisonRows(
     const upLine = pickDetailUnitPrice(row, priceMode)
     g.categoryPrices[cat] = upLine != null && Number.isFinite(upLine) ? upLine : null
     const qtyEff = Math.max(0, qty)
-    const lineRecovery = pickDetailTotalRecovery(row)
+    const lineRecovery = pickComparisonTotalGoods(row)
     if (lineRecovery != null && Number.isFinite(lineRecovery)) g.materialSum += lineRecovery
     else g.materialSum += unitPrice * qtyEff
     g.freightSum += freight
@@ -3803,30 +4209,42 @@ function aggregateComparisonRows(
   }
   return [...grouped.values()]
     .map((g) => {
-      const avgFreightPerTon = g.freightCount > 0 ? g.freightSum / g.freightCount : 0
-      const totalFreightFromLine =
-        g.totalFreightSum > 0 ? g.totalFreightSum : avgFreightPerTon * g.qtySum
-      let netProfit = g.materialSum - totalFreightFromLine
-      const sample = rows.find(
+      const smelterRows = rows.filter(
         (r) =>
           (pickStr(r, ['smelter_name', '冶炼厂', '冶炼厂名', 'smelter', 'factory_name']) || '未知冶炼厂') ===
           g.smelter,
       )
-      if (sample) {
-        const backendProfit =
-          priceMode === 'tax3'
-            ? pickNumberComparisonDetail(sample, ['利润_含3%', '利润'])
-            : pickNumberComparisonDetail(sample, ['利润_基准', '利润'])
-        if (backendProfit != null && Number.isFinite(backendProfit)) netProfit = backendProfit
+      const money = accumulateComparisonMoneyFromRows(smelterRows)
+      const avgFreightPerTon = g.freightCount > 0 ? g.freightSum / g.freightCount : 0
+      const totalFreightFromLine =
+        money.freight > 0 ? money.freight : g.totalFreightSum > 0 ? g.totalFreightSum : avgFreightPerTon * g.qtySum
+      const totalGoods = money.totalGoods > 0 ? money.totalGoods : g.materialSum
+      let netProfit =
+        money.netGoods > 0 ? money.netGoods : totalGoods - totalFreightFromLine
+      if (money.netGoods <= 0) {
+        const sample = smelterRows[0]
+        if (sample) {
+          const backendProfit = pickComparisonNetGoods(sample)
+          if (backendProfit != null && Number.isFinite(backendProfit)) netProfit = backendProfit
+        }
       }
-      const unitPrice = g.qtySum > 0 ? g.materialSum / g.qtySum : 0
+      const unitPrice = g.qtySum > 0 ? totalGoods / g.qtySum : 0
       return {
         smelter: g.smelter,
         unitPrice: toDisplayNum(unitPrice),
         netProfit: toDisplayNum(netProfit),
-        totalRecovery: toDisplayNum(g.materialSum),
+        totalRecovery: toDisplayNum(totalGoods),
         totalFreight: toDisplayNum(totalFreightFromLine),
         qtySum: toDisplayNum(g.qtySum),
+        valuePerTon: money.valuePerTon != null ? toDisplayNum(money.valuePerTon) : null,
+        grossProfit:
+          money.grossProfit != null && Number.isFinite(money.grossProfit)
+            ? toDisplayNum(money.grossProfit)
+            : money.grossProfit,
+        grossProfitPerTon:
+          money.grossProfitPerTon != null && Number.isFinite(money.grossProfitPerTon)
+            ? toDisplayNum(money.grossProfitPerTon)
+            : money.grossProfitPerTon,
         categoryPrices: g.categoryPrices,
         lineUnitPrice: g.strictLineDen > 0 ? toDisplayNum(g.strictLineNum / g.strictLineDen) : undefined,
         freightUnitPrice: g.strictFpuDen > 0 ? toDisplayNum(g.strictFpuNum / g.strictFpuDen) : undefined,
@@ -4457,10 +4875,13 @@ function openComparisonModal() {
   if (warehouseDistanceMonitorOn.value) {
     exitWarehouseDistanceMonitorMode(false)
   }
+  const wasVisible = comparisonModalVisible.value
   const wh = selectedWarehouse.value?.title?.trim()
   comparisonModalTitle.value = wh ? `比价预测结果：${wh}` : '比价预测结果'
-  comparisonSectionCollapsed.value = false
-  forecastSectionCollapsed.value = false
+  if (!wasVisible) {
+    comparisonSectionCollapsed.value = false
+    forecastSectionCollapsed.value = false
+  }
   comparisonModalVisible.value = true
   const sel = selectedWarehouse.value
   if (sel && comparisonRanks.value.length) {
@@ -4937,6 +5358,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('webkitfullscreenchange', onEmapFullscreenChange)
   dismissGeoNearestToast()
   dismissComparisonPrereqToast()
+  emapMapPopupCloseCaptureOff?.()
   stopEmapRankTipLayoutHandlers()
   cancelFlowOverlayAnimations()
   stopFlowAnimations()
@@ -5000,19 +5422,47 @@ onBeforeUnmount(() => {
     0 12px 32px rgba(0, 0, 0, 0.45);
 }
 
-.emap-toolbar-collapsed-fab {
+.emap-cmp-settings-bubble {
   position: absolute;
   top: 12px;
   left: 12px;
   z-index: 1002;
-  backdrop-filter: blur(8px);
-  background: rgba(6, 18, 40, 0.9);
-  border-color: rgba(34, 211, 238, 0.38);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  cursor: default;
+}
+
+.emap-cmp-settings-bubble--head {
+  position: static;
+  flex-direction: row;
+  align-items: center;
+  padding: 4px 10px 4px 4px;
+  gap: 6px;
+  border-radius: 999px;
+}
+
+.emap-cmp-settings-bubble--head .emap-map-tools-drag-hint {
+  width: 28px;
+  height: 28px;
+  font-size: 0.85rem;
+}
+
+.emap-cmp-settings-head-btn {
+  border: none;
+  background: transparent;
+  color: #e2e8f0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 2px;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.emap-cmp-settings-head-btn:hover {
+  color: #f8fafc;
 }
 
 .emap-map-wrap--toolbar-collapsed :deep(.leaflet-top.leaflet-left) {
-  top: 48px;
+  top: 88px;
 }
 
 .emap-toolbar-heading {
@@ -5873,7 +6323,7 @@ onBeforeUnmount(() => {
   top: 12px;
   left: 12px;
   z-index: 1000;
-  width: min(720px, calc(100% - 24px));
+  width: min(920px, calc(100% - 24px));
   max-height: min(70vh, calc(100% - 132px));
   background: rgba(6, 18, 40, 0.92);
   border: 1px solid rgba(34, 211, 238, 0.3);
@@ -6003,13 +6453,6 @@ onBeforeUnmount(() => {
   min-width: 0;
 }
 
-.emap-cmp-panel-settings-btn {
-  flex-shrink: 0;
-  backdrop-filter: blur(8px);
-  background: rgba(6, 18, 40, 0.9);
-  border-color: rgba(34, 211, 238, 0.38);
-}
-
 .emap-cmp-panel-title {
   margin: 0;
   font-size: 18px;
@@ -6088,11 +6531,20 @@ onBeforeUnmount(() => {
   text-overflow: ellipsis;
 }
 
+/* 固定列宽：厂名可省略；金额列保证完整显示（列多时允许横向滚动） */
 .emap-cmp-table-wrap {
   max-height: none;
-  overflow: visible;
+  overflow-x: auto;
+  overflow-y: visible;
   border: 1px solid rgba(34, 211, 238, 0.22);
   border-radius: 8px;
+}
+
+.emap-cmp-table {
+  width: 100%;
+  min-width: 880px;
+  table-layout: fixed;
+  font-size: 11px;
 }
 
 .emap-cmp-forecast {
@@ -6122,13 +6574,7 @@ onBeforeUnmount(() => {
   gap: 8px;
 }
 
-/* 固定列宽：厂名省略，四列金额完整单行；容器不横向滚动 */
-.emap-cmp-table {
-  width: 100%;
-  table-layout: fixed;
-  font-size: 11px;
-}
-
+/* 固定列宽：厂名省略；金额列完整显示 */
 .emap-cmp-table th,
 .emap-cmp-table td {
   text-align: center;
@@ -6176,17 +6622,17 @@ onBeforeUnmount(() => {
 }
 
 .emap-cmp-table .emap-cmp-col-smelter {
-  width: 16%;
+  width: 13%;
   max-width: 0;
 }
 
 .emap-cmp-table .emap-cmp-col-unit {
-  width: 11%;
+  width: 8%;
   font-size: 11px;
 }
 
 .emap-cmp-table .emap-cmp-col-cats {
-  width: 22%;
+  width: 16%;
   vertical-align: middle;
   padding-top: 6px;
   padding-bottom: 6px;
@@ -6194,7 +6640,20 @@ onBeforeUnmount(() => {
 }
 
 .emap-cmp-table .emap-cmp-col-money {
-  width: 12%;
+  width: 10%;
+  min-width: 4.75rem;
+  overflow: visible;
+}
+
+.emap-cmp-table td.emap-cmp-col-money,
+.emap-cmp-table th.emap-cmp-col-money {
+  overflow: visible;
+}
+
+.emap-cmp-col-money .emap-cmp-cell-truncate {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .emap-cmp-cell-truncate {
