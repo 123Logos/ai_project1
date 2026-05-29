@@ -37,10 +37,12 @@ if (!block.includes('freight:v(e,[`运费`])') && !block.includes('<td>${M(fr)}<
 }
 
 block = block.replace(/,freight:v\(e,\[`运费`\]\)/, '')
+// 删除 fr= 时保留逗号，避免 `sw=...` 与 `hz=...` 粘连导致 SyntaxError
 block = block.replace(
   /,fr=t\.freight!=null&&!isNaN\(t\.freight\)\?t\.freight\.toLocaleString\(\):`-`,/,
   '',
 )
+block = block.replace(/`"><\/span> `hz=/g, '`"></span> `,hz=')
 block = block.replace(/\s*<td>\$\{M\(fr\)\}<\/td>/, '')
 block = block.replace(/D\(e,13,/g, 'D(e,12,')
 block = block.replace(/E\(e,13,/g, 'E(e,12,')
