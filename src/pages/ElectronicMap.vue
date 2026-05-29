@@ -1392,43 +1392,6 @@ function applyWarehouseTypeVisibility() {
   }
 }
 
-function applyGlobalMarkerVisibility() {
-  const markerLayer = markerLayerRef.value
-  if (!markerLayer) return
-  const map = mapRef.value
-  if (!map) return
-  for (const p of allWarehousePoints.value) {
-    const m = warehouseMarkerById.get(p.id)
-    if (!m) continue
-    const isOnMap = map.hasLayer(m)
-    if (hideAllWarehouses.value) {
-      if (isOnMap) m.remove()
-    } else {
-      if (!isOnMap) m.addTo(markerLayer)
-    }
-  }
-  for (const p of allSmelterPoints.value) {
-    const m = smelterMarkerById.get(p.id)
-    if (!m) continue
-    const isOnMap = map.hasLayer(m)
-    if (hideAllSmelters.value) {
-      if (isOnMap) m.remove()
-    } else {
-      if (!isOnMap) m.addTo(markerLayer)
-    }
-  }
-}
-
-function toggleAllWarehousesVisibility() {
-  hideAllWarehouses.value = !hideAllWarehouses.value
-  applyGlobalMarkerVisibility()
-}
-
-function toggleAllSmeltersVisibility() {
-  hideAllSmelters.value = !hideAllSmelters.value
-  applyGlobalMarkerVisibility()
-}
-
 function syncEmapFullscreenFlag() {
   const shell = emapShellRef.value
   const fs =
@@ -1473,10 +1436,6 @@ function onEmapFullscreenChange() {
 const allSmelterPoints = ref<MapPoint[]>([])
 /** 隐藏的库房类型标签集合 */
 const hiddenWarehouseTypes = ref<Set<string>>(new Set())
-/** 全局隐藏所有库房标记 */
-const hideAllWarehouses = ref(false)
-/** 全局隐藏所有冶炼厂标记 */
-const hideAllSmelters = ref(false)
 
 /** 库房 id → 标记，用于选中时把其余库房变浅 */
 const warehouseMarkerById = new Map<string, L.Marker>()
