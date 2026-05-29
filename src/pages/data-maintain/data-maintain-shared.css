@@ -1,0 +1,141 @@
+.dmp-page {
+  max-width: 1100px;
+}
+
+.dmp-top {
+  margin-bottom: 16px;
+}
+
+.dmp-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: none;
+  color: #2563eb;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.dmp-top h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.dmp-top p {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.5;
+}
+
+.dmp-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.dmp-tab {
+  border: 1px solid #d1d5db;
+  background: #fff;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  color: #475569;
+}
+
+.dmp-tab.active {
+  background: #196cc0;
+  border-color: #196cc0;
+  color: #fff;
+  font-weight: 600;
+}
+
+.dmp-panel {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.dmp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.dmp-search {
+  max-width: 220px;
+  height: 38px;
+}
+
+.dmp-msg {
+  color: #0f766e;
+  font-size: 13px;
+  margin: 0 0 8px;
+}
+
+.dmp-err {
+  color: #b91c1c;
+  font-size: 13px;
+  margin: 0 0 8px;
+  white-space: pre-wrap;
+}
+
+.dmp-hint {
+  padding: 14px 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+}
+
+.dmp-preview-title {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 8px;
+}
+
+.dmp-preview-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.dmp-table-wrap {
+  overflow-x: auto;
+}
+
+.dmp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dmp-table th,
+.dmp-table td {
+  border: 1px solid #e2e8f0;
+  padding: 8px 10px;
+  text-align: left;
+}
+
+.dmp-table th {
+  background: #f8fafc;
+  font-weight: 600;
+  color: #334155;
+}
+
+.dmp-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: #64748b;
+}

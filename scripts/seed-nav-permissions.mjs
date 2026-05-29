@@ -29,6 +29,9 @@ const NAV_PERMISSION_SEED = [
     label: '库房距离监测配置',
     field_name: 'perm_nav_map_supply_warehouse_distance_config',
   },
+  { label: '数据维护', field_name: 'perm_nav_map_supply_data_maintain' },
+  { label: '当前库存维护', field_name: 'perm_nav_map_supply_current_stock' },
+  { label: '收货价格维护', field_name: 'perm_nav_map_supply_receive_price' },
 
   { label: 'AI 预测', field_name: 'perm_nav_ai_prediction' },
   { label: '历史数据管理', field_name: 'perm_nav_ai_prediction_history_manage' },

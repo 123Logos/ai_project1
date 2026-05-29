@@ -12,21 +12,23 @@
         <div class="wdc-filters">
           <div class="wdc-filter-field">
             <label for="wdc-filter-from">源库房</label>
-            <select id="wdc-filter-from" v-model.number="filterFromId" class="wdc-select">
-              <option :value="0">全部</option>
-              <option v-for="w in warehouseOptions" :key="`ff-${w.id}`" :value="w.id">
-                {{ w.name }}
-              </option>
-            </select>
+            <WarehouseSearchPicker
+              input-id="wdc-filter-from"
+              v-model="filterFromId"
+              :options="warehouseOptions"
+              allow-all
+              placeholder="全部或搜索选择源库房"
+            />
           </div>
           <div class="wdc-filter-field">
             <label for="wdc-filter-to">对标库房</label>
-            <select id="wdc-filter-to" v-model.number="filterToId" class="wdc-select">
-              <option :value="0">全部</option>
-              <option v-for="w in warehouseOptions" :key="`ft-${w.id}`" :value="w.id">
-                {{ w.name }}
-              </option>
-            </select>
+            <WarehouseSearchPicker
+              input-id="wdc-filter-to"
+              v-model="filterToId"
+              :options="warehouseOptions"
+              allow-all
+              placeholder="全部或搜索选择对标库房"
+            />
           </div>
           <button type="button" class="btn btn-outline-secondary" :disabled="busy" @click="applyFilters">
             筛选
@@ -139,7 +141,7 @@
               v-model="dialogAddFromSearch"
               type="search"
               class="wdc-search"
-              placeholder="输入名称或编号筛选，点击下方条目选择"
+              placeholder="输入名称或编号模糊搜索，点击下方选择"
               autocomplete="off"
               aria-controls="wdc-dlg-from-list"
               aria-autocomplete="list"
@@ -167,7 +169,7 @@
               v-model="dialogAddTargetSearch"
               type="search"
               class="wdc-search"
-              placeholder="搜索名称或编号以筛选列表…"
+              placeholder="模糊搜索名称或编号以筛选列表…"
               autocomplete="off"
             />
             <div class="wdc-modal-chips">
@@ -183,16 +185,13 @@
         <div v-else-if="dialogMode === 'edit'" class="wdc-modal-body">
           <div v-if="dialogEditGroup?.rows.length" class="wdc-row">
             <label for="wdc-dlg-pick-target">选择你要修改的对标库房</label>
-            <select
-              id="wdc-dlg-pick-target"
-              class="wdc-select"
-              :value="editingRow?.toId ?? 0"
-              @change="onModalPickTargetChange($event)"
-            >
-              <option v-for="br in dialogEditGroup.rows" :key="`pick-${br.fromId}-${br.toId}`" :value="br.toId">
-                {{ br.toName }}
-              </option>
-            </select>
+            <WarehouseSearchPicker
+              input-id="wdc-dlg-pick-target"
+              :model-value="editingRow?.toId ?? 0"
+              :options="dialogEditBoundOptions"
+              placeholder="搜索当前已绑定的对标库房"
+              @update:model-value="onModalGroupTargetChange"
+            />
           </div>
           <p class="wdc-modal-readonly">
             <span class="wdc-muted">源库房：</span>{{ editingRow?.fromName }}
@@ -202,9 +201,13 @@
           </p>
           <div class="wdc-row">
             <label for="wdc-dlg-edit-to">修改为对标库房</label>
-            <select id="wdc-dlg-edit-to" v-model.number="dialogToId" class="wdc-select">
-              <option v-for="w in dialogEditTargetOptions" :key="`de-${w.id}`" :value="w.id">{{ w.name }}</option>
-            </select>
+            <WarehouseSearchPicker
+              input-id="wdc-dlg-edit-to"
+              v-model="dialogToId"
+              :options="warehouseOptions"
+              :exclude-id="editingRow?.fromId ?? 0"
+              placeholder="模糊搜索新对标库房"
+            />
           </div>
         </div>
         <div v-else-if="dialogMode === 'delete'" class="wdc-modal-body">
@@ -213,16 +216,13 @@
           </p>
           <div v-if="dialogEditGroup?.rows.length" class="wdc-row">
             <label for="wdc-dlg-pick-del">选择你要删除的对标库房</label>
-            <select
-              id="wdc-dlg-pick-del"
-              class="wdc-select"
-              :value="editingRow?.toId ?? 0"
-              @change="onModalPickTargetChange($event)"
-            >
-              <option v-for="br in dialogEditGroup.rows" :key="`del-${br.fromId}-${br.toId}`" :value="br.toId">
-                {{ br.toName }}
-              </option>
-            </select>
+            <WarehouseSearchPicker
+              input-id="wdc-dlg-pick-del"
+              :model-value="editingRow?.toId ?? 0"
+              :options="dialogEditBoundOptions"
+              placeholder="搜索要删除的对标库房"
+              @update:model-value="onModalGroupTargetChange"
+            />
           </div>
           <p class="wdc-hint">将删除从上述源库房到所选对标库房的绑定关系。</p>
         </div>
@@ -232,16 +232,13 @@
           </p>
           <div v-if="dialogEditGroup?.rows.length" class="wdc-row">
             <label for="wdc-dlg-pick-tier">对标库房</label>
-            <select
-              id="wdc-dlg-pick-tier"
-              class="wdc-select"
-              :value="editingRow?.toId ?? 0"
-              @change="onModalPickTargetChange($event)"
-            >
-              <option v-for="br in dialogEditGroup.rows" :key="`tier-${br.fromId}-${br.toId}`" :value="br.toId">
-                {{ br.toName }}
-              </option>
-            </select>
+            <WarehouseSearchPicker
+              input-id="wdc-dlg-pick-tier"
+              :model-value="editingRow?.toId ?? 0"
+              :options="dialogEditBoundOptions"
+              placeholder="搜索要编辑差价的对标库房"
+              @update:model-value="onModalGroupTargetChange"
+            />
           </div>
           <div class="wdc-row">
             <label for="wdc-dlg-tier-text">差价</label>
@@ -286,7 +283,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
+import WarehouseSearchPicker from '@/components/WarehouseSearchPicker.vue'
 import { warehouseDisplayName } from '@/utils/warehouseDisplayName'
+import { warehouseMatchesQuery } from '@/utils/warehouseFuzzyMatch'
 import {
   deleteTlUnbindWarehouseLink,
   fetchTlCalculateDistance,
@@ -409,16 +408,18 @@ const dialogTargetOptions = computed(() =>
   warehouseOptions.value.filter((w) => w.id !== dialogFromId.value),
 )
 
-function warehouseMatchesQuery(w: WarehouseOption, raw: string): boolean {
-  const q = raw.trim()
-  if (!q) return true
-  const idStr = String(w.id)
-  const name = String(w.name)
-  const qLower = q.toLowerCase()
-  return name.includes(q) || idStr.includes(q) || name.toLowerCase().includes(qLower) || idStr.toLowerCase().includes(qLower)
-}
+const dialogEditBoundOptions = computed((): WarehouseOption[] => {
+  const seen = new Set<number>()
+  const out: WarehouseOption[] = []
+  for (const r of dialogEditGroup.value?.rows ?? []) {
+    if (r.toId <= 0 || seen.has(r.toId)) continue
+    seen.add(r.toId)
+    out.push({ id: r.toId, name: r.toName })
+  }
+  return out
+})
 
-/** 源库房下拉：按搜索词过滤；当前已选若不在过滤结果中仍保留在列表首条以免下拉显示异常 */
+/** 源库房列表：按搜索词过滤；当前已选若不在过滤结果中仍保留在列表首条 */
 const dialogFromSelectOptions = computed((): WarehouseOption[] => {
   const all = warehouseOptions.value
   const q = dialogAddFromSearch.value
@@ -438,11 +439,6 @@ const dialogTargetOptionsFiltered = computed(() =>
 function pickAddDialogFromWarehouse(w: WarehouseOption) {
   dialogFromId.value = w.id
 }
-
-const dialogEditTargetOptions = computed(() => {
-  const fromId = editingRow.value?.fromId ?? 0
-  return warehouseOptions.value.filter((w) => w.id !== fromId)
-})
 
 const dialogValid = computed(() => {
   if (dialogMode.value === 'add') {
@@ -479,12 +475,6 @@ function onModalGroupTargetChange(toId: number) {
   if (dialogMode.value === 'edit-tier') {
     dialogTierText.value = row.tierPriceEditSeed
   }
-}
-
-function onModalPickTargetChange(e: Event) {
-  const t = Number((e.target as HTMLSelectElement).value)
-  if (!Number.isFinite(t)) return
-  onModalGroupTargetChange(t)
 }
 
 function openEditModalFromGroup(grp: LinkRowGroup) {
