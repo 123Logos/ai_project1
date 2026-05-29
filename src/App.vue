@@ -6,64 +6,20 @@
           <h1 class="title">废铅蓄电池供应链服务系统</h1>
         </div>
         <div class="module-tabs">
-          <template v-for="item in visiblePrimaryTabs" :key="item.key">
-            <div
-              v-if="item.key === 'prediction'"
-              ref="predictionDropdownEl"
-              class="tab-dropdown"
-            >
-              <button
-                class="tab-btn tab-btn-primary tab-dropdown-trigger"
-                :class="{
-                  active: isLoggedIn && activeSection === 'prediction',
-                  'tab-btn--need-login': !isLoggedIn,
-                }"
-                type="button"
-                :title="!isLoggedIn ? '请先登录' : predictionDropdownTitle"
-                :aria-expanded="predictionDropdownOpen"
-                aria-haspopup="menu"
-                @click.stop="onPredictionTabClick"
-              >
-                {{ item.label }}
-                <span class="tab-dropdown-chevron" :class="{ open: predictionDropdownOpen }" aria-hidden="true">▼</span>
-              </button>
-              <div
-                v-show="predictionDropdownOpen && isLoggedIn"
-                class="tab-dropdown-menu"
-                role="menu"
-                aria-label="AI 预测子模块"
-                @click.stop
-              >
-                <p v-if="predictionPermTip" class="tab-dropdown-tip" role="alert">{{ predictionPermTip }}</p>
-                <button
-                  v-for="sub in predictionSubTabs"
-                  :key="sub.key"
-                  type="button"
-                  class="tab-dropdown-item"
-                  :class="{
-                    active: activeSection === 'prediction' && predictionSubTab === sub.key,
-                  }"
-                  role="menuitem"
-                  @click="onSelectPredictionSub(sub.key)"
-                >
-                  {{ sub.label }}
-                </button>
-              </div>
-            </div>
-            <button
-              v-else
-              class="tab-btn tab-btn-primary"
-              :class="{
-                active: isLoggedIn && activeSection === item.key,
-                'tab-btn--need-login': !isLoggedIn,
-              }"
-              type="button"
-              :title="!isLoggedIn ? '请先登录' : undefined"
-              @click="onSelectSection(item.key)"
-            >
-              {{ item.label }}
-            </button>
-          </template>
+          <button
+            v-for="item in visiblePrimaryTabs"
+            :key="item.key"
+            class="tab-btn tab-btn-primary"
+            :class="{
+              active: isLoggedIn && activeSection === item.key,
+              'tab-btn--need-login': !isLoggedIn,
+            }"
+            type="button"
+            :title="!isLoggedIn ? '请先登录' : undefined"
+            @click="onSelectSection(item.key)"
+          >
+            {{ item.label }}
+          </button>
           <a
             class="tab-btn tab-btn-primary tab-btn-external"
             :href="inventorySystemUrl"
@@ -95,6 +51,23 @@
         </div>
       </div>
     </header>
+
+    <nav
+      v-if="isLoggedIn && navPermissionsReady && activeSection === 'prediction'"
+      class="prediction-sub-nav"
+      aria-label="AI 预测子模块"
+    >
+      <button
+        v-for="sub in predictionSubTabs"
+        :key="sub.key"
+        type="button"
+        class="prediction-sub-tab"
+        :class="{ active: predictionSubTab === sub.key }"
+        @click="onSelectPredictionSub(sub.key)"
+      >
+        {{ sub.label }}
+      </button>
+    </nav>
 
     <main
       v-if="!isLoggedIn"
@@ -198,7 +171,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import HistoryManage from './pages/HistoryManage.vue'
 import HistoryQuery from './pages/HistoryQuery.vue'
 import PurchaseQuantity from './pages/PurchaseQuantity.vue'
@@ -238,9 +211,6 @@ const predictionSubTabs: Array<{ key: PredictionSubKey; label: string }> = [
 
 const activeSection = ref<SectionKey>('map')
 const predictionSubTab = ref<PredictionSubKey>('historyManage')
-const predictionDropdownOpen = ref(false)
-const predictionDropdownEl = ref<HTMLElement | null>(null)
-const predictionPermTip = ref('')
 const baseUrl = import.meta.env.BASE_URL
 const embeddedCacheVersion = `${Date.now()}`
 const isLoggedIn = ref(!!getToken())
@@ -272,12 +242,6 @@ watch(
   { flush: 'post', immediate: true },
 )
 
-const predictionDropdownTitle = computed(() => {
-  if (!isLoggedIn.value) return undefined
-  const cur = predictionSubTabs.find((t) => t.key === predictionSubTab.value)
-  return cur ? `当前：${cur.label}，点击切换` : '点击选择子功能'
-})
-
 /** 整页刷新（F5）或从浏览器往返缓存恢复时：后台拉权限（不再用于隐藏导航） */
 async function refreshNavPermissionsOnPageLoad() {
   if (!getToken()) {
@@ -293,51 +257,15 @@ function onPageShow(ev: PageTransitionEvent) {
   if (ev.persisted) void refreshNavPermissionsOnPageLoad()
 }
 
-function closePredictionDropdown() {
-  predictionDropdownOpen.value = false
-  predictionPermTip.value = ''
-}
-
-function onDocumentClick(ev: MouseEvent) {
-  if (!predictionDropdownOpen.value) return
-  const root = predictionDropdownEl.value
-  if (root && !root.contains(ev.target as Node)) {
-    closePredictionDropdown()
-  }
-}
-
-function onPredictionTabClick() {
-  if (!isLoggedIn.value) {
-    showLogin.value = true
-    return
-  }
-  if (predictionDropdownOpen.value) {
-    closePredictionDropdown()
-    return
-  }
-  if (activeSection.value !== 'prediction') {
-    activeSection.value = 'prediction'
-  }
-  predictionDropdownOpen.value = true
-}
-
 function onSelectPredictionSub(key: PredictionSubKey) {
-  predictionPermTip.value = ''
   activeSection.value = 'prediction'
   predictionSubTab.value = key
-  closePredictionDropdown()
 }
 
 onMounted(() => {
   isLoggedIn.value = !!getToken()
   void refreshNavPermissionsOnPageLoad()
   window.addEventListener('pageshow', onPageShow)
-  document.addEventListener('click', onDocumentClick)
-})
-
-onUnmounted(() => {
-  window.removeEventListener('pageshow', onPageShow)
-  document.removeEventListener('click', onDocumentClick)
 })
 
 watch(showLogin, (v) => {
@@ -347,7 +275,6 @@ watch(showLogin, (v) => {
 })
 
 function onSelectSection(key: SectionKey) {
-  closePredictionDropdown()
   if (!isLoggedIn.value) {
     showLogin.value = true
     return
@@ -379,7 +306,6 @@ const activeFrameTitle = computed(() => {
 })
 
 function openUserManage() {
-  closePredictionDropdown()
   activeSection.value = 'users'
 }
 
@@ -388,7 +314,6 @@ function logoutNow() {
   clearMePermissions()
   navPermissionsReady.value = true
   isLoggedIn.value = false
-  closePredictionDropdown()
   activeSection.value = 'map'
   predictionSubTab.value = 'historyManage'
 }
@@ -604,91 +529,43 @@ a.tab-btn {
   opacity: 0.9;
 }
 
-.tab-dropdown {
-  position: relative;
-  flex-shrink: 0;
-  z-index: 1200;
-}
-
-.tab-dropdown-trigger {
-  display: inline-flex;
+.prediction-sub-nav {
+  display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
+  padding: 10px 24px;
+  background: #f5f7fa;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 72px;
+  z-index: 1090;
 }
 
-.tab-dropdown-chevron {
-  margin-left: 4px;
-  font-size: 10px;
-  line-height: 1;
-  opacity: 0.9;
-  transition: transform 0.2s ease;
-  display: inline-block;
-}
-
-.tab-dropdown-chevron.open {
-  transform: rotate(180deg);
-}
-
-.tab-dropdown-menu {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
-  transform: translateX(-50%);
-  min-width: 168px;
-  padding: 6px;
-  background: #ffffff;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.18);
-  border: 1px solid #e5e7eb;
-}
-
-.tab-dropdown-tip {
-  margin: 0 0 4px;
-  padding: 6px 10px;
-  font-size: 12px;
-  line-height: 1.4;
-  color: #b45309;
-  background: #fffbeb;
-  border-radius: 4px;
-  border: 1px solid #fcd34d;
-}
-
-.tab-dropdown-item {
-  display: block;
-  width: 100%;
-  border: none;
-  padding: 0 14px;
+.prediction-sub-tab {
+  border: 1px solid #e2e8f0;
+  padding: 0 20px;
   height: 36px;
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: 8px;
+  background: #eef2f6;
+  color: #475569;
+  font-size: 14px;
   font-weight: 500;
   font-family: inherit;
-  color: #374151;
-  background: transparent;
-  text-align: left;
   cursor: pointer;
-  transition: background 0.15s ease, color 0.15s ease;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
   white-space: nowrap;
 }
 
-.tab-dropdown-item:hover {
-  background: #f3f4f6;
-  color: #111827;
+.prediction-sub-tab:hover {
+  background: #e8eef5;
+  color: #334155;
 }
 
-.tab-dropdown-item.active {
+.prediction-sub-tab.active {
+  background: #e8f1ff;
+  border-color: #196cc0;
   color: #196cc0;
-  background: rgba(25, 108, 192, 0.1);
   font-weight: 600;
-}
-
-.tab-dropdown-item--denied {
-  color: #9ca3af;
-}
-
-.tab-dropdown-item--denied:hover {
-  color: #6b7280;
-  background: #fef2f2;
 }
 
 .page-main {
