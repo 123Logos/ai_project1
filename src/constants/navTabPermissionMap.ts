@@ -15,12 +15,25 @@ export const AI_PRICING_NAV_FIELDS: readonly string[] = NAV_PERMISSION_SEED.filt
   (r) => r.category === 'ai_pricing',
 ).map((r) => r.field_name)
 
-export type PrimaryNavKey = 'map' | 'prediction' | 'detect' | 'price' | 'aiPricing' | 'warehouseDistance'
+export type PrimaryNavKey =
+  | 'map'
+  | 'prediction'
+  | 'detect'
+  | 'price'
+  | 'aiPricing'
+  | 'dataMaintain'
+  | 'warehouseDistance'
 
 export function primaryNavRequiredFields(key: PrimaryNavKey): readonly string[] {
   switch (key) {
     case 'map':
       return ['perm_nav_map_supply_electronic_map']
+    case 'dataMaintain':
+      return [
+        'perm_nav_map_supply_data_maintain',
+        'perm_nav_map_supply_current_stock',
+        'perm_nav_map_supply_receive_price',
+      ]
     case 'warehouseDistance':
       return ['perm_nav_map_supply_warehouse_distance_config']
     case 'prediction':
