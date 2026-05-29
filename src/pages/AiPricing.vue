@@ -305,7 +305,19 @@
           返回
         </button>
         <h3 class="sub-page-title">冶炼厂标定价格</h3>
-        <div class="header-actions" style="display:flex; gap:8px;">
+        <div class="header-actions" style="display:flex; gap:8px; flex-wrap: wrap;">
+          <button class="btn add-btn add-btn--outline" @click="downloadSmelterImportTemplate">
+            <i class="bi bi-download me-1"></i>
+            下载模板
+          </button>
+          <button class="btn add-btn add-btn--outline" @click="triggerSmelterExcelImport">
+            <i class="bi bi-upload me-1"></i>
+            Excel 导入
+          </button>
+          <button class="btn add-btn" @click="openSmelterBatch">
+            <i class="bi bi-list-ul me-1"></i>
+            批量新增
+          </button>
           <button class="btn add-btn" @click="openSmelterAdd">
             <i class="bi bi-plus-lg me-1"></i>
             新增
@@ -316,6 +328,13 @@
           </button>
         </div>
       </div>
+      <input
+        ref="smelterExcelFileInput"
+        type="file"
+        accept=".xlsx,.xlsm"
+        style="display:none"
+        @change="handleSmelterExcelImport"
+      />
       <div class="sub-page-body">
         <div class="table-wrap">
           <table class="data-table">
@@ -501,6 +520,134 @@
             <button class="page-btn" :disabled="historyPage <= 1" @click="changeHistoryPage(historyPage - 1)">上一页</button>
             <span class="page-current">第 {{ historyPage }} 页</span>
             <button class="page-btn" :disabled="historyPage * historyPageSize >= historyTotal" @click="changeHistoryPage(historyPage + 1)">下一页</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 批量新增弹窗 -->
+      <div v-if="showSmelterBatchForm" class="form-mask" @click.self="showSmelterBatchForm = false">
+        <div class="form-card history-card smelter-batch-card">
+          <div class="form-card-header">
+            <h6>批量新增标定价格</h6>
+            <button class="form-close-btn" @click="showSmelterBatchForm = false">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <div class="form-card-body">
+            <p class="text-muted small mb-3">
+              最多 500 条；任一条校验失败则整批不写入。定价日期留空时由后端使用当天。
+            </p>
+            <div class="table-wrap">
+              <table class="data-table batch-table">
+                <thead>
+                  <tr>
+                    <th style="min-width: 180px;">冶炼厂</th>
+                    <th style="min-width: 120px;">标定价格</th>
+                    <th style="min-width: 140px;">定价日期</th>
+                    <th class="col-actions" style="width: 72px;">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr v-for="(row, idx) in smelterBatchRows" :key="idx">
+                    <td>
+                      <select v-model.number="row.smelter_id" class="form-control form-control-sm">
+                        <option :value="0">请选择冶炼厂</option>
+                        <option v-for="s in smelterOptions" :key="s.id" :value="s.id">{{ s.name }}</option>
+                      </select>
+                    </td>
+                    <td>
+                      <input
+                        v-model.number="row.price"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        class="form-control form-control-sm"
+                        placeholder="标定价格"
+                      />
+                    </td>
+                    <td>
+                      <input v-model="row.date" type="date" class="form-control form-control-sm" />
+                    </td>
+                    <td class="col-actions">
+                      <button
+                        type="button"
+                        class="action-btn action-delete"
+                        :disabled="smelterBatchRows.length <= 1"
+                        @click="removeSmelterBatchRow(idx)"
+                      >
+                        <i class="bi bi-trash3"></i>
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+            <button type="button" class="btn add-btn add-btn--outline mt-2" :disabled="smelterBatchRows.length >= 500" @click="addSmelterBatchRow">
+              <i class="bi bi-plus-lg me-1"></i>
+              添加一行
+            </button>
+            <div v-if="smelterBatchError" class="alert alert-warning py-2 mt-2 mb-0">{{ smelterBatchError }}</div>
+          </div>
+          <div class="form-card-footer">
+            <button class="btn form-btn-cancel" @click="showSmelterBatchForm = false">取消</button>
+            <button class="btn form-btn-submit" :disabled="smelterBatchLoading" @click="submitSmelterBatch">
+              {{ smelterBatchLoading ? '提交中…' : '提交' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Excel 导入结果 -->
+      <div v-if="showSmelterImportResult" class="form-mask" @click.self="showSmelterImportResult = false">
+        <div class="form-card history-card">
+          <div class="form-card-header">
+            <h6>Excel 导入结果</h6>
+            <button class="form-close-btn" @click="showSmelterImportResult = false">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+          <div class="form-card-body">
+            <p v-if="smelterImportResultMsg" class="mb-2">{{ smelterImportResultMsg }}</p>
+            <div v-if="smelterImportResult" class="import-result-stats small text-muted mb-2">
+              <span>工作表：{{ smelterImportResult.sheet }}</span>
+              <span class="ms-2">解析 {{ smelterImportResult.parsed_rows }} 行</span>
+              <span class="ms-2 text-success">成功 {{ smelterImportResult.inserted }} 条</span>
+              <span v-if="smelterImportResult.skipped_errors" class="ms-2 text-warning">
+                跳过 {{ smelterImportResult.skipped_errors }} 行
+              </span>
+            </div>
+            <div v-if="smelterImportResult?.errors?.length" class="mb-3">
+              <div class="fw-semibold small mb-1">失败行说明</div>
+              <ul class="import-error-list small mb-0">
+                <li v-for="(err, i) in smelterImportResult.errors" :key="i">{{ err }}</li>
+              </ul>
+            </div>
+            <div v-if="smelterImportResult?.samples?.length">
+              <div class="fw-semibold small mb-1">成功样例（最多 20 条）</div>
+              <div class="table-wrap">
+                <table class="data-table history-table">
+                  <thead>
+                    <tr>
+                      <th>Excel 行</th>
+                      <th>冶炼厂 id</th>
+                      <th>标定价格</th>
+                      <th>定价日期</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(s, i) in smelterImportResult.samples" :key="i">
+                      <td>{{ s.Excel行 }}</td>
+                      <td>{{ s.冶炼厂id }}</td>
+                      <td>{{ s.标定价格 }}</td>
+                      <td>{{ s.定价日期 }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          <div class="form-card-footer">
+            <button class="btn form-btn-submit" @click="showSmelterImportResult = false">关闭</button>
           </div>
         </div>
       </div>
@@ -946,10 +1093,17 @@ import {
   updateSmelterPrice,
   fetchSmelterPriceHistory,
   deleteSmelterPrice,
+  batchCreateSmelterPrice,
+  batchCreateSmelterPriceOneByOne,
+  SmelterBatchUnavailableError,
+  importSmelterCalibrationExcel,
   type SmelterPriceRow,
   type SmelterPriceHistoryRow,
+  type SmelterCalibrationExcelImportResult,
+  type SmelterCalibrationPriceCreate,
 } from '@/api/smelterPriceApi'
-import { fetchTlSmelters, searchTlWarehouses, fetchTlWarehousesAll, fetchTlWarehouseLinksOutbound, fetchTlRealtimeSpreadList } from '@/api/tlApi'
+import * as XLSX from 'xlsx'
+import { fetchTlSmeltersAll, searchTlWarehouses, fetchTlWarehousesAll, fetchTlWarehouseLinksOutbound, fetchTlRealtimeSpreadList } from '@/api/tlApi'
 import {
   fetchBenchmarkAnalysis,
   type BenchmarkAnalysisRow,
@@ -1241,19 +1395,185 @@ function openSmelterEdit(row: SmelterPriceRow) {
   showSmelterForm.value = true
 }
 
+function todayYmd(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+async function loadSmelterOptions() {
+  try {
+    const rows = await fetchTlSmeltersAll()
+    smelterOptions.value = rows
+      .map((r) => ({
+        id: Number(r['冶炼厂id'] ?? r.id ?? 0),
+        name: String(r['冶炼厂'] ?? r.name ?? ''),
+      }))
+      .filter((s) => s.id > 0 && s.name)
+  } catch {
+    smelterOptions.value = []
+  }
+}
+
 async function openSmelterAdd() {
-  smelterAddForm.value = { smelter_id: 0, price: 0, date: new Date().toISOString().slice(0, 10) }
+  smelterAddForm.value = { smelter_id: 0, price: 0, date: todayYmd() }
   smelterInputText.value = ''
   smelterAddError.value = ''
   showSmelterAddForm.value = true
+  await loadSmelterOptions()
+}
+
+interface SmelterBatchRow {
+  smelter_id: number
+  price: number | null
+  date: string
+}
+
+const showSmelterBatchForm = ref(false)
+const smelterBatchRows = ref<SmelterBatchRow[]>([])
+const smelterBatchLoading = ref(false)
+const smelterBatchError = ref('')
+
+function newSmelterBatchRow(): SmelterBatchRow {
+  return { smelter_id: 0, price: null, date: todayYmd() }
+}
+
+function addSmelterBatchRow() {
+  if (smelterBatchRows.value.length >= 500) return
+  smelterBatchRows.value.push(newSmelterBatchRow())
+}
+
+function removeSmelterBatchRow(idx: number) {
+  if (smelterBatchRows.value.length <= 1) return
+  smelterBatchRows.value.splice(idx, 1)
+}
+
+async function openSmelterBatch() {
+  smelterBatchError.value = ''
+  smelterBatchRows.value = [newSmelterBatchRow(), newSmelterBatchRow()]
+  showSmelterBatchForm.value = true
+  await loadSmelterOptions()
+}
+
+function validateSmelterBatchRows(): SmelterCalibrationPriceCreate[] | null {
+  const rows = smelterBatchRows.value.filter((r) => r.smelter_id > 0 || r.price != null)
+  if (!rows.length) {
+    smelterBatchError.value = '请至少填写一行有效数据'
+    return null
+  }
+  if (rows.length > 500) {
+    smelterBatchError.value = '单次最多 500 条'
+    return null
+  }
+  const payload: SmelterCalibrationPriceCreate[] = []
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    const line = i + 1
+    if (!row.smelter_id) {
+      smelterBatchError.value = `第 ${line} 行：请选择冶炼厂`
+      return null
+    }
+    if (row.price == null || Number.isNaN(row.price)) {
+      smelterBatchError.value = `第 ${line} 行：请输入标定价格`
+      return null
+    }
+    const item: SmelterCalibrationPriceCreate = {
+      冶炼厂id: row.smelter_id,
+      标定价格: row.price,
+    }
+    if (row.date) item.定价日期 = row.date
+    payload.push(item)
+  }
+  return payload
+}
+
+async function finishSmelterBatchSuccess(inserted: number, usedFallback = false) {
+  showSmelterBatchForm.value = false
+  await loadSmelterPrice()
+  alert(
+    usedFallback
+      ? `已逐条新增 ${inserted} 条（当前服务器未开通批量事务接口，非整批回滚模式）`
+      : `已批量新增 ${inserted} 条冶炼厂标定价格`,
+  )
+}
+
+async function submitSmelterBatch() {
+  smelterBatchError.value = ''
+  const payload = validateSmelterBatchRows()
+  if (!payload) return
+  smelterBatchLoading.value = true
   try {
-    const rows = await fetchTlSmelters()
-    smelterOptions.value = rows.map((r) => ({
-      id: Number(r['冶炼厂id'] ?? r.id ?? 0),
-      name: String(r['冶炼厂'] ?? r.name ?? ''),
-    })).filter((s) => s.id > 0 && s.name)
-  } catch {
-    smelterOptions.value = []
+    const res = await batchCreateSmelterPrice(payload)
+    await finishSmelterBatchSuccess(res.inserted)
+  } catch (e) {
+    if (e instanceof SmelterBatchUnavailableError) {
+      const ok = confirm(
+        '当前环境尚未部署批量新增接口（POST /tl/smelter_calibration_prices/batch）。\n\n' +
+          '是否改为逐条提交？\n' +
+          '注意：非事务模式，若中途失败，已成功写入的数据不会自动回滚。',
+      )
+      if (!ok) {
+        smelterBatchError.value =
+          '已取消。请让后端部署批量接口，或使用单条「新增」/「Excel 导入」。'
+        return
+      }
+      try {
+        const res = await batchCreateSmelterPriceOneByOne(payload)
+        await finishSmelterBatchSuccess(res.inserted, true)
+      } catch (err) {
+        smelterBatchError.value = err instanceof Error ? err.message : String(err)
+      }
+      return
+    }
+    smelterBatchError.value = e instanceof Error ? e.message : String(e)
+  } finally {
+    smelterBatchLoading.value = false
+  }
+}
+
+const smelterExcelFileInput = ref<HTMLInputElement | null>(null)
+const smelterExcelImportLoading = ref(false)
+const showSmelterImportResult = ref(false)
+const smelterImportResult = ref<SmelterCalibrationExcelImportResult | null>(null)
+const smelterImportResultMsg = ref('')
+
+function downloadSmelterImportTemplate() {
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['冶炼厂', '标定价格', '定价日期'],
+    ['金利', 9500, '2026-05-29'],
+    ['某某厂', 9480, ''],
+  ])
+  const wb = XLSX.utils.book_new()
+  XLSX.utils.book_append_sheet(wb, ws, '导入数据')
+  XLSX.writeFile(wb, '冶炼厂标定价格导入模板.xlsx')
+}
+
+function triggerSmelterExcelImport() {
+  smelterExcelFileInput.value?.click()
+}
+
+async function handleSmelterExcelImport(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  input.value = ''
+  if (!file) return
+  const ext = file.name.toLowerCase()
+  if (!ext.endsWith('.xlsx') && !ext.endsWith('.xlsm')) {
+    alert('请选择 .xlsx 或 .xlsm 文件')
+    return
+  }
+  smelterExcelImportLoading.value = true
+  try {
+    const data = await importSmelterCalibrationExcel(file)
+    smelterImportResult.value = data
+    const partial = data.skipped_errors > 0
+    smelterImportResultMsg.value = partial
+      ? `部分成功：已导入 ${data.inserted} 条，${data.skipped_errors} 行跳过`
+      : `已导入 ${data.inserted} 条冶炼厂标定价格`
+    showSmelterImportResult.value = true
+    if (data.inserted > 0) await loadSmelterPrice()
+  } catch (e) {
+    alert(e instanceof Error ? e.message : String(e))
+  } finally {
+    smelterExcelImportLoading.value = false
   }
 }
 
@@ -2566,6 +2886,16 @@ watch(activePage, (val) => {
 /* ===== 历史记录弹窗 ===== */
 .history-card {
   width: min(640px, 100%);
+}
+
+.smelter-batch-card {
+  width: min(920px, 100%);
+}
+
+.import-error-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding-left: 1.25rem;
 }
 
 .history-table th,

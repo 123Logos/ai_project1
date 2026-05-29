@@ -1930,6 +1930,16 @@ function warehouseSmelterFreightBlockHtml(
   return `<div class="emap-wh-hover-freight"><div class="emap-wh-hover-freight-head">运费</div><div class="emap-wh-hover-freight-scroll">${items}</div></div>`
 }
 
+/** 接口值为万吨/年，展示为吨/年 */
+function formatHazardLicenseQty(wanTonPerYear: number | null): string {
+  if (wanTonPerYear === null) return '—'
+  const tonPerYear = wanTonPerYear * 10000
+  const text = Number.isInteger(tonPerYear)
+    ? tonPerYear.toLocaleString('zh-CN')
+    : tonPerYear.toLocaleString('zh-CN', { maximumFractionDigits: 2 })
+  return `${text} 吨/年`
+}
+
 /** 库房信息卡片 HTML：悬浮 tooltip 与点击弹窗共用 */
 function warehouseHoverTooltipHtml(p: MapPoint): string {
   const raw = p.raw
@@ -1945,7 +1955,7 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
   const haz = pickNumber(raw, ['危废经营许可数量', 'hazard_license_count', '危废许可数量'])
   const monthly = pickNumber(raw, ['月均收货', 'monthly_avg_receipt', '月均采购'])
   const smelterFreights = pickWarehouseSmelterFreights(raw)
-  const hazText = haz === null ? '—' : String(haz)
+  const hazText = formatHazardLicenseQty(haz)
   const monthlyText = monthly === null ? '—' : String(monthly)
   const freightBlock = warehouseSmelterFreightBlockHtml(smelterFreights)
   const tipRow = (label: string, value: string) =>
