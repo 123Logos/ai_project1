@@ -71,6 +71,8 @@ const hasAiReport = computed(() => {
   return !!(p?.result || p?.multi?.length)
 })
 
+const aiReportResult = computed(() => v3Payload.value?.result ?? null)
+
 const hasReportContent = computed(
   () =>
     hasAiReport.value ||
@@ -1360,18 +1362,18 @@ onUnmounted(() => {
           </div>
 
           <div v-if="hasAiReport" class="report">
-            <template v-if="v3Payload.result">
+            <template v-if="aiReportResult">
               <div class="report-head">
                 <span
                   class="pill"
-                  :class="v3Payload.result.result || undefined"
-                  >{{ v3Payload.result.result || '—' }}</span
+                  :class="aiReportResult.result || undefined"
+                  >{{ aiReportResult.result || '—' }}</span
                 >
                 <div class="meter-wrap">
                   <div class="meter-label">
                     <span>风险倾向</span>
                     <span>{{
-                      ((v3Payload.result.confidence ?? 0) * 100).toFixed(1)
+                      ((aiReportResult.confidence ?? 0) * 100).toFixed(1)
                     }}%</span>
                   </div>
                   <div class="meter">
@@ -1380,14 +1382,14 @@ onUnmounted(() => {
                       :style="{
                         width: `${Math.min(
                           100,
-                          Math.max(0, (v3Payload.result.confidence ?? 0) * 100),
+                          Math.max(0, (aiReportResult.confidence ?? 0) * 100),
                         )}%`,
                       }"
                     />
                   </div>
                 </div>
               </div>
-              <p class="report-reason">{{ v3Payload.result.reason || '—' }}</p>
+              <p class="report-reason">{{ aiReportResult.reason || '—' }}</p>
               <div v-if="summaryExtendedLines.length" class="detect-ext-block">
                 <h4 class="detect-ext-title">增强检测项</h4>
                 <dl class="detect-ext-dl">
