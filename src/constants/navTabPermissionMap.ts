@@ -52,12 +52,13 @@ export function hasAnyAiPredictionNavPermission(has: (field: string) => boolean)
   return canSeePrimaryNav('prediction', has)
 }
 
-export type PredictionSubKey = 'historyManage' | 'historyQuery' | 'forecast'
+export type PredictionSubKey = 'historyManage' | 'historyQuery' | 'forecast' | 'leadPrice'
 
 export const PREDICTION_SUB_TO_FIELD: Record<PredictionSubKey, string> = {
   historyManage: 'perm_nav_ai_prediction_history_manage',
   historyQuery: 'perm_nav_ai_prediction_history_query',
   forecast: 'perm_nav_ai_prediction_forecast',
+  leadPrice: 'perm_nav_ai_prediction_lead_price_query',
 }
 
 /**
