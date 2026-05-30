@@ -13,6 +13,8 @@ import {
   type V3ResultItem,
 } from './api/detect'
 import {
+  historyEntryHasAi,
+  historyEntryKindLabel,
   mergeHistoryEntriesForDisplay,
   type DetectionHistoryEntry,
 } from './detectionHistory'
@@ -35,6 +37,11 @@ const imageNatural = ref({ w: 0, h: 0 })
 const v3SpecifyBbox = ref(false)
 /** 单据时间（可选）：付款截图等场景供后端时间校验 */
 const documentTime = ref('')
+
+/** 可多选：勾选哪种就使用哪种，两项都勾选则并行 */
+const useModelDetection = ref(true)
+const useRuleDetection = ref(true)
+
 const drawing = ref(false)
 const drawStart = ref<{ x: number; y: number } | null>(null)
 const drawCurrent = ref<{ x: number; y: number } | null>(null)
@@ -58,6 +65,35 @@ const ruleCheckError = ref<string | null>(null)
 
 const ruleCheckVerdictInfo = computed(() => ruleCheckVerdict(ruleCheckPayload.value))
 const ruleCheckUserView = computed(() => buildRuleCheckUserView(ruleCheckPayload.value))
+
+const hasAiReport = computed(() => {
+  const p = v3Payload.value
+  return !!(p?.result || p?.multi?.length)
+})
+
+const hasReportContent = computed(
+  () =>
+    hasAiReport.value ||
+    !!ruleCheckPayload.value ||
+    ruleCheckLoading.value ||
+    !!ruleCheckError.value,
+)
+
+/** 报告区底部展示的图片（标注图优先，其次历史原图/当前上传图） */
+const reportImageUrl = computed(() => {
+  if (vizObjectUrl.value) return null
+  if (viewingHistoryId.value && historyPreviewUrl.value) return historyPreviewUrl.value
+  if (!viewingHistoryId.value && activePreviewUrl.value && hasReportContent.value) {
+    return activePreviewUrl.value
+  }
+  return null
+})
+
+const reportImageHeading = computed(() => {
+  if (vizObjectUrl.value) return '标注示意图'
+  if (viewingHistoryId.value && hasAiReport.value) return '检测原图'
+  return '检测图片'
+})
 
 const vizObjectUrl = ref<string | null>(null)
 const vizLoading = ref(false)
@@ -84,8 +120,8 @@ const viewingHistoryId = ref<string | null>(null)
 /** 同步检测进行中时用于取消 fetch */
 const detectAbort = ref<AbortController | null>(null)
 
-const activePreviewUrl = computed(() =>
-  viewingHistoryId.value ? historyPreviewUrl.value : filePreviews.value[selectedUploadIndex.value] || null,
+const activePreviewUrl = computed(
+  () => filePreviews.value[selectedUploadIndex.value] || null,
 )
 
 function revokeUploadPreviews() {
@@ -211,6 +247,111 @@ function startRuleChecks(file: File, bbox: BboxXYXY | null, signal: AbortSignal)
     })
 }
 
+async function runRuleSingle(file: File) {
+  const bbox: BboxXYXY | null = v3SpecifyBbox.value ? (userBbox.value ?? fullImageBbox()) : null
+  if (v3SpecifyBbox.value && !bbox) {
+    errorMsg.value = '请框选区域或等待图片在预览区加载完成'
+    return
+  }
+
+  busy.value = true
+  errorMsg.value = null
+  viewingHistoryId.value = null
+  v3Payload.value = null
+  v3TaskId.value = null
+  if (vizObjectUrl.value) {
+    URL.revokeObjectURL(vizObjectUrl.value)
+    vizObjectUrl.value = null
+  }
+  detectAbort.value?.abort()
+  const ac = new AbortController()
+  detectAbort.value = ac
+  resetRuleCheck()
+  ruleCheckLoading.value = true
+  pollStatus.value = '正在进行规则检测…'
+  try {
+    const data = await submitRuleChecks(file, bbox, detectSubmitOpts(ac.signal))
+    if (ac.signal.aborted) return
+    ruleCheckPayload.value = data
+    ruleCheckError.value = null
+    pollStatus.value = '规则检测完成'
+    void refreshHistoryList()
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      pollStatus.value = '已取消'
+      return
+    }
+    ruleCheckPayload.value = null
+    ruleCheckError.value = e instanceof Error ? e.message : String(e)
+    errorMsg.value = ruleCheckError.value
+    pollStatus.value = ''
+  } finally {
+    ruleCheckLoading.value = false
+    detectAbort.value = null
+    busy.value = false
+  }
+}
+
+async function runRuleBatch(picked: File[]) {
+  if (v3SpecifyBbox.value) {
+    errorMsg.value = '批量检测暂不支持“仅分析框选区域”，请关闭后重试。'
+    return
+  }
+
+  busy.value = true
+  errorMsg.value = null
+  viewingHistoryId.value = null
+  v3Payload.value = null
+  v3TaskId.value = null
+  if (vizObjectUrl.value) {
+    URL.revokeObjectURL(vizObjectUrl.value)
+    vizObjectUrl.value = null
+  }
+  detectAbort.value?.abort()
+  const ac = new AbortController()
+  detectAbort.value = ac
+  resetRuleCheck()
+  ruleCheckLoading.value = true
+  let success = 0
+  const failed: string[] = []
+  let lastData: RuleChecksData | null = null
+  try {
+    pollStatus.value = `批量规则检测 0/${picked.length}…`
+    for (let i = 0; i < picked.length; i++) {
+      const f = picked[i]!
+      pollStatus.value = `批量规则检测 ${i + 1}/${picked.length}…`
+      try {
+        const data = await submitRuleChecks(f, null, detectSubmitOpts(ac.signal))
+        success += 1
+        lastData = data
+        void refreshHistoryList()
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e
+        failed.push(`${f.name}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    if (lastData) {
+      ruleCheckPayload.value = lastData
+      ruleCheckError.value = null
+    }
+    pollStatus.value = `批量规则检测完成：成功 ${success}/${picked.length}`
+    if (failed.length) {
+      errorMsg.value = `以下文件失败（${failed.length}）：\n${failed.slice(0, 5).join('\n')}${failed.length > 5 ? '\n…' : ''}`
+    }
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      pollStatus.value = '已取消'
+      return
+    }
+    errorMsg.value = e instanceof Error ? e.message : String(e)
+    pollStatus.value = ''
+  } finally {
+    ruleCheckLoading.value = false
+    detectAbort.value = null
+    busy.value = false
+  }
+}
+
 /** 单张/批量共用：v3 异步提交 → 等待 → 拉取结果（与多张单步逻辑一致） */
 async function runV3AsyncOne(
   file: File,
@@ -259,9 +400,6 @@ function onImgLoad() {
 
 function onImgError() {
   imageNatural.value = { w: 0, h: 0 }
-  if (viewingHistoryId.value) {
-    historyPreviewUrl.value = null
-  }
 }
 
 const overlayStroke = computed(() =>
@@ -380,16 +518,16 @@ function collectNumberedBoxesFromPayload(
 
 /** 与右侧「各区域明细」序号一致；按面积从小到大排序绘制，小框后画在上层，减轻遮挡 */
 const previewNumberedRegions = computed((): NumberedBbox[] => {
-  if (!imageNatural.value.w) return []
+  if (!imageNatural.value.w || viewingHistoryId.value) return []
   const p = v3Payload.value
   if (!p) return []
   return collectNumberedBoxesFromPayload(p)
 })
 
-/** 看历史时无本机图、且服务器示意图未取回时，用坐标画一张「区域示意」避免只有文字 */
+/** 看历史且无标注图/原图时，用坐标画区域示意（放在报告区） */
 const historySchematicSpec = computed(() => {
-  if (!viewingHistoryId.value || !v3Payload.value || activePreviewUrl.value) return null
-  if (vizObjectUrl.value || vizLoading.value) return null
+  if (!viewingHistoryId.value || !v3Payload.value) return null
+  if (vizObjectUrl.value || vizLoading.value || historyPreviewUrl.value) return null
   const boxes = collectNumberedBoxesFromPayload(v3Payload.value)
   if (!boxes.length) return null
   let minX = Infinity
@@ -591,7 +729,12 @@ function historyResultLabel(entry: DetectionHistoryEntry) {
   if (r) return r
   const m = entry.payload.multi?.[0]?.result
   if (m) return m
+  if (entry.ruleCheck) return ruleCheckVerdict(entry.ruleCheck).label
   return '已完成'
+}
+
+function historyKindLabel(entry: DetectionHistoryEntry) {
+  return historyEntryKindLabel(entry)
 }
 
 function historyPillClass(entry: DetectionHistoryEntry) {
@@ -681,9 +824,11 @@ async function applyHistoryEntry(entry: DetectionHistoryEntry) {
     return
   }
   v3TaskId.value = entry.taskId || null
-  v3Payload.value = clonePayloadForView(entry.payload)
-  if (entry.taskId) {
-    void loadViz(entry.taskId)
+  if (historyEntryHasAi(entry)) {
+    v3Payload.value = clonePayloadForView(entry.payload)
+    if (entry.taskId) void loadViz(entry.taskId)
+  } else {
+    v3Payload.value = null
   }
 }
 
@@ -697,12 +842,27 @@ async function runV3() {
     errorMsg.value = '请先上传图片'
     return
   }
+  if (!useModelDetection.value && !useRuleDetection.value) {
+    errorMsg.value = '请至少选择一种检测方式'
+    return
+  }
+
+  if (useRuleDetection.value && !useModelDetection.value) {
+    if (picked.length > 1) {
+      await runRuleBatch(picked)
+    } else {
+      await runRuleSingle(picked[0]!)
+    }
+    return
+  }
+
   if (picked.length > 1) {
     await runV3Batch(picked)
     return
   }
 
   const one = picked[0]!
+  const runRule = useRuleDetection.value
 
   /** Mock 模式仍走同步 v1（本地假数据），与真实服务异步路径分离 */
   if (isDetectionMockMode()) {
@@ -726,7 +886,8 @@ async function runV3() {
     const ac = new AbortController()
     detectAbort.value = ac
     pollStatus.value = ''
-    startRuleChecks(one, bbox, ac.signal)
+    if (runRule) startRuleChecks(one, bbox, ac.signal)
+    else resetRuleCheck()
     try {
       pollStatus.value = '正在提交检测…'
       const data = await submitV1ImageDetectSync(one, bbox, detectSubmitOpts(ac.signal))
@@ -781,7 +942,8 @@ async function runV3() {
   const ac = new AbortController()
   detectAbort.value = ac
   pollStatus.value = ''
-  startRuleChecks(one, bbox, ac.signal)
+  if (runRule) startRuleChecks(one, bbox, ac.signal)
+  else resetRuleCheck()
   try {
     pollStatus.value = '预计等待约 1 分钟（按每张约 1 分钟估算）'
     await waitMs(300)
@@ -811,11 +973,13 @@ async function runV3Batch(files: File[]) {
     errorMsg.value = '批量检测暂不支持“仅分析框选区域”，请关闭后重试。'
     return
   }
+  const runRule = useRuleDetection.value
   busy.value = true
   errorMsg.value = null
   viewingHistoryId.value = null
   v3Payload.value = null
   v3TaskId.value = null
+  if (!runRule) resetRuleCheck()
   if (vizObjectUrl.value) {
     URL.revokeObjectURL(vizObjectUrl.value)
     vizObjectUrl.value = null
@@ -834,7 +998,7 @@ async function runV3Batch(files: File[]) {
       const f = files[i]!
       const prefix = `批量检测 ${i + 1}/${files.length}`
       try {
-        startRuleChecks(f, null, ac.signal)
+        if (runRule) startRuleChecks(f, null, ac.signal)
         const { taskId, payload } = await runV3AsyncOne(f, null, prefix, ac.signal)
         success += 1
         lastTaskId = taskId
@@ -939,13 +1103,38 @@ onUnmounted(() => {
       <aside class="sidebar">
         <section class="card side-section">
           <h2 class="section-title">检测方式</h2>
-          <div class="mode-grid">
-            <div class="mode-panel" role="status">
-              <span class="mode-tile-title">智能全图分析</span>
-              <span class="mode-tile-desc"
-                >自动查找关键区域并汇总结论，适合证件、票据等复杂画面</span
-              >
-            </div>
+          <p class="detect-type-hint">可多选；勾选哪种使用哪种，两项都选则并行检测。</p>
+          <div class="detect-type-list">
+            <label class="detect-type-item">
+              <input
+                v-model="useModelDetection"
+                type="checkbox"
+                class="detect-type-input"
+                :disabled="busy || (useModelDetection && !useRuleDetection)"
+              />
+              <span class="detect-type-check" aria-hidden="true" />
+              <span class="detect-type-body">
+                <span class="detect-type-title">AI 检测</span>
+                <span class="detect-type-desc"
+                  >自动查找关键区域并汇总结论，适合证件、票据等复杂画面</span
+                >
+              </span>
+            </label>
+            <label class="detect-type-item">
+              <input
+                v-model="useRuleDetection"
+                type="checkbox"
+                class="detect-type-input"
+                :disabled="busy || (useRuleDetection && !useModelDetection)"
+              />
+              <span class="detect-type-check" aria-hidden="true" />
+              <span class="detect-type-body">
+                <span class="detect-type-title">规则检测</span>
+                <span class="detect-type-desc"
+                  >核查拼接痕迹、时间一致性等规则项，速度较快</span
+                >
+              </span>
+            </label>
           </div>
         </section>
 
@@ -1009,7 +1198,12 @@ onUnmounted(() => {
               <span class="switch-text">仅分析我框出的区域</span>
             </label>
             <p class="option-hint">
-              关闭此项时，将由系统自动在图中选取多个关键位置分别判断。
+              <template v-if="useModelDetection">
+                关闭此项时，将由系统自动在图中选取多个关键位置分别判断。
+              </template>
+              <template v-else>
+                不框选时对整图进行规则核查；开启后可指定区域。
+              </template>
             </p>
           </div>
 
@@ -1056,9 +1250,6 @@ onUnmounted(() => {
           <div class="workspace-head">
             <h2 class="section-title tight">预览</h2>
             <div class="workspace-head-tags">
-              <span v-if="viewingHistoryId" class="workspace-tip workspace-tip-muted"
-                >历史记录预览</span
-              >
               <span v-if="v3SpecifyBbox" class="workspace-tip">框选模式已开启</span>
             </div>
           </div>
@@ -1150,79 +1341,25 @@ onUnmounted(() => {
             />
           </div>
 
-          <div
-            v-else-if="viewingHistoryId && v3Payload && historySchematicSpec"
-            class="history-schematic-wrap"
-          >
-            <p class="history-schematic-title">区域位置示意</p>
-            <p class="history-schematic-note">
-              无本机原图且未从服务器取回标注照片时，仅根据检测坐标绘制框线（与接口像素坐标一致，非真实底图）。
-            </p>
-            <svg
-              class="history-schematic-svg"
-              :viewBox="historySchematicSpec.viewBox"
-              preserveAspectRatio="xMidYMid meet"
-            >
-              <g v-for="item in historySchematicRenderList" :key="'hs' + item.n">
-                <rect
-                  :x="item.bbox[0]"
-                  :y="item.bbox[1]"
-                  :width="item.bbox[2]"
-                  :height="item.bbox[3]"
-                  fill="rgba(37, 99, 235, 0.08)"
-                  :stroke="regionStrokeForIndex(item.n)"
-                  stroke-width="2"
-                  :stroke-dasharray="regionDashForIndex(item.n)"
-                />
-                <circle
-                  :cx="item.cx"
-                  :cy="item.cy"
-                  :r="item.r"
-                  fill="#1d4ed8"
-                  stroke="#fff"
-                  stroke-width="1.5"
-                />
-                <text
-                  :x="item.cx"
-                  :y="item.cy"
-                  text-anchor="middle"
-                  dominant-baseline="central"
-                  :font-size="item.fs * 0.88"
-                  font-weight="700"
-                  fill="#fff"
-                  style="font-family: system-ui, -apple-system, sans-serif"
-                >
-                  {{ item.n }}
-                </text>
-              </g>
-            </svg>
-          </div>
-
-          <div
-            v-else-if="viewingHistoryId && v3Payload && vizLoading"
-            class="empty-preview history-preview-placeholder"
-          >
-            <p>正在加载标注示意图…</p>
-          </div>
-
-          <div
-            v-else-if="viewingHistoryId && v3Payload"
-            class="empty-preview history-preview-placeholder"
-          >
-            <p>当前为历史记录</p>
-            <p class="history-preview-hint">
-              原图未保存在本机。下方可查看当时结论与标注示意图（若服务端仍保留任务）；若无坐标数据则仅显示文字结论。
-            </p>
-          </div>
           <div v-else class="empty-preview">
             <p>请先在左侧上传一张图片</p>
+            <p v-if="viewingHistoryId" class="history-preview-hint">
+              当前正在查看历史记录，检测图片与结论见右侧「检测报告」。
+            </p>
           </div>
         </section>
 
         <section class="card workspace-card results-card">
-          <h2 class="section-title tight">检测报告</h2>
+          <div class="workspace-head">
+            <h2 class="section-title tight">检测报告</h2>
+            <div class="workspace-head-tags">
+              <span v-if="viewingHistoryId" class="workspace-tip workspace-tip-muted"
+                >历史记录</span
+              >
+            </div>
+          </div>
 
-          <div v-if="v3Payload" class="report">
+          <div v-if="hasAiReport" class="report">
             <template v-if="v3Payload.result">
               <div class="report-head">
                 <span
@@ -1300,9 +1437,16 @@ onUnmounted(() => {
             class="rule-check-block"
             aria-labelledby="rule-check-heading"
           >
-            <h3 id="rule-check-heading" class="rule-check-heading">辅助核查</h3>
+            <h3 id="rule-check-heading" class="rule-check-heading">
+              {{ hasAiReport ? '辅助核查' : '规则检测' }}
+            </h3>
             <p class="rule-check-desc">
-              从「是否被拼接贴图」「画面时间是否与单据一致」等角度做补充检查，结论供参考，不替代上方 AI 检测。
+              <template v-if="hasAiReport">
+                从「是否被拼接贴图」「画面时间是否与单据一致」等角度做补充检查，结论供参考，不替代上方 AI 检测。
+              </template>
+              <template v-else>
+                从「是否被拼接贴图」「画面时间是否与单据一致」等角度做规则核查，结论供参考。
+              </template>
             </p>
 
             <p v-if="ruleCheckLoading" class="rule-check-status">辅助核查进行中，请稍候…</p>
@@ -1347,24 +1491,96 @@ onUnmounted(() => {
             </template>
           </div>
 
-          <div v-if="vizObjectUrl" class="viz-wrap">
-            <h3 class="viz-heading">标注示意图</h3>
-            <div class="viz-frame">
-              <img
-                :src="vizObjectUrl"
-                alt="检测标注示意"
-                class="viz-img viz-img-zoomin"
-                @click="openPreviewLightbox(vizObjectUrl)"
-              />
+          <div
+            v-if="
+              hasReportContent &&
+              (vizLoading || vizObjectUrl || reportImageUrl || historySchematicSpec)
+            "
+            class="report-images"
+          >
+            <div v-if="viewingHistoryId && hasAiReport && vizLoading" class="history-viz-loading">
+              正在加载标注示意图…
+            </div>
+
+            <div v-if="vizObjectUrl" class="viz-wrap">
+              <h3 class="viz-heading">标注示意图</h3>
+              <div class="viz-frame">
+                <img
+                  :src="vizObjectUrl"
+                  alt="检测标注示意"
+                  class="viz-img viz-img-zoomin"
+                  @click="openPreviewLightbox(vizObjectUrl)"
+                />
+              </div>
+            </div>
+
+            <div v-else-if="reportImageUrl" class="viz-wrap">
+              <h3 class="viz-heading">{{ reportImageHeading }}</h3>
+              <div class="viz-frame">
+                <img
+                  :src="reportImageUrl"
+                  alt="检测图片"
+                  class="viz-img viz-img-zoomin"
+                  @click="openPreviewLightbox(reportImageUrl)"
+                />
+              </div>
+            </div>
+
+            <div
+              v-if="viewingHistoryId && historySchematicSpec"
+              class="history-schematic-wrap history-schematic-wrap--report"
+            >
+              <p class="history-schematic-title">区域位置示意</p>
+              <p class="history-schematic-note">
+                服务端未保留原图或标注图时，仅根据检测坐标绘制框线（与接口像素坐标一致，非真实底图）。
+              </p>
+              <svg
+                class="history-schematic-svg"
+                :viewBox="historySchematicSpec.viewBox"
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <g v-for="item in historySchematicRenderList" :key="'hs' + item.n">
+                  <rect
+                    :x="item.bbox[0]"
+                    :y="item.bbox[1]"
+                    :width="item.bbox[2]"
+                    :height="item.bbox[3]"
+                    fill="rgba(37, 99, 235, 0.08)"
+                    :stroke="regionStrokeForIndex(item.n)"
+                    stroke-width="2"
+                    :stroke-dasharray="regionDashForIndex(item.n)"
+                  />
+                  <circle
+                    :cx="item.cx"
+                    :cy="item.cy"
+                    :r="item.r"
+                    fill="#1d4ed8"
+                    stroke="#fff"
+                    stroke-width="1.5"
+                  />
+                  <text
+                    :x="item.cx"
+                    :y="item.cy"
+                    text-anchor="middle"
+                    dominant-baseline="central"
+                    :font-size="item.fs * 0.88"
+                    font-weight="700"
+                    fill="#fff"
+                    style="font-family: system-ui, -apple-system, sans-serif"
+                  >
+                    {{ item.n }}
+                  </text>
+                </g>
+              </svg>
             </div>
           </div>
 
           <p v-if="vizHintMissing" class="viz-miss-hint">
-            本条任务的标注图在服务端已过期或未生成，故无示意图；左侧「区域位置示意」或下方文字为当前可用信息。
+            本条任务的标注图在服务端已过期或未生成；可结合下方检测图片与文字结论查看。
           </p>
 
           <p
-            v-if="!v3Payload && !errorMsg && !busy"
+            v-if="!hasReportContent && !errorMsg && !busy"
             class="empty-report"
           >
             完成检测后，将在此展示结论、说明与示意图。
@@ -1386,7 +1602,7 @@ onUnmounted(() => {
               {{ historyLoading ? '加载中…' : '刷新' }}
             </button>
           </div>
-          <p class="history-api-hint">来自服务端近 7 日记录；含 AI 检测与辅助核查结果</p>
+          <p class="history-api-hint">来自服务端近 7 日记录；同一次检测会合并，仅 AI 或仅规则也会单独展示</p>
           <p v-if="historyError" class="history-error">{{ historyError }}</p>
           <p
             v-if="!historyLoading && !historyEntries.length && !historyError"
@@ -1406,7 +1622,12 @@ onUnmounted(() => {
                 class="history-main"
                 @click="applyHistoryEntry(h)"
               >
-                <span class="history-time">{{ formatHistoryTime(h.savedAt) }}</span>
+                <span class="history-meta">
+                  <span class="history-time">{{ formatHistoryTime(h.savedAt) }}</span>
+                  <span v-if="historyKindLabel(h)" class="history-kind">{{
+                    historyKindLabel(h)
+                  }}</span>
+                </span>
                 <span class="history-file" :title="h.fileName">{{
                   truncateName(h.fileName)
                 }}</span>
@@ -1613,36 +1834,102 @@ onUnmounted(() => {
   margin-bottom: 0.75rem;
 }
 
-.mode-grid {
-  display: flex;
-  flex-direction: column;
+.detect-type-hint {
+  margin: -0.35rem 0 0.75rem;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  line-height: 1.45;
 }
 
-.mode-panel {
-  width: 100%;
-  box-sizing: border-box;
-  text-align: left;
-  padding: 1.1rem 1.15rem;
-  min-height: 7.5rem;
+.detect-type-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.detect-type-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.95rem 1rem;
   border-radius: var(--radius-sm);
-  border: 1px solid var(--brand);
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    background 0.15s,
+    box-shadow 0.15s;
+}
+
+.detect-type-item:has(.detect-type-input:checked) {
+  border-color: var(--brand);
   background: #eff6ff;
   box-shadow: 0 0 0 1px var(--brand);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
 }
 
-.mode-tile-title {
-  display: block;
+.detect-type-item:has(.detect-type-input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.detect-type-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.detect-type-check {
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.1rem;
+  border-radius: 0.25rem;
+  border: 2px solid #94a3b8;
+  background: #fff;
+  position: relative;
+  transition:
+    border-color 0.15s,
+    background 0.15s;
+}
+
+.detect-type-input:checked + .detect-type-check {
+  border-color: var(--brand);
+  background: var(--brand);
+}
+
+.detect-type-input:checked + .detect-type-check::after {
+  content: '';
+  position: absolute;
+  left: 0.28rem;
+  top: 0.05rem;
+  width: 0.28rem;
+  height: 0.55rem;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.detect-type-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.detect-type-title {
   font-weight: 600;
   font-size: 0.95rem;
   color: var(--text);
-  margin-bottom: 0.25rem;
 }
 
-.mode-tile-desc {
-  display: block;
+.detect-type-desc {
   font-size: 0.8rem;
   color: var(--text-muted);
   line-height: 1.45;
@@ -2062,6 +2349,25 @@ onUnmounted(() => {
   font-variant-numeric: tabular-nums;
 }
 
+.history-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.history-kind {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 0.1rem 0.38rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  letter-spacing: 0.02em;
+}
+
 .history-file {
   display: block;
   font-size: 0.78rem;
@@ -2330,6 +2636,29 @@ onUnmounted(() => {
   padding: 0.75rem 0.65rem 0.85rem;
   background: var(--surface-2);
   border-radius: var(--radius-sm);
+}
+
+.report-images {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.report-images .viz-wrap {
+  margin-top: 0;
+}
+
+.history-schematic-wrap--report {
+  margin-top: 0.75rem;
+}
+
+.history-viz-loading {
+  margin: 0.5rem 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 .history-schematic-title {
