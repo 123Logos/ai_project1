@@ -6,7 +6,7 @@
         返回
       </button>
       <h2>当前库存维护</h2>
-      <p>导入依据：库房名称 + 当前库存（可选库存日期）。列表仅展示各库房最新一条库存记录。</p>
+      <p>导入依据：库房名称 + 回收品种 + 当前库存（可选库存日期）。列表展示各「库房 + 品类」最新快照。</p>
     </div>
 
     <div class="dmp-tabs">
@@ -22,7 +22,9 @@
         <button type="button" class="btn btn-primary" :disabled="importLoading" @click="triggerImport">
           {{ importLoading ? '导入中…' : '选择 Excel 导入' }}
         </button>
-        <button type="button" class="btn btn-outline-secondary" @click="downloadTemplate">下载模板</button>
+        <button type="button" class="btn btn-outline-secondary" :disabled="templateLoading" @click="downloadTemplate">
+          {{ templateLoading ? '下载中…' : '下载模板' }}
+        </button>
       </div>
       <input ref="fileInput" type="file" accept=".xlsx,.xlsm,.xls,.csv" style="display:none" @change="onFileSelect" />
 
@@ -51,15 +53,29 @@
       </div>
 
       <div v-else class="dmp-hint card">
-        <p class="mb-1"><strong>模板列：</strong>库房名称、当前库存、库存日期（可选，YYYY-MM-DD）</p>
-        <p class="mb-0 text-muted small">库房名称须与系统中已有库房一致；未填库存日期时由后端使用当天。</p>
+        <p class="mb-1"><strong>模板列：</strong>库房名称、回收品种、当前库存、库存日期（可选，YYYY-MM-DD）</p>
+        <p class="mb-2 text-muted small">同一库房可有多行不同品类；保存后系统自动汇总更新库房「当前库存」。</p>
+        <p v-if="categories.length" class="mb-0 small">
+          <strong>系统品类（{{ categories.length }}）：</strong>
+          <span class="text-muted">{{ categoryHint }}</span>
+        </p>
+        <p v-else-if="categoriesLoading" class="mb-0 small text-muted">正在加载品类…</p>
       </div>
     </div>
 
     <div v-else class="dmp-panel">
       <p v-if="listError" class="dmp-err">{{ listError }}</p>
       <div class="dmp-toolbar">
-        <input v-model.trim="keyword" type="search" class="form-control dmp-search" placeholder="搜索库房名称" />
+        <input
+          v-model.trim="keyword"
+          type="search"
+          class="form-control dmp-search"
+          placeholder="搜索库房名称或品类名"
+        />
+        <select v-model="categoryIdFilter" class="form-select dmp-search">
+          <option value="">全部品类</option>
+          <option v-for="c in categories" :key="c.id" :value="String(c.id)">{{ c.name }}</option>
+        </select>
         <button type="button" class="btn btn-outline-secondary" :disabled="listLoading" @click="loadList">查询</button>
         <button type="button" class="btn btn-outline-secondary" :disabled="listLoading" @click="loadList">刷新</button>
       </div>
@@ -68,6 +84,7 @@
           <thead>
             <tr>
               <th>库房名称</th>
+              <th>回收品种</th>
               <th>当前库存</th>
               <th>库存日期</th>
               <th>更新时间</th>
@@ -75,13 +92,17 @@
           </thead>
           <tbody>
             <tr v-if="listLoading">
-              <td colspan="4" class="text-center py-4">加载中…</td>
+              <td colspan="5" class="text-center py-4">加载中…</td>
             </tr>
             <tr v-else-if="!listRows.length">
-              <td colspan="4" class="text-center py-4 text-muted">暂无数据</td>
+              <td colspan="5" class="text-center py-4 text-muted">暂无数据</td>
             </tr>
-            <tr v-for="row in listRows" :key="`${row.id}-${row.warehouseName}`">
+            <tr
+              v-for="row in listRows"
+              :key="`${row.id}-${row.warehouseName}-${row.categoryName}`"
+            >
               <td>{{ row.warehouseName }}</td>
+              <td>{{ row.categoryName || '—' }}</td>
               <td>{{ formatNum(row.stock) }}</td>
               <td>{{ row.stockDate || '—' }}</td>
               <td>{{ formatTime(row.updatedAt) }}</td>
@@ -99,13 +120,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
+import { fetchTlCategories } from '@/api/tlApi'
 import {
+  downloadWarehouseInventoryTemplate,
   fetchWarehouseCurrentStockList,
   importWarehouseCurrentStockExcel,
   type WarehouseCurrentStockRow,
 } from '@/api/warehouseCurrentStockApi'
-import { downloadXlsxTemplate, parseExcelFileForPreview } from '@/utils/excelImportPreview'
+import { parseExcelFileForPreview } from '@/utils/excelImportPreview'
 
 const emit = defineEmits<{ back: [] }>()
 
@@ -114,7 +137,14 @@ const message = ref('')
 const importError = ref('')
 const listError = ref('')
 const importLoading = ref(false)
+const templateLoading = ref(false)
 const listLoading = ref(false)
+
+const categories = ref<Array<{ id: number; name: string }>>([])
+const categoriesLoading = ref(false)
+const categoryHint = computed(
+  () => categories.value.map((c) => c.name).slice(0, 12).join('、') + (categories.value.length > 12 ? '…' : ''),
+)
 
 const fileInput = ref<HTMLInputElement | null>(null)
 const pendingFile = ref<File | null>(null)
@@ -123,6 +153,7 @@ const previewRows = ref<Record<string, string>[]>([])
 const previewTotal = ref(0)
 
 const keyword = ref('')
+const categoryIdFilter = ref('')
 const listRows = ref<WarehouseCurrentStockRow[]>([])
 const page = ref(1)
 const pageSize = 50
@@ -147,11 +178,24 @@ function formatTime(t: string): string {
   return t.replace('T', ' ').slice(0, 19)
 }
 
-function downloadTemplate() {
-  downloadXlsxTemplate('当前库存导入模板.xlsx', '导入数据', ['库房名称', '当前库存', '库存日期'], [
-    ['示例库房A', 1200, '2026-05-29'],
-    ['示例库房B', 800, ''],
-  ])
+async function downloadTemplate() {
+  templateLoading.value = true
+  importError.value = ''
+  try {
+    const blob = await downloadWarehouseInventoryTemplate()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = '库房库存导入模板.xlsx'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  } catch (e) {
+    importError.value = formatApiError(e, '下载库存模板')
+  } finally {
+    templateLoading.value = false
+  }
 }
 
 function triggerImport() {
@@ -220,10 +264,12 @@ async function loadList() {
   listLoading.value = true
   listError.value = ''
   try {
+    const categoryId = categoryIdFilter.value ? Number(categoryIdFilter.value) : undefined
     const res = await fetchWarehouseCurrentStockList({
       page: page.value,
       page_size: pageSize,
       keyword: keyword.value,
+      category_id: categoryId != null && Number.isFinite(categoryId) ? categoryId : undefined,
     })
     listRows.value = res.items
     total.value = res.total
@@ -246,6 +292,21 @@ watch(tab, (t) => {
   if (t === 'list' && !listRows.value.length && !listLoading.value) {
     void loadList()
   }
+})
+
+async function loadCategories() {
+  categoriesLoading.value = true
+  try {
+    categories.value = await fetchTlCategories()
+  } catch {
+    categories.value = []
+  } finally {
+    categoriesLoading.value = false
+  }
+}
+
+onMounted(() => {
+  void loadCategories()
 })
 </script>
 

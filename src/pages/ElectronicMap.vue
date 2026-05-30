@@ -95,9 +95,6 @@
         v-if="toolbarCollapsed && !comparisonModalVisible && !warehouseDistanceMonitorOn"
         class="emap-map-tools-bubble emap-cmp-settings-bubble"
       >
-        <span class="emap-map-tools-drag-hint" aria-hidden="true">
-          <i class="bi bi-sliders2" aria-hidden="true"></i>
-        </span>
         <button
           type="button"
           class="emap-map-tools-tab"
@@ -429,9 +426,6 @@
               v-if="toolbarCollapsed"
               class="emap-map-tools-bubble emap-cmp-settings-bubble emap-cmp-settings-bubble--head"
             >
-              <span class="emap-map-tools-drag-hint" aria-hidden="true">
-                <i class="bi bi-sliders2" aria-hidden="true"></i>
-              </span>
               <button
                 type="button"
                 class="emap-cmp-settings-head-btn"
@@ -749,12 +743,38 @@
       </div>
       <div class="emap-map-corner">
         <div class="emap-legend">
-          <span class="emap-legend-item"
-            ><span class="emap-legend-dot emap-legend-dot--wh"></span> 库房（随类型颜色）</span
-          >
-          <span class="emap-legend-item"
-            ><span class="emap-legend-tri"></span> 冶炼厂</span
-          >
+          <div class="emap-legend-item emap-legend-item--toggle">
+            <button
+              type="button"
+              class="emap-legend-eye-btn"
+              :title="allWarehousesHidden ? '显示全部库房' : '隐藏全部库房'"
+              @click.stop="toggleAllWarehousesVisibility"
+            >
+              <i
+                class="bi"
+                :class="allWarehousesHidden ? 'bi-eye-slash' : 'bi-eye'"
+                aria-hidden="true"
+              />
+            </button>
+            <span class="emap-legend-dot emap-legend-dot--wh"></span>
+            <span>库房（随类型颜色）</span>
+          </div>
+          <div class="emap-legend-item emap-legend-item--toggle">
+            <button
+              type="button"
+              class="emap-legend-eye-btn"
+              :title="allSmeltersHidden ? '显示全部冶炼厂' : '隐藏全部冶炼厂'"
+              @click.stop="toggleAllSmeltersVisibility"
+            >
+              <i
+                class="bi"
+                :class="allSmeltersHidden ? 'bi-eye-slash' : 'bi-eye'"
+                aria-hidden="true"
+              />
+            </button>
+            <span class="emap-legend-tri"></span>
+            <span>冶炼厂</span>
+          </div>
           <div v-if="warehouseTypeStats.length" class="emap-legend-stats">
             <div class="emap-legend-stats-title">
               库房类型数量
@@ -1432,6 +1452,16 @@ function toggleWarehouseTypeVisibility(label: string) {
   applyWarehouseTypeVisibility()
 }
 
+function toggleAllWarehousesVisibility() {
+  allWarehousesHidden.value = !allWarehousesHidden.value
+  applyWarehouseTypeVisibility()
+}
+
+function toggleAllSmeltersVisibility() {
+  allSmeltersHidden.value = !allSmeltersHidden.value
+  applySmelterVisibility()
+}
+
 function applyWarehouseTypeVisibility() {
   const markerLayer = markerLayerRef.value
   if (!markerLayer) return
@@ -1443,10 +1473,26 @@ function applyWarehouseTypeVisibility() {
       pickStr(p.raw, ['类型', 'type', 'warehouse_type_name', '类型名']).trim() || '未分类'
     const markerLatLng = m.getLatLng()
     const isOnMap = markerLatLng != null && mapRef.value?.hasLayer(m)
-    if (hidden.has(typeName)) {
+    if (allWarehousesHidden.value || hidden.has(typeName)) {
       if (isOnMap) m.remove()
     } else {
       if (!isOnMap) m.addTo(markerLayer)
+    }
+  }
+}
+
+function applySmelterVisibility() {
+  const markerLayer = markerLayerRef.value
+  if (!markerLayer) return
+  for (const p of allSmelterPoints.value) {
+    const m = smelterMarkerById.get(p.id)
+    if (!m) continue
+    const markerLatLng = m.getLatLng()
+    const isOnMap = markerLatLng != null && mapRef.value?.hasLayer(m)
+    if (allSmeltersHidden.value) {
+      if (isOnMap) m.remove()
+    } else if (!isOnMap) {
+      m.addTo(markerLayer)
     }
   }
 }
@@ -1495,6 +1541,9 @@ function onEmapFullscreenChange() {
 const allSmelterPoints = ref<MapPoint[]>([])
 /** 隐藏的库房类型标签集合 */
 const hiddenWarehouseTypes = ref<Set<string>>(new Set())
+/** 隐藏全部库房 / 冶炼厂打点 */
+const allWarehousesHidden = ref(false)
+const allSmeltersHidden = ref(false)
 
 /** 库房 id → 标记，用于选中时把其余库房变浅 */
 const warehouseMarkerById = new Map<string, L.Marker>()
@@ -2072,6 +2121,52 @@ function warehouseReceiptPriceBlockHtml(
   return `<div class="emap-wh-hover-freight"><div class="emap-wh-hover-freight-head">收货价格</div><div class="emap-wh-hover-freight-scroll">${items}</div></div>`
 }
 
+function pickWarehouseStockByCategory(
+  raw: Record<string, unknown>,
+): { category: string; stock: number | null; date: string }[] {
+  const arr = raw['库存按品种']
+  if (!Array.isArray(arr) || !arr.length) return []
+  const out: { category: string; stock: number | null; date: string }[] = []
+  for (const item of arr) {
+    if (!item || typeof item !== 'object') continue
+    const o = item as Record<string, unknown>
+    const category = pickStr(o, [
+      '品类名',
+      '品类',
+      '品种',
+      'category',
+      'category_name',
+      '回收品种',
+    ])
+    const stock = pickNumber(o, ['当前库存', 'current_stock', 'stock'])
+    const date = pickStr(o, ['库存日期', 'inventory_date', 'stock_date', 'date'])
+    if (!category && stock === null) continue
+    out.push({ category: category || '—', stock, date })
+  }
+  return out
+}
+
+function warehouseStockBlockHtml(
+  stocks: { category: string; stock: number | null; date: string }[],
+): string {
+  if (!stocks.length) {
+    return `<div class="emap-wh-hover-row"><span class="emap-wh-hover-k">库存按品种</span><span class="emap-wh-hover-v">—</span></div>`
+  }
+  const items = stocks
+    .map((s) => {
+      const val =
+        s.stock === null
+          ? '—'
+          : `${s.stock.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 吨`
+      const dateSuffix = s.date ? ` · ${escapeHtml(s.date)}` : ''
+      return `<div class="emap-wh-hover-freight-item"><span class="emap-wh-hover-freight-smelter">${escapeHtml(
+        s.category,
+      )}</span><span class="emap-wh-hover-freight-val">${escapeHtml(val)}${dateSuffix}</span></div>`
+    })
+    .join('')
+  return `<div class="emap-wh-hover-freight"><div class="emap-wh-hover-freight-head">库存按品种</div><div class="emap-wh-hover-freight-scroll">${items}</div></div>`
+}
+
 function formatWarehouseCurrentStock(raw: Record<string, unknown>): string {
   const stock = pickNumber(raw, ['当前库存', 'current_stock', 'stock'])
   if (stock === null) return '—'
@@ -2122,6 +2217,8 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
   const haz = pickNumber(raw, ['危废经营许可数量', 'hazard_license_count', '危废许可数量'])
   const monthly = pickNumber(raw, ['月均收货', 'monthly_avg_receipt', '月均采购'])
   const stockText = formatWarehouseCurrentStock(raw)
+  const stocksByCategory = pickWarehouseStockByCategory(raw)
+  const stockBlock = warehouseStockBlockHtml(stocksByCategory)
   const smelterFreights = pickWarehouseSmelterFreights(raw)
   const receiptPrices = pickWarehouseReceiptPricesByCategory(raw)
   const hazText = formatHazardLicenseQty(haz)
@@ -2146,7 +2243,7 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
   )}${dual(metric('联系人', contact || '—'), metric('电话', phone || '—'))}${dual(
     metric('危废经营许可数量', hazText),
     metric('月均收货', monthlyText),
-  )}${tipRow('当前库存', stockText)}${receiptBlock}${freightBlock}</div></div>`
+  )}${tipRow('当前库存（汇总）', stockText)}${stockBlock}${receiptBlock}${freightBlock}</div></div>`
 }
 
 function smelterPopupHtml(p: MapPoint): string {
@@ -2614,6 +2711,7 @@ function renderMarkers(points: MapPoint[], options?: { preserveMapView?: boolean
 
   refreshAllMarkerVisualState()
   applyWarehouseTypeVisibility()
+  applySmelterVisibility()
   refreshWarehouseMarkerLockInteractivity()
   syncLockedWarehousePopupPin()
 
@@ -5424,25 +5522,19 @@ onBeforeUnmount(() => {
 
 .emap-cmp-settings-bubble {
   position: absolute;
-  top: 12px;
+  top: 72px;
   left: 12px;
   z-index: 1002;
   cursor: default;
+  padding: 6px;
 }
 
 .emap-cmp-settings-bubble--head {
   position: static;
   flex-direction: row;
   align-items: center;
-  padding: 4px 10px 4px 4px;
-  gap: 6px;
+  padding: 4px 12px;
   border-radius: 999px;
-}
-
-.emap-cmp-settings-bubble--head .emap-map-tools-drag-hint {
-  width: 28px;
-  height: 28px;
-  font-size: 0.85rem;
 }
 
 .emap-cmp-settings-head-btn {
@@ -5459,10 +5551,6 @@ onBeforeUnmount(() => {
 
 .emap-cmp-settings-head-btn:hover {
   color: #f8fafc;
-}
-
-.emap-map-wrap--toolbar-collapsed :deep(.leaflet-top.leaflet-left) {
-  top: 88px;
 }
 
 .emap-toolbar-heading {
@@ -6968,6 +7056,18 @@ onBeforeUnmount(() => {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.emap-legend-item--toggle {
+  display: grid;
+  grid-template-columns: 18px 14px 1fr;
+  align-items: center;
+  gap: 6px;
+}
+
+.emap-legend-item--toggle .emap-legend-dot,
+.emap-legend-item--toggle .emap-legend-tri {
+  justify-self: center;
 }
 
 .emap-legend-dot {

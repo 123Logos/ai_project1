@@ -3,7 +3,7 @@
     <div v-if="!subPage" class="dm-home">
       <div class="dm-head">
         <h2>数据维护</h2>
-        <p>维护库房当前库存与收货价格，支持 Excel 批量导入；列表仅展示各库房最新记录。</p>
+        <p>维护库房当前库存与收货价格，支持 Excel 批量导入；库存按「库房 + 品类」维度维护。</p>
       </div>
       <div class="dm-cards">
         <button type="button" class="dm-card" @click="subPage = 'stock'">
@@ -12,7 +12,7 @@
           </div>
           <div class="dm-card-body">
             <h4>当前库存维护</h4>
-            <p>按库房名称 + 当前库存导入，记录库存日期，页面展示最新库存。</p>
+            <p>按库房 + 回收品种录入或导入库存，系统自动汇总库房总库存。</p>
           </div>
           <i class="bi bi-chevron-right dm-card-arrow"></i>
         </button>
