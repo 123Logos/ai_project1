@@ -3157,20 +3157,6 @@ function pickNumberComparisonDetail(row: Record<string, unknown>, keys: string[]
   return null
 }
 
-/** 库房回收价：优先接口明细行顶层「总回收价」，再回退含循融宝等口径下的总价 */
-function pickDetailTotalRecovery(row: Record<string, unknown>): number | null {
-  const direct = pickNumber(row, ['总回收价', 'total_recovery'])
-  if (direct != null && Number.isFinite(direct)) return direct
-  return pickNumberComparisonDetail(row, [
-    '总回收价',
-    'total_recovery',
-    '总价',
-    '报价金额',
-    '物料总价',
-    'material_sum',
-  ])
-}
-
 /** 比价表「总货款」：优先顶层/含循融宝「总货款」 */
 function pickComparisonTotalGoods(row: Record<string, unknown>): number | null {
   const top = pickNumber(row, ['总货款'])

@@ -51,6 +51,7 @@ export const NAV_PERMISSION_SEED: NavPermissionSeedRow[] = [
   { category: 'ai_prediction', label: '历史数据管理', field_name: 'perm_nav_ai_prediction_history_manage' },
   { category: 'ai_prediction', label: '历史数据查询', field_name: 'perm_nav_ai_prediction_history_query' },
   { category: 'ai_prediction', label: '送货量预测', field_name: 'perm_nav_ai_prediction_forecast' },
+  { category: 'ai_prediction', label: '铅价格查询', field_name: 'perm_nav_ai_prediction_lead_price_query' },
 
   { category: 'ai_security', label: '图片真伪检查', field_name: 'perm_nav_ai_security_image_detect' },
 

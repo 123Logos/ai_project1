@@ -106,6 +106,9 @@
       <section v-else-if="activeSection === 'prediction' && predictionSubTab === 'forecast'" class="panel inner-page">
         <PurchaseQuantity />
       </section>
+      <section v-else-if="activeSection === 'prediction' && predictionSubTab === 'leadPrice'" class="panel inner-page">
+        <LeadPriceQuery />
+      </section>
       <section v-else-if="activeSection === 'map'" class="panel emap-panel">
         <ElectronicMap />
       </section>
@@ -172,6 +175,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import HistoryManage from './pages/HistoryManage.vue'
 import HistoryQuery from './pages/HistoryQuery.vue'
 import PurchaseQuantity from './pages/PurchaseQuantity.vue'
+import LeadPriceQuery from './pages/LeadPriceQuery.vue'
 import ElectronicMap from './pages/ElectronicMap.vue'
 import UserManage from './pages/UserManage.vue'
 import WarehouseDistanceConfig from './components/WarehouseDistanceConfig.vue'
@@ -211,6 +215,7 @@ const predictionSubTabs: Array<{ key: PredictionSubKey; label: string }> = [
   { key: 'historyManage', label: '历史数据管理' },
   { key: 'historyQuery', label: '历史数据查询' },
   { key: 'forecast', label: '送货量预测' },
+  { key: 'leadPrice', label: '铅价格查询' },
 ]
 
 const activeSection = ref<SectionKey>('map')
