@@ -6,9 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview",
-    "deploy": "powershell -ExecutionPolicy Bypass -File ./deploy.ps1",
-    "deploy:all": "powershell -ExecutionPolicy Bypass -File ./deploy.ps1 -WithNginx"
+    "preview": "vite preview"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.5",

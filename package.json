@@ -8,10 +8,6 @@
     "build": "vue-tsc -b && vite build",
     "build:deploy-root": "vue-tsc -b && vite build --base=/",
     "preview": "vite preview",
-    "deploy": "powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy.ps1",
-    "update": "powershell -NoProfile -ExecutionPolicy Bypass -File ./update.ps1",
-    "deploy:118": "powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy-redspiderbc.ps1",
-    "update:118": "powershell -NoProfile -ExecutionPolicy Bypass -File ./deploy-redspiderbc.ps1 -SkipNpmInstall",
     "seed:permissions": "node scripts/seed-nav-permissions.mjs",
     "seed:permissions:dry": "node scripts/seed-nav-permissions.mjs --dry-run"
   },
