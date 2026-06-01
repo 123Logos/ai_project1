@@ -531,9 +531,9 @@ const closeErrorModal = () => {
 const DEFAULT_SMELTER = '河南金利金铅集团有限公司'
 
 function defaultHistoryDateRange(): { startDate: string; endDate: string } {
-  const start = new Date()
-  const end = new Date(start)
-  end.setDate(end.getDate() + 14)
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(start.getDate() - 29)
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
   return { startDate: fmt(start), endDate: fmt(end) }
 }

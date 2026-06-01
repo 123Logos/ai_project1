@@ -211,49 +211,6 @@
             </div>
           </div>
 
-          <div class="filter-item multi-select-item">
-            <label>大区经理 <span class="filter-required">*</span></label>
-            <div class="multi-select-container">
-              <div
-                class="selected-tags"
-                :class="multiSelectTagsClass(forecastWhSelectedManagers)"
-                @click="focusWhManagerInput"
-              >
-                <span v-for="item in whManagersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeWhManager(item)">×</button>
-                </span>
-                <span
-                  v-if="whManagersTagsMore > 0"
-                  class="tag tag-more tag-shrink"
-                  :title="'还有：' + whManagersTagsRest.join('、')"
-                >+{{ whManagersTagsMore }}</span>
-                <input
-                  ref="whManagerInputRef"
-                  v-model="whManagerSearchText"
-                  type="text"
-                  class="multi-input"
-                  :placeholder="multiSelectPlaceholder(forecastWhSelectedManagers)"
-                  @input="onWhManagerSearchInput"
-                  @focus="onWhManagerFocus"
-                  @blur="closeWhManagerDropdown"
-                  @keydown.enter="handleWhManagerKeydown"
-                />
-              </div>
-              <div v-show="whManagerDropdownVisible && filteredWhManagerOptions.length > 0" class="dropdown-list">
-                <div
-                  v-for="item in filteredWhManagerOptions"
-                  :key="item"
-                  class="dropdown-item"
-                  :class="{ 'dropdown-item--selected': forecastWhSelectedManagers.includes(item) }"
-                  @mousedown.prevent="onWhManagerDropdownPick(item)"
-                >
-                  {{ item }}
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div class="filter-item multi-select-item multi-select-item--wide">
             <label>冶炼厂 <span class="filter-required">*</span></label>
             <div class="multi-select-container multi-select-container--wide">
@@ -698,7 +655,6 @@ function getForecastFilterValidationError(): string | null {
   }
   const missing: string[] = []
   if (forecastWhSelectedWarehouses.value.length === 0) missing.push('仓库')
-  if (forecastWhSelectedManagers.value.length === 0) missing.push('大区经理')
   if (forecastWhSelectedSmelters.value.length === 0) missing.push('冶炼厂')
   if (missing.length > 0) return `请先选择${missing.join('、')}后再查询`
   const f = forecastWhFilters.value
@@ -1059,7 +1015,12 @@ function closeAnalysisDrawer() {
   analysisDrawerVisible.value = false
 }
 
-function drawSummaryChart() {
+function formatPrice(n: number): string {
+  if (!Number.isFinite(n)) return '—'
+  return n.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
+}
+
+function drawSummaryChart(highlightIndex = -1) {
   const canvas = summaryChartCanvasRef.value
   if (!canvas) return
   const dates = chartDates.value
@@ -1075,12 +1036,17 @@ function drawSummaryChart() {
   canvas.width = width
   canvas.height = height
 
-  const margin = { t: 20, r: 16, b: 44, l: 64 }
+  const margin = { t: 24, r: 20, b: 56, l: 72 }
   const W = width - margin.l - margin.r
   const H = height - margin.t - margin.b
   const n = dates.length
   const maxV = Math.max(...values, 0)
   const maxY = maxV <= 0 ? 1 : maxV * 1.08
+  const xStep = n <= 1 ? W / 2 : W / (n - 1)
+  const toX = (i: number) => margin.l + i * xStep
+  const toY = (v: number) => margin.t + H - (v / maxY) * H
+
+  summaryChartLayout = { margin, W, H, maxY, xStep, toX, toY }
 
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, width, height)
@@ -1103,28 +1069,45 @@ function drawSummaryChart() {
     ctx.moveTo(margin.l, y)
     ctx.lineTo(margin.l + W, y)
     ctx.stroke()
-    ctx.fillText(val.toFixed(2), 4, y + 4)
+    ctx.fillText(formatPrice(val), 4, y + 4)
   }
 
-  const xStep = n <= 1 ? W / 2 : W / (n - 1)
+  if (highlightIndex >= 0 && highlightIndex < n) {
+    const hx = toX(highlightIndex)
+    ctx.strokeStyle = 'rgba(20, 118, 219, 0.35)'
+    ctx.lineWidth = 1
+    ctx.setLineDash([4, 4])
+    ctx.beginPath()
+    ctx.moveTo(hx, margin.t)
+    ctx.lineTo(hx, margin.t + H)
+    ctx.stroke()
+    ctx.setLineDash([])
+  }
+
   ctx.strokeStyle = '#1476db'
   ctx.lineWidth = 2
   ctx.beginPath()
   values.forEach((v, i) => {
-    const x = margin.l + i * xStep
-    const y = margin.t + H - (v / maxY) * H
+    const x = toX(i)
+    const y = toY(v)
     if (i === 0) ctx.moveTo(x, y)
     else ctx.lineTo(x, y)
   })
   ctx.stroke()
 
-  ctx.fillStyle = '#1476db'
   values.forEach((v, i) => {
-    const x = margin.l + i * xStep
-    const y = margin.t + H - (v / maxY) * H
+    const x = toX(i)
+    const y = toY(v)
+    const active = i === highlightIndex
+    ctx.fillStyle = '#1476db'
     ctx.beginPath()
-    ctx.arc(x, y, 4, 0, Math.PI * 2)
+    ctx.arc(x, y, active ? 6 : 3, 0, Math.PI * 2)
     ctx.fill()
+    if (active) {
+      ctx.strokeStyle = '#fff'
+      ctx.lineWidth = 2
+      ctx.stroke()
+    }
   })
 
   const maxLabs = Math.max(2, Math.floor(W / 56))
@@ -1132,18 +1115,81 @@ function drawSummaryChart() {
   ctx.fillStyle = '#64748b'
   dates.forEach((d, i) => {
     if (i % labStep !== 0 && i !== n - 1) return
-    const x = margin.l + i * xStep
+    const x = toX(i)
     const label = d.length >= 10 ? d.slice(5) : d
-    ctx.fillText(label, x - 16, margin.t + H + 28)
+    ctx.fillText(label, x - 16, margin.t + H + 20)
   })
 
   ctx.fillStyle = '#475569'
   ctx.font = '12px system-ui, sans-serif'
-  ctx.fillText('预测重量（吨）', margin.l, margin.t - 6)
-  ctx.fillText('预测日期', margin.l + W / 2 - 28, height - 8)
+  ctx.fillText('预测重量（吨）', margin.l, margin.t - 8)
+  ctx.fillText('预测日期', margin.l + W / 2 - 28, height - 6)
+
+  if (highlightIndex >= 0) {
+    updateSummaryTooltipPosition(highlightIndex)
+  }
 }
 
 let summaryChartResizeHandler: (() => void) | null = null
+
+function summaryCanvasPointer(ev: MouseEvent): { x: number; y: number } {
+  const canvas = summaryChartCanvasRef.value!
+  const rect = canvas.getBoundingClientRect()
+  const scaleX = canvas.width / rect.width
+  const scaleY = canvas.height / rect.height
+  return {
+    x: (ev.clientX - rect.left) * scaleX,
+    y: (ev.clientY - rect.top) * scaleY,
+  }
+}
+
+function findNearestSummaryPoint(px: number, py: number): number {
+  if (!summaryChartLayout) return -1
+  const values = chartTotalByDate.value
+  let best = -1
+  let bestDist = SUMMARY_HIT_RADIUS
+  values.forEach((v, i) => {
+    const dx = px - summaryChartLayout!.toX(i)
+    const dy = py - summaryChartLayout!.toY(v)
+    const d = Math.hypot(dx, dy)
+    if (d < bestDist) {
+      bestDist = d
+      best = i
+    }
+  })
+  return best
+}
+
+function updateSummaryTooltipPosition(index: number) {
+  const canvas = summaryChartCanvasRef.value
+  if (!canvas || !summaryChartLayout || index < 0) return
+  const rect = canvas.getBoundingClientRect()
+  const scaleX = rect.width / canvas.width
+  const scaleY = rect.height / canvas.height
+  const left = summaryChartLayout.toX(index) * scaleX
+  const top = summaryChartLayout.toY(chartTotalByDate.value[index] ?? 0) * scaleY
+  summaryTooltipStyle.value = {
+    left: `${left}px`,
+    top: `${top}px`,
+    transform: 'translate(-50%, calc(-100% - 10px))',
+  }
+}
+
+function onSummaryChartMouseMove(ev: MouseEvent) {
+  if (!summaryChartLayout || chartTotalByDate.value.length === 0) return
+  const { x, y } = summaryCanvasPointer(ev)
+  const hit = findNearestSummaryPoint(x, y)
+  if (hit === summaryHoverIndex.value) return
+  summaryHoverIndex.value = hit
+  drawSummaryChart(hit)
+}
+
+function onSummaryChartMouseLeave() {
+  if (summaryHoverIndex.value < 0) return
+  summaryHoverIndex.value = -1
+  summaryTooltipStyle.value = {}
+  drawSummaryChart(-1)
+}
 
 watch([chartDates, chartTotalByDate], () => {
   if (chartDates.value.length > 0) {
@@ -1469,9 +1515,6 @@ function buildForecastFilterParams(): Record<string, any> {
     if (forecastWhSelectedWarehouses.value.length > 0) {
       params.warehouses = forecastWhSelectedWarehouses.value
     }
-    if (forecastWhSelectedManagers.value.length > 0) {
-      params.regional_managers = forecastWhSelectedManagers.value
-    }
     if (forecastWhSelectedSmelters.value.length > 0) {
       params.smelters = forecastWhSelectedSmelters.value
     }
@@ -1493,9 +1536,6 @@ function buildForecastFilterParams(): Record<string, any> {
     if (f.endDate) params.date_to = f.endDate
     if (forecastWhSelectedWarehouses.value.length > 0) {
       params.warehouses = forecastWhSelectedWarehouses.value
-    }
-    if (forecastWhSelectedManagers.value.length > 0) {
-      params.regional_managers = forecastWhSelectedManagers.value
     }
     if (forecastWhSelectedSmelters.value.length > 0) {
       params.smelters = forecastWhSelectedSmelters.value
@@ -1704,10 +1744,8 @@ function handleReset() {
     mgrSmelterSearchText.value = ''
   } else if (forecastActiveTab.value === 'warehouse') {
     forecastWhSelectedWarehouses.value = []
-    forecastWhSelectedManagers.value = []
     forecastWhSelectedSmelters.value = []
     whWarehouseSearchText.value = ''
-    whManagerSearchText.value = ''
     whSmelterSearchText.value = ''
   }
   applyDefaultForecastDateRange()
@@ -1808,7 +1846,7 @@ function drawRowTrendChart(highlightIndex = -1) {
     ctx.scale(dpr, dpr)
   }
 
-  const margin = { t: 28, r: 20, b: 44, l: 60 }
+  const margin = { t: 28, r: 20, b: 56, l: 72 }
   const W = width - margin.l - margin.r
   const H = height - margin.t - margin.b
   const n = dates.length
@@ -1827,36 +1865,35 @@ function drawRowTrendChart(highlightIndex = -1) {
 
   // 网格线
   const ySteps = 5
-  ctx.lineWidth = 1
+  ctx.font = '11px system-ui, sans-serif'
+  ctx.fillStyle = '#64748b'
   for (let i = 0; i <= ySteps; i++) {
     const y = margin.t + H - (i / ySteps) * H
     const val = (i / ySteps) * maxY
-    ctx.strokeStyle = i === 0 ? '#e2e8f0' : '#f1f5f9'
+    ctx.strokeStyle = '#f1f5f9'
+    ctx.lineWidth = 1
     ctx.beginPath()
     ctx.moveTo(margin.l, y)
     ctx.lineTo(margin.l + W, y)
     ctx.stroke()
-    ctx.font = '11px system-ui, sans-serif'
-    ctx.fillStyle = '#94a3b8'
-    ctx.textAlign = 'right'
-    ctx.textBaseline = 'middle'
-    ctx.fillText(val.toFixed(1), margin.l - 8, y)
+    ctx.fillText(formatPrice(val), 4, y + 4)
   }
 
   // X 轴基线
-  ctx.strokeStyle = '#e2e8f0'
+  ctx.strokeStyle = '#d1d5db'
   ctx.lineWidth = 1
   ctx.beginPath()
-  ctx.moveTo(margin.l, margin.t + H)
+  ctx.moveTo(margin.l, margin.t)
+  ctx.lineTo(margin.l, margin.t + H)
   ctx.lineTo(margin.l + W, margin.t + H)
   ctx.stroke()
 
   // 悬浮竖线
   if (highlightIndex >= 0 && highlightIndex < n) {
     const hx = toX(highlightIndex)
-    ctx.strokeStyle = 'rgba(20, 118, 219, 0.25)'
+    ctx.strokeStyle = 'rgba(20, 118, 219, 0.35)'
     ctx.lineWidth = 1
-    ctx.setLineDash([4, 3])
+    ctx.setLineDash([4, 4])
     ctx.beginPath()
     ctx.moveTo(hx, margin.t)
     ctx.lineTo(hx, margin.t + H)
@@ -1864,68 +1901,45 @@ function drawRowTrendChart(highlightIndex = -1) {
     ctx.setLineDash([])
   }
 
-  // 面积渐变
-  const gradient = ctx.createLinearGradient(0, margin.t, 0, margin.t + H)
-  gradient.addColorStop(0, 'rgba(20, 118, 219, 0.18)')
-  gradient.addColorStop(0.7, 'rgba(20, 118, 219, 0.04)')
-  gradient.addColorStop(1, 'rgba(20, 118, 219, 0)')
-
-  // 面积填充（平滑曲线）
+  // 面积填充（与铅价格查询页面一致）
+  ctx.fillStyle = 'rgba(20, 118, 219, 0.12)'
   ctx.beginPath()
-  ctx.moveTo(toX(0), margin.t + H)
-  ctx.lineTo(toX(0), toY(values[0]))
-  for (let i = 1; i < n; i++) {
-    const cpX = (toX(i - 1) + toX(i)) / 2
-    ctx.bezierCurveTo(cpX, toY(values[i - 1]), cpX, toY(values[i]), toX(i), toY(values[i]))
-  }
+  values.forEach((v, i) => {
+    const x = toX(i)
+    const y = toY(v)
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  })
   ctx.lineTo(toX(n - 1), margin.t + H)
+  ctx.lineTo(toX(0), margin.t + H)
   ctx.closePath()
-  ctx.fillStyle = gradient
   ctx.fill()
 
-  // 折线（平滑曲线）
-  ctx.beginPath()
-  ctx.moveTo(toX(0), toY(values[0]))
-  for (let i = 1; i < n; i++) {
-    const cpX = (toX(i - 1) + toX(i)) / 2
-    ctx.bezierCurveTo(cpX, toY(values[i - 1]), cpX, toY(values[i]), toX(i), toY(values[i]))
-  }
+  // 折线（直线，与铅价格查询页面一致）
   ctx.strokeStyle = '#1476db'
-  ctx.lineWidth = 2.5
-  ctx.lineJoin = 'round'
-  ctx.lineCap = 'round'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  values.forEach((v, i) => {
+    const x = toX(i)
+    const y = toY(v)
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  })
   ctx.stroke()
 
-  // 数据点
+  // 数据点（与铅价格查询页面一致）
   values.forEach((v, i) => {
     const x = toX(i)
     const y = toY(v)
     const active = i === highlightIndex
+    ctx.fillStyle = '#1476db'
+    ctx.beginPath()
+    ctx.arc(x, y, active ? 6 : 3, 0, Math.PI * 2)
+    ctx.fill()
     if (active) {
-      // 外环
-      ctx.fillStyle = 'rgba(20, 118, 219, 0.18)'
-      ctx.beginPath()
-      ctx.arc(x, y, 10, 0, Math.PI * 2)
-      ctx.fill()
-      // 白底
-      ctx.fillStyle = '#fff'
-      ctx.beginPath()
-      ctx.arc(x, y, 5.5, 0, Math.PI * 2)
-      ctx.fill()
-      // 蓝心
-      ctx.fillStyle = '#1476db'
-      ctx.beginPath()
-      ctx.arc(x, y, 4, 0, Math.PI * 2)
-      ctx.fill()
-    } else {
-      ctx.fillStyle = '#fff'
-      ctx.beginPath()
-      ctx.arc(x, y, 3.5, 0, Math.PI * 2)
-      ctx.fill()
-      ctx.fillStyle = '#1476db'
-      ctx.beginPath()
-      ctx.arc(x, y, 2.5, 0, Math.PI * 2)
-      ctx.fill()
+      ctx.strokeStyle = '#fff'
+      ctx.lineWidth = 2
+      ctx.stroke()
     }
   })
 
@@ -1939,19 +1953,23 @@ function drawRowTrendChart(highlightIndex = -1) {
     if (i % labStep !== 0 && i !== n - 1) return
     const x = toX(i)
     const label = d.length >= 10 ? d.slice(5) : d
-    ctx.fillStyle = i === highlightIndex ? '#1476db' : '#94a3b8'
-    ctx.fillText(label, x, margin.t + H + 10)
+    ctx.fillStyle = '#64748b'
+    ctx.fillText(label, x, margin.t + H + 20)
   })
 
   // 轴标题
   ctx.textAlign = 'left'
   ctx.textBaseline = 'alphabetic'
-  ctx.fillStyle = '#94a3b8'
-  ctx.font = '11px system-ui, sans-serif'
+  ctx.fillStyle = '#475569'
+  ctx.font = '12px system-ui, sans-serif'
   ctx.fillText('预测重量（吨）', margin.l, margin.t - 10)
   ctx.textAlign = 'center'
   ctx.fillText('预测日期', margin.l + W / 2, height - 6)
   ctx.textAlign = 'start'
+
+  if (highlightIndex >= 0) {
+    updateTrendTooltipPosition(highlightIndex)
+  }
 }
 
 function trendCanvasPointer(ev: MouseEvent): { x: number; y: number } {
@@ -2200,6 +2218,7 @@ onMounted(async () => {
 }
 
 .summary-chart-wrap {
+  position: relative;
   min-height: 200px;
   margin-top: 8px;
 }
@@ -2207,7 +2226,32 @@ onMounted(async () => {
 .summary-chart-wrap canvas {
   display: block;
   width: 100%;
-  height: auto;
+}
+
+.summary-chart-tooltip {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  padding: 7px 11px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.summary-tooltip-date {
+  color: #94a3b8;
+  font-size: 11px;
+  margin-bottom: 1px;
+}
+
+.summary-tooltip-value {
+  font-weight: 600;
+  font-size: 13px;
+  color: #e2e8f0;
 }
 
 .chart-empty-hint {
@@ -2664,7 +2708,6 @@ onMounted(async () => {
 .modal-chart-wrap canvas {
   display: block;
   width: 100%;
-  height: auto;
   cursor: crosshair;
 }
 
