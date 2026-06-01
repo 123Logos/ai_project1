@@ -2222,7 +2222,10 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
   const smelterFreights = pickWarehouseSmelterFreights(raw)
   const receiptPrices = pickWarehouseReceiptPricesByCategory(raw)
   const hazText = formatHazardLicenseQty(haz)
-  const monthlyText = monthly === null ? '—' : String(monthly)
+  const monthlyText =
+    monthly === null
+      ? '—'
+      : `${Number.isInteger(monthly) ? monthly.toLocaleString('zh-CN') : monthly.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} 吨`
   const receiptBlock = warehouseReceiptPriceBlockHtml(receiptPrices)
   const freightBlock = warehouseSmelterFreightBlockHtml(smelterFreights)
   const tipRow = (label: string, value: string) =>
@@ -2240,10 +2243,10 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
   )}${tipRow(
     '地址',
     addr || '—',
-  )}${dual(metric('联系人', contact || '—'), metric('电话', phone || '—'))}${dual(
-    metric('危废经营许可数量', hazText),
-    metric('月均收货', monthlyText),
-  )}${tipRow('当前库存（汇总）', stockText)}${stockBlock}${receiptBlock}${freightBlock}</div></div>`
+  )}${dual(metric('联系人', contact || '—'), metric('电话', phone || '—'))}${tipRow(
+    '危废经营许可数量',
+    hazText,
+  )}${tipRow('月均收货', monthlyText)}${tipRow('当前库存（汇总）', stockText)}${stockBlock}${receiptBlock}${freightBlock}</div></div>`
 }
 
 function smelterPopupHtml(p: MapPoint): string {
