@@ -342,7 +342,20 @@
       <ForecastBasisPanel :summary="chartSummaryAnalysis" :placeholder="chartBasisPlaceholder" />
       <div class="summary-chart-wrap">
         <p v-if="!chartLoading && chartDates.length === 0" class="chart-empty-hint">{{ chartEmptyHint }}</p>
-        <canvas v-else ref="summaryChartCanvasRef"></canvas>
+        <canvas
+          v-else
+          ref="summaryChartCanvasRef"
+          @mousemove="onSummaryChartMouseMove"
+          @mouseleave="onSummaryChartMouseLeave"
+        ></canvas>
+        <div
+          v-if="summaryHoverIndex >= 0"
+          class="summary-chart-tooltip"
+          :style="summaryTooltipStyle"
+        >
+          <div class="summary-tooltip-date">{{ chartDates[summaryHoverIndex] }}</div>
+          <div class="summary-tooltip-value">{{ formatTrendValue(chartTotalByDate[summaryHoverIndex]) }} 吨</div>
+        </div>
       </div>
     </div>
 
@@ -709,6 +722,20 @@ const chartSummaryAnalysis = ref('')
 const chartDates = ref<string[]>([])
 const chartTotalByDate = ref<number[]>([])
 const summaryChartCanvasRef = ref<HTMLCanvasElement | null>(null)
+const summaryHoverIndex = ref(-1)
+const summaryTooltipStyle = ref<Record<string, string>>({})
+const SUMMARY_HIT_RADIUS = 16
+
+interface SummaryChartLayout {
+  margin: { t: number; r: number; b: number; l: number }
+  W: number
+  H: number
+  maxY: number
+  xStep: number
+  toX: (i: number) => number
+  toY: (v: number) => number
+}
+let summaryChartLayout: SummaryChartLayout | null = null
 
 const detailRows = ref<PrdForecastDetailRow[]>([])
 const detailTabFilters = ref({ startDate: '', endDate: '' })
