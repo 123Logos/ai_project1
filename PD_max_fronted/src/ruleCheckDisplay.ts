@@ -1,4 +1,9 @@
-import type { RuleChecksData, RuleChecksPixelOverlap, RuleChecksTimestamp } from './api/detect'
+import type {
+  RuleChecksData,
+  RuleChecksPixelOverlap,
+  RuleChecksSemantic,
+  RuleChecksTimestamp,
+} from './api/detect'
 
 export type RuleCheckFindingStatus = 'ok' | 'warn' | 'bad'
 
@@ -31,6 +36,7 @@ const ANOMALY_ZH: Record<string, string> = {
   transaction_time_unparsed: '图片里疑似有时间文字，但系统未能可靠识别',
   future_datetime: '图片中出现“未来时间”，不符合常理',
   exif_editing_software: '照片信息中带有修图软件痕迹',
+  account_mask_pattern_inconsistent: '账号脱敏格式不一致',
 }
 
 function joinUnique(parts: string[]): string {
@@ -47,7 +53,16 @@ function joinUnique(parts: string[]): string {
 
 function anomalyTexts(codes: string[] | undefined): string[] {
   if (!codes?.length) return []
-  return codes.map((c) => ANOMALY_ZH[c.trim()] ?? '').filter(Boolean)
+  return codes.map((c) => ANOMALY_ZH[c.trim()] ?? c.trim()).filter(Boolean)
+}
+
+function verdictFromLegacyFields(data: RuleChecksData): string {
+  const po = data.pixel_overlap
+  const ts = data.timestamp
+  const sem = data.semantic
+  if (po?.hard_tamper || ts?.hard_tamper || sem?.hard_tamper) return '篡改'
+  if (po?.alert || (ts?.risk ?? 0) >= 0.42 || sem?.passed === false) return '可疑'
+  return '正常'
 }
 
 export function ruleCheckVerdict(data: RuleChecksData | null | undefined): {
@@ -55,16 +70,19 @@ export function ruleCheckVerdict(data: RuleChecksData | null | undefined): {
   pillClass: string
 } {
   if (!data) return { label: '—', pillClass: '' }
-  const po = data.pixel_overlap
-  const ts = data.timestamp
-  if (po?.hard_tamper || ts?.hard_tamper) return { label: '篡改', pillClass: '篡改' }
-  if (po?.alert || (ts?.risk ?? 0) >= 0.42) return { label: '可疑', pillClass: '可疑' }
-  return { label: '正常', pillClass: '正常' }
+  if (data.available === false) return { label: '暂无', pillClass: '' }
+  const st = data.status?.trim()
+  if (st === '篡改' || st === '可疑' || st === '正常') {
+    return { label: st, pillClass: st }
+  }
+  const label = verdictFromLegacyFields(data)
+  return { label, pillClass: label }
 }
 
 function defaultSummary(data: RuleChecksData, label: string): string {
   const fromApi = data.reason?.trim()
   if (fromApi) return fromApi
+  if (label === '暂无') return '暂无规则核查结果。'
   if (label === '篡改') return '发现较明确的异常信号，建议谨慎采信该图片，并结合原件人工复核。'
   if (label === '可疑') return '发现一些需留意的疑点，建议结合原件再核对。'
   return '未发现明显的拼接痕迹或时间矛盾。'
@@ -73,7 +91,11 @@ function defaultSummary(data: RuleChecksData, label: string): string {
 function pixelFinding(
   po: RuleChecksPixelOverlap | null | undefined,
   skipped: boolean,
+  unavailable: boolean,
 ): RuleCheckUserFinding {
+  if (unavailable) {
+    return { status: 'ok', title: '拼接 / 贴图痕迹', text: '暂无该项检测数据。' }
+  }
   if (skipped) {
     return {
       status: 'ok',
@@ -85,11 +107,14 @@ function pixelFinding(
     return {
       status: 'ok',
       title: '拼接 / 贴图痕迹',
-      text: '未获取到该项结果。',
+      text: '暂无该项检测数据。',
     }
   }
-  const reasonText = joinUnique(po.reasons ?? [])
-  if (po.hard_tamper) {
+  const reasonText = joinUnique([
+    ...(po.reasons ?? []),
+    ...(po.message ? [po.message] : []),
+  ])
+  if (po.hard_tamper || po.passed === false) {
     return {
       status: 'bad',
       title: '拼接 / 贴图痕迹',
@@ -115,47 +140,57 @@ function pixelFinding(
 }
 
 function collectTimeFacts(ts: RuleChecksTimestamp | undefined): RuleCheckTimeFact[] {
-  const tc = ts?.timestamp_check
-  if (!tc) return []
+  if (!ts) return []
+  const tc = ts.timestamp_check
   const facts: RuleCheckTimeFact[] = []
-  if (tc.status_bar_time) {
+  if (tc?.status_bar_time) {
     facts.push({ label: '图片顶部状态栏时间', value: String(tc.status_bar_time) })
   }
-  const tx = tc.transaction_datetime || tc.transaction_time
+  const tx =
+    tc?.transaction_datetime ||
+    tc?.transaction_time ||
+    ts.transaction_time
   if (tx) facts.push({ label: '图片中的交易时间', value: String(tx) })
-  const doc = tc.business_document_datetime || tc.business_document_time
+  const doc = tc?.business_document_datetime || tc?.business_document_time
   if (doc) facts.push({ label: '您填写的单据时间', value: String(doc) })
-  if (tc.exif_datetime_original) {
+  if (tc?.exif_datetime_original) {
     facts.push({ label: '照片原始拍摄时间', value: String(tc.exif_datetime_original) })
   }
-  if (tc.exif_software) {
+  if (tc?.exif_software) {
     facts.push({ label: '照片编辑软件信息', value: String(tc.exif_software) })
   }
   return facts
 }
 
-function timestampFinding(ts: RuleChecksTimestamp | undefined): RuleCheckUserFinding {
+function timestampFinding(
+  ts: RuleChecksTimestamp | undefined,
+  unavailable: boolean,
+): RuleCheckUserFinding {
+  if (unavailable) {
+    return { status: 'ok', title: '时间与单据核对', text: '暂无该项检测数据。' }
+  }
   if (!ts) {
     return {
       status: 'ok',
       title: '时间与单据核对',
-      text: '未获取到该项结果。',
+      text: '暂无该项检测数据。',
     }
   }
   const reasonParts = [
     ...(ts.reasons ?? []),
+    ...(ts.message ? [ts.message] : []),
     ...anomalyTexts(ts.anomalies),
     ...anomalyTexts(ts.timestamp_check?.anomalies),
   ]
   const reasonText = joinUnique(reasonParts)
 
-  if (ts.hard_tamper) {
+  if (ts.hard_tamper || ts.passed === false) {
     return {
       status: 'bad',
       title: '时间与单据核对',
       text:
         reasonText ||
-        '图片中的时间与单据信息存在明显矛盾，或出现修图、未来时间等高风险信号，请重点人工核查。',
+        '图片中的时间与单据信息存在明显矛盾，或出现修图、未来时间等高风险信号，请重点人工复核。',
     }
   }
   if (ts.business_mismatch || (ts.risk ?? 0) >= 0.42 || reasonText) {
@@ -174,16 +209,56 @@ function timestampFinding(ts: RuleChecksTimestamp | undefined): RuleCheckUserFin
   }
 }
 
+function semanticFinding(
+  sem: RuleChecksSemantic | undefined,
+  unavailable: boolean,
+): RuleCheckUserFinding | null {
+  if (unavailable || !sem) return null
+  const reasonText = joinUnique([
+    ...(sem.message ? [sem.message] : []),
+    ...anomalyTexts(sem.anomalies),
+  ])
+  if (sem.hard_tamper || sem.passed === false) {
+    return {
+      status: 'bad',
+      title: '语义与格式核查',
+      text: reasonText || '发现语义或格式类异常（如金额格式、账号脱敏不一致等），建议人工复核。',
+    }
+  }
+  if (reasonText) {
+    return {
+      status: 'warn',
+      title: '语义与格式核查',
+      text: reasonText,
+    }
+  }
+  return {
+    status: 'ok',
+    title: '语义与格式核查',
+    text: '未发现明显的语义或格式异常。',
+  }
+}
+
 export function buildRuleCheckUserView(
   data: RuleChecksData | null | undefined,
 ): RuleCheckUserView | null {
   if (!data) return null
+  if (data.available === false) {
+    return {
+      summary: data.reason?.trim() || '暂无规则核查结果。',
+      findings: [],
+      timeFacts: [],
+    }
+  }
   const { label } = ruleCheckVerdict(data)
-  const pixelSkipped = data.pixel_overlap == null && !!data.timestamp
+  const unavailable = false
+  const pixelSkipped = data.pixel_overlap == null && !!data.timestamp && !data.semantic
   const findings: RuleCheckUserFinding[] = [
-    pixelFinding(data.pixel_overlap, pixelSkipped),
-    timestampFinding(data.timestamp),
+    pixelFinding(data.pixel_overlap, pixelSkipped, unavailable),
+    timestampFinding(data.timestamp, unavailable),
   ]
+  const sem = semanticFinding(data.semantic, unavailable)
+  if (sem) findings.push(sem)
   return {
     summary: defaultSummary(data, label),
     findings,

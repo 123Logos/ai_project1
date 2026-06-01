@@ -889,6 +889,47 @@ export async function getV3Result(
   return normalizeV3PollJson(json)
 }
 
+/** 轮询 v3 任务直至完成或失败（建议间隔 1–2s） */
+export async function pollV3UntilComplete(
+  taskId: string,
+  opts?: {
+    signal?: AbortSignal
+    intervalMs?: number
+    maxAttempts?: number
+    onPoll?: (status: string, attempt: number) => void
+  },
+): Promise<V3PollBody> {
+  const intervalMs = opts?.intervalMs ?? 2000
+  const maxAttempts = opts?.maxAttempts ?? 90
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    if (opts?.signal?.aborted) throw new DOMException('Aborted', 'AbortError')
+    const data = await getV3Result(taskId, { signal: opts?.signal })
+    const st = (data.status || '').toUpperCase()
+    opts?.onPoll?.(st, attempt)
+    if (st === 'FAILED') {
+      throw new Error(data.error_msg?.trim() || '检测失败')
+    }
+    if (st === 'COMPLETED') return data
+    if (st !== 'PENDING' && st !== 'PROCESSING' && st) {
+      throw new Error(`未知任务状态：${data.status}`)
+    }
+    if (attempt < maxAttempts) {
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, intervalMs)
+        opts?.signal?.addEventListener(
+          'abort',
+          () => {
+            clearTimeout(t)
+            reject(new DOMException('Aborted', 'AbortError'))
+          },
+          { once: true },
+        )
+      })
+    }
+  }
+  throw new Error('检测超时，请稍后在历史记录中查看结果')
+}
+
 export async function getVisualizationBlob(taskId: string): Promise<Blob> {
   const enc = encodeURIComponent(taskId)
   const tryPaths = [
@@ -938,6 +979,8 @@ export interface DetectionHistoryOutcome {
   result?: V3ResultItem | null
   multi_results?: V3ResultItem[]
   error_msg?: string | null
+  /** 与 task_id 关联的规则摘要（async_v3 历史） */
+  linked_rule_checks?: unknown
   /** 规则检测完整结果（mode=rule_checks 或嵌套在 AI outcome 内） */
   rule_checks?: Record<string, unknown>
   pixel_overlap?: unknown
@@ -1046,6 +1089,7 @@ function coerceApiRecord(raw: Record<string, unknown>): DetectionHistoryApiRecor
   }
   const linkedRuleChecks =
     parseLinkedRuleChecksField(raw.linked_rule_checks ?? raw.linkedRuleChecks) ??
+    parseLinkedRuleChecksField(outcome?.linked_rule_checks) ??
     (outcome?.rule_checks ? parseLinkedRuleChecksField(outcome.rule_checks) : null)
 
   return {
@@ -1105,6 +1149,8 @@ function extractItemsAndTotal(json: unknown): {
 export async function fetchDetectionHistory(
   page = 1,
   pageSize = 20,
+  /** 逗号分隔，如 `async_v3,rule_checks` */
+  mode?: string,
 ): Promise<DetectionHistoryListResult> {
   const p = Math.max(1, page)
   const ps = Math.min(200, Math.max(1, pageSize))
@@ -1121,6 +1167,8 @@ export async function fetchDetectionHistory(
     page: String(p),
     page_size: String(ps),
   })
+  const modeFilter = typeof mode === 'string' ? mode.trim() : ''
+  if (modeFilter) q.set('mode', modeFilter)
   const res = await fetch(`${aiDetectionUrl('/api/v1/history')}?${q}`)
   if (!res.ok) {
     const t = await res.text()
@@ -1134,6 +1182,8 @@ export async function fetchDetectionHistory(
 /** POST /ai-detection/api/v1/rule-checks — 像素重叠（可选 bbox）+ 时间戳规则聚合 */
 export type RuleChecksPixelOverlap = {
   pixel_overlap_score?: number
+  passed?: boolean
+  message?: string
   overlap_metrics?: {
     structural_score?: number
     blend_score?: number
@@ -1146,6 +1196,14 @@ export type RuleChecksPixelOverlap = {
   alert?: boolean
   hard_tamper?: boolean
   reasons?: string[]
+  [key: string]: unknown
+}
+
+export type RuleChecksSemantic = {
+  passed?: boolean
+  message?: string
+  anomalies?: string[]
+  hard_tamper?: boolean
   [key: string]: unknown
 }
 
@@ -1165,6 +1223,9 @@ export type RuleChecksTimestampDetail = {
 }
 
 export type RuleChecksTimestamp = {
+  passed?: boolean
+  message?: string
+  transaction_time?: string | null
   timestamp_check?: RuleChecksTimestampDetail
   risk?: number
   reasons?: string[]
@@ -1175,10 +1236,139 @@ export type RuleChecksTimestamp = {
 }
 
 export type RuleChecksData = {
+  /** linked_rule_checks：false 表示无规则数据 */
+  available?: boolean
+  /** 规则侧综合状态：正常 / 可疑 / 篡改 */
+  status?: string
   pixel_overlap?: RuleChecksPixelOverlap | null
   timestamp?: RuleChecksTimestamp
+  semantic?: RuleChecksSemantic
   hard_tamper_flags?: Record<string, boolean>
   reason?: string
+}
+
+function mergeReasons(message: unknown, reasons: unknown): string[] | undefined {
+  const list: string[] = []
+  if (typeof message === 'string' && message.trim()) list.push(message.trim())
+  if (Array.isArray(reasons)) {
+    for (const r of reasons) {
+      const t = String(r ?? '').trim()
+      if (t) list.push(t)
+    }
+  }
+  return list.length ? list : undefined
+}
+
+function normalizePixelOverlapBlock(
+  raw: unknown,
+  flags?: Record<string, boolean>,
+): RuleChecksPixelOverlap | null {
+  if (!isRecord(raw)) return null
+  const passed = raw.passed
+  const alert =
+    passed === false ? true : passed === true ? false : raw.alert === true
+  const hard_tamper =
+    raw.hard_tamper === true ||
+    flags?.pixel_overlap === true ||
+    (passed === false && alert)
+  return {
+    ...raw,
+    pixel_overlap_score:
+      raw.pixel_overlap_score != null ? Number(raw.pixel_overlap_score) : undefined,
+    passed: typeof passed === 'boolean' ? passed : undefined,
+    message: typeof raw.message === 'string' ? raw.message : undefined,
+    alert,
+    hard_tamper,
+    reasons: mergeReasons(raw.message, raw.reasons),
+  }
+}
+
+function normalizeTimestampBlock(
+  raw: unknown,
+  flags?: Record<string, boolean>,
+): RuleChecksTimestamp | undefined {
+  if (!isRecord(raw)) return undefined
+  const passed = raw.passed
+  const detail: RuleChecksTimestampDetail = isRecord(raw.timestamp_check)
+    ? { ...(raw.timestamp_check as RuleChecksTimestampDetail) }
+    : { ...raw }
+  if (typeof raw.transaction_time === 'string' && raw.transaction_time.trim()) {
+    detail.transaction_time = detail.transaction_time ?? raw.transaction_time
+    detail.transaction_datetime =
+      detail.transaction_datetime ?? raw.transaction_time
+  }
+  const hard_tamper =
+    raw.hard_tamper === true ||
+    flags?.timestamp === true ||
+    passed === false
+  const business_mismatch =
+    raw.business_mismatch === true ||
+    detail.business_mismatch === true ||
+    (Array.isArray(detail.anomalies) && detail.anomalies.length > 0)
+  return {
+    passed: typeof passed === 'boolean' ? passed : undefined,
+    message: typeof raw.message === 'string' ? raw.message : undefined,
+    transaction_time:
+      typeof raw.transaction_time === 'string' ? raw.transaction_time : undefined,
+    timestamp_check: detail,
+    hard_tamper,
+    business_mismatch,
+    reasons: mergeReasons(raw.message, raw.reasons),
+    anomalies: Array.isArray(raw.anomalies)
+      ? raw.anomalies.map(String)
+      : Array.isArray(detail.anomalies)
+        ? detail.anomalies.map(String)
+        : undefined,
+    risk: typeof raw.risk === 'number' ? raw.risk : undefined,
+  }
+}
+
+function normalizeSemanticBlock(
+  raw: unknown,
+  flags?: Record<string, boolean>,
+): RuleChecksSemantic | undefined {
+  if (!isRecord(raw)) return undefined
+  const passed = raw.passed
+  const hard_tamper = raw.hard_tamper === true || flags?.semantic === true || passed === false
+  return {
+    passed: typeof passed === 'boolean' ? passed : undefined,
+    message: typeof raw.message === 'string' ? raw.message : undefined,
+    anomalies: Array.isArray(raw.anomalies) ? raw.anomalies.map(String) : undefined,
+    hard_tamper,
+  }
+}
+
+/** 解析 linked_rule_checks / 规则 outcome 完整结构 */
+export function normalizeLinkedRuleChecksObject(raw: Record<string, unknown>): RuleChecksData | null {
+  if (raw.available === false) {
+    return {
+      available: false,
+      status: typeof raw.status === 'string' ? raw.status : undefined,
+      reason: typeof raw.reason === 'string' ? raw.reason : undefined,
+    }
+  }
+
+  const flags = isRecord(raw.hard_tamper_flags)
+    ? (raw.hard_tamper_flags as Record<string, boolean>)
+    : undefined
+  const pixel = normalizePixelOverlapBlock(raw.pixel_overlap, flags)
+  const timestamp = normalizeTimestampBlock(raw.timestamp, flags)
+  const semantic = normalizeSemanticBlock(raw.semantic, flags)
+  const reason = typeof raw.reason === 'string' ? raw.reason : undefined
+
+  if (!pixel && !timestamp && !semantic && !reason && raw.available !== true) {
+    return null
+  }
+
+  return {
+    available: raw.available === true ? true : undefined,
+    status: typeof raw.status === 'string' ? raw.status : undefined,
+    pixel_overlap: pixel,
+    timestamp,
+    semantic,
+    hard_tamper_flags: flags,
+    reason,
+  }
 }
 
 function ruleCheckDataLayer(json: unknown): Record<string, unknown> {
@@ -1197,9 +1387,12 @@ function ruleCheckDataLayer(json: unknown): Record<string, unknown> {
 
 function normalizeRuleChecksJson(json: unknown): RuleChecksData {
   const o = ruleCheckDataLayer(json)
+  const linked = normalizeLinkedRuleChecksObject(o)
+  if (linked) return linked
   return {
-    pixel_overlap: (o.pixel_overlap as RuleChecksPixelOverlap | null | undefined) ?? null,
-    timestamp: isRecord(o.timestamp) ? (o.timestamp as RuleChecksTimestamp) : undefined,
+    pixel_overlap: normalizePixelOverlapBlock(o.pixel_overlap),
+    timestamp: normalizeTimestampBlock(o.timestamp),
+    semantic: normalizeSemanticBlock(o.semantic),
     hard_tamper_flags: isRecord(o.hard_tamper_flags)
       ? (o.hard_tamper_flags as Record<string, boolean>)
       : undefined,
@@ -1217,22 +1410,19 @@ export function parseLinkedRuleChecksField(raw: unknown): RuleChecksData | null 
     }
     return null
   }
-  try {
-    return normalizeRuleChecksJson(isRecord(raw) ? { data: raw } : raw)
-  } catch {
-    if (!isRecord(raw)) return null
-    if (raw.pixel_overlap == null && raw.timestamp == null && typeof raw.reason !== 'string') {
-      return null
-    }
-    return {
-      pixel_overlap: (raw.pixel_overlap as RuleChecksPixelOverlap | null | undefined) ?? null,
-      timestamp: isRecord(raw.timestamp) ? (raw.timestamp as RuleChecksTimestamp) : undefined,
-      hard_tamper_flags: isRecord(raw.hard_tamper_flags)
-        ? (raw.hard_tamper_flags as Record<string, boolean>)
-        : undefined,
-      reason: typeof raw.reason === 'string' ? raw.reason : undefined,
-    }
+  if (!isRecord(raw)) return null
+  if (raw.available === false) {
+    return normalizeLinkedRuleChecksObject(raw)
   }
+  try {
+    const fromLayer = normalizeRuleChecksJson(isRecord(raw) ? { data: raw } : raw)
+    if (fromLayer.available === false || fromLayer.pixel_overlap || fromLayer.timestamp || fromLayer.semantic || fromLayer.reason) {
+      return fromLayer
+    }
+  } catch {
+    /* fall through */
+  }
+  return normalizeLinkedRuleChecksObject(raw)
 }
 
 async function postRuleCheckMultipart(

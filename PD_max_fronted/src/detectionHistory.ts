@@ -67,6 +67,22 @@ export function isPrimaryHistoryMode(mode: string | undefined): boolean {
   return !isRuleHistoryMode(mode)
 }
 
+function isAsyncV3HistoryMode(mode: string | undefined): boolean {
+  return String(mode ?? '').trim().toLowerCase() === 'async_v3'
+}
+
+/** 已有同 task_id 的 async_v3 时，不单独展示附属 rule_checks 行 */
+export function shouldShowHistoryItem(
+  entry: DetectionHistoryEntry,
+  all: DetectionHistoryEntry[],
+): boolean {
+  if (!isRuleHistoryMode(entry.mode)) return true
+  if (!isValidTaskId(entry.taskId)) return true
+  return !all.some(
+    (x) => isAsyncV3HistoryMode(x.mode) && isValidTaskId(x.taskId) && x.taskId === entry.taskId,
+  )
+}
+
 function parseHistoryTime(iso: string): number {
   const t = Date.parse(String(iso ?? '').replace(' ', 'T'))
   return Number.isFinite(t) ? t : 0
@@ -327,5 +343,5 @@ export function mergeHistoryEntriesForDisplay(
     }
     if (isPrimaryHistoryMode(e.mode)) out.push(e)
   }
-  return out
+  return out.filter((e) => shouldShowHistoryItem(e, out))
 }

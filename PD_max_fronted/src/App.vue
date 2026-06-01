@@ -5,6 +5,7 @@ import {
   fetchDetectionHistory,
   getV3Result,
   getVisualizationBlob,
+  pollV3UntilComplete,
   submitRuleChecks,
   submitV1ImageDetectSync,
   submitV3Detect,
@@ -234,14 +235,17 @@ function detectSubmitOpts(signal: AbortSignal, withRuleChecks = false) {
 }
 
 function applyLinkedRuleChecksFromPoll(linked: RuleChecksData | null | undefined) {
-  if (linked) {
-    ruleCheckPayload.value = linked
-    ruleCheckError.value = null
-  } else {
-    ruleCheckPayload.value = null
-    ruleCheckError.value = null
-  }
+  ruleCheckPayload.value = linked ?? null
+  ruleCheckError.value = null
   ruleCheckLoading.value = false
+}
+
+function v3PayloadFromPoll(data: Awaited<ReturnType<typeof getV3Result>>): V3ViewPayload {
+  return {
+    result: data.result ?? null,
+    multi: data.multi_results,
+    error_msg: data.error_msg ?? null,
+  }
 }
 
 /** 与主鉴伪并行：规则检测失败不阻断 AI 结果展示 */
@@ -383,35 +387,31 @@ async function runV3AsyncOne(
   const submit = await submitV3Detect(file, bbox, detectSubmitOpts(signal, withRuleChecks))
   const taskId = submit.task_id?.trim()
   if (!taskId) throw new Error(`${progressPrefix}：未返回任务 ID`)
-  await waitWithCountdown(
-    90,
-    (remain) => {
-      const mm = Math.floor(remain / 60)
-      const ss = remain % 60
-      pollStatus.value = withRuleChecks
-        ? `${progressPrefix}：检测与辅助核查预计 ${mm}:${String(ss).padStart(2, '0')} 后完成`
-        : `${progressPrefix}：预计等待 ${mm}:${String(ss).padStart(2, '0')} 后查询结果`
-    },
-    signal,
-  )
   pollStatus.value = withRuleChecks
-    ? `${progressPrefix}：查询检测与辅助核查结果…`
-    : `${progressPrefix}：查询结果中…`
-  const data = await getV3Result(taskId, { signal })
+    ? `${progressPrefix}：检测与辅助核查处理中…`
+    : `${progressPrefix}：检测处理中…`
+  const data = await pollV3UntilComplete(taskId, {
+    signal,
+    intervalMs: 2000,
+    onPoll: (st, attempt) => {
+      const label =
+        st === 'PENDING' || st === 'PROCESSING'
+          ? '处理中'
+          : st === 'COMPLETED'
+            ? '已完成'
+            : st
+      pollStatus.value = withRuleChecks
+        ? `${progressPrefix}：检测与辅助核查${label}（第 ${attempt} 次查询）`
+        : `${progressPrefix}：检测${label}（第 ${attempt} 次查询）`
+    },
+  })
   if (data.error_msg?.trim() && !data.result && !(data.multi_results?.length)) {
     throw new Error(data.error_msg)
-  }
-  if ((data.status || '').toUpperCase() !== 'COMPLETED') {
-    throw new Error(`任务未完成（状态 ${data.status || 'unknown'}）`)
   }
   if (!data.result && !(data.multi_results?.length)) {
     throw new Error('未返回检测结果')
   }
-  const payload: V3ViewPayload = {
-    result: data.result ?? null,
-    multi: data.multi_results,
-    error_msg: data.error_msg ?? null,
-  }
+  const payload = v3PayloadFromPoll(data)
   if (withRuleChecks) {
     applyLinkedRuleChecksFromPoll(data.linked_rule_checks)
   }
@@ -796,7 +796,7 @@ async function goHistoryPage(page: number) {
   historyLoading.value = true
   historyError.value = null
   try {
-    const r = await fetchDetectionHistory(page, HISTORY_PAGE_SIZE)
+    const r = await fetchDetectionHistory(page, HISTORY_PAGE_SIZE, 'async_v3,rule_checks,sync_v1')
     historyEntries.value = mergeHistoryEntriesForDisplay(r.items)
     historyTotal.value = r.total
     historyPage.value = page
@@ -852,7 +852,29 @@ async function applyHistoryEntry(entry: DetectionHistoryEntry) {
   }
   v3TaskId.value = entry.taskId || null
   if (historyEntryHasAi(entry)) {
-    v3Payload.value = clonePayloadForView(entry.payload)
+    const taskId = entry.taskId?.trim()
+    if (taskId && !isDetectionMockMode()) {
+      ruleCheckLoading.value = !!entry.ruleCheck || String(entry.mode ?? '').includes('v3')
+      try {
+        const data = await getV3Result(taskId)
+        v3Payload.value = v3PayloadFromPoll(data)
+        if (data.linked_rule_checks != null) {
+          applyLinkedRuleChecksFromPoll(data.linked_rule_checks)
+        } else {
+          ruleCheckPayload.value = entry.ruleCheck ?? null
+          ruleCheckLoading.value = false
+        }
+      } catch (e) {
+        v3Payload.value = clonePayloadForView(entry.payload)
+        ruleCheckPayload.value = entry.ruleCheck ?? null
+        ruleCheckError.value =
+          e instanceof Error ? e.message : '刷新检测结果失败，已显示历史缓存'
+        ruleCheckLoading.value = false
+      }
+    } else {
+      v3Payload.value = clonePayloadForView(entry.payload)
+      ruleCheckPayload.value = entry.ruleCheck ?? null
+    }
     if (entry.taskId) void loadViz(entry.taskId)
   } else {
     v3Payload.value = null
