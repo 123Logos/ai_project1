@@ -739,6 +739,26 @@
             <p><strong>品类：</strong>{{ forecastModalMeta.product_variety }}</p>
             <p v-if="forecastModalMeta.smelter"><strong>冶炼厂：</strong>{{ forecastModalMeta.smelter }}</p>
           </div>
+          <div v-if="forecastDetailRows.length" class="emap-fc-analysis">
+            <div class="emap-fc-analysis-head">
+              <h4 class="emap-fc-analysis-title">预测依据</h4>
+              <span class="emap-fc-analysis-hint text-muted">点击行查看完整说明</span>
+            </div>
+            <div class="emap-fc-analysis-scroll">
+              <button
+                v-for="row in forecastDetailRows"
+                :key="row.targetDate"
+                type="button"
+                class="emap-fc-analysis-row"
+                :title="row.analysis || ''"
+                @click="openForecastAnalysisDrawer(row)"
+              >
+                <span class="emap-fc-analysis-date">{{ formatForecastDetailDate(row.targetDate) }}</span>
+                <span class="emap-fc-analysis-weight">{{ row.predictedWeight.toFixed(2) }} 吨</span>
+                <span class="emap-fc-analysis-snippet">{{ truncateForecastAnalysis(row.analysis) }}</span>
+              </button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="emap-map-corner">
@@ -888,6 +908,13 @@
         </div>
       </div>
     </div>
+    <PredictionAnalysisDrawer
+      :visible="forecastAnalysisDrawerVisible"
+      :title="forecastAnalysisDrawerTitle"
+      :analysis="forecastAnalysisDrawerText"
+      :meta-lines="forecastAnalysisDrawerMeta"
+      @close="closeForecastAnalysisDrawer"
+    />
   </div>
 </template>
 
@@ -900,6 +927,8 @@ import iconUrl from 'leaflet/dist/images/marker-icon.png'
 import shadowUrl from 'leaflet/dist/images/marker-shadow.png'
 import axios from 'axios'
 import { ApiPaths } from '../api/paths'
+import PredictionAnalysisDrawer from '../components/PredictionAnalysisDrawer.vue'
+import { pickAnalysisText } from '@/utils/apiFieldPick'
 import { warehouseDisplayName } from '@/utils/warehouseDisplayName'
 import {
   fetchTlCalculateDistance,
@@ -971,6 +1000,15 @@ type ForecastChartMeta = {
   regional_manager: string
   product_variety: string
   smelter?: string
+}
+
+type ForecastDetailRow = {
+  targetDate: string
+  predictedWeight: number
+  analysis: string | null
+  regionalManager: string
+  productVariety: string
+  smelter: string | null
 }
 
 const GAODE_TILE =
@@ -1193,6 +1231,11 @@ const forecastError = ref('')
 const forecastModalMeta = ref<ForecastChartMeta | null>(null)
 const forecastModalDates = ref<string[]>([])
 const forecastModalValues = ref<number[]>([])
+const forecastDetailRows = ref<ForecastDetailRow[]>([])
+const forecastAnalysisDrawerVisible = ref(false)
+const forecastAnalysisDrawerTitle = ref('预测依据详情')
+const forecastAnalysisDrawerText = ref<string | null>(null)
+const forecastAnalysisDrawerMeta = ref<string[]>([])
 const comparisonModalVisible = ref(false)
 const comparisonModalTitle = ref('比价预测结果')
 const comparisonSectionCollapsed = ref(false)
@@ -4967,6 +5010,56 @@ function resetForecastData() {
   forecastModalMeta.value = null
   forecastModalDates.value = []
   forecastModalValues.value = []
+  forecastDetailRows.value = []
+}
+
+function formatForecastDetailDate(iso: string): string {
+  const s = String(iso ?? '').trim()
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[2]}-${m[3]}`
+  return s
+}
+
+function truncateForecastAnalysis(analysis: string | null | undefined, maxLen = 72): string {
+  const t = (analysis ?? '').trim()
+  if (!t) return '—'
+  if (t.length <= maxLen) return t
+  return `${t.slice(0, maxLen)}…`
+}
+
+function openForecastAnalysisDrawer(row: ForecastDetailRow) {
+  forecastAnalysisDrawerTitle.value = `预测依据 · ${row.targetDate}`
+  forecastAnalysisDrawerText.value = row.analysis
+  forecastAnalysisDrawerMeta.value = [
+    `预测日期：${row.targetDate}`,
+    `预测重量：${row.predictedWeight.toFixed(2)} 吨`,
+    row.regionalManager ? `大区经理：${row.regionalManager}` : '',
+    row.productVariety ? `品类：${row.productVariety}` : '',
+    row.smelter ? `冶炼厂：${row.smelter}` : '',
+  ].filter(Boolean)
+  forecastAnalysisDrawerVisible.value = true
+}
+
+function closeForecastAnalysisDrawer() {
+  forecastAnalysisDrawerVisible.value = false
+}
+
+function parseForecastDetailRow(row: Record<string, unknown>): ForecastDetailRow | null {
+  const targetDate = pickStr(row, ['target_date', '预测日期', 'date'])
+  if (!targetDate) return null
+  return {
+    targetDate,
+    predictedWeight: pickNumber(row, ['predicted_weight', '预测重量', 'weight']) ?? 0,
+    analysis: pickAnalysisText(row),
+    regionalManager: pickStr(row, ['regional_manager', '大区经理', '经理']),
+    productVariety: pickStr(row, ['product_variety', '品类', '品种', '产品品种']),
+    smelter: pickStrOrNull(row, ['smelter', '冶炼厂', 'smelter_name', '冶炼厂名']),
+  }
+}
+
+function pickStrOrNull(row: Record<string, unknown>, keys: string[]): string | null {
+  const s = pickStr(row, keys)
+  return s || null
 }
 
 const comparisonSummary = computed(() => {
@@ -5214,6 +5307,10 @@ async function runForecastForWarehouse(warehouse: MapPoint) {
     }
     forecastModalDates.value = dates
     forecastModalValues.value = vals
+    forecastDetailRows.value = working
+      .map(parseForecastDetailRow)
+      .filter((r): r is ForecastDetailRow => r != null)
+      .sort((a, b) => a.targetDate.localeCompare(b.targetDate, 'zh-CN'))
     if (comparisonModalVisible.value && !forecastSectionCollapsed.value) {
       nextTick(() => drawForecastTrendChart())
     }
@@ -7024,6 +7121,79 @@ onBeforeUnmount(() => {
 .emap-fc-chart-meta strong {
   color: #7dd3fc;
   margin-right: 6px;
+}
+
+.emap-fc-analysis {
+  background: rgba(8, 26, 52, 0.75);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.emap-fc-analysis-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.emap-fc-analysis-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 700;
+  color: #f8fafc;
+}
+
+.emap-fc-analysis-hint {
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.emap-fc-analysis-scroll {
+  max-height: 180px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.emap-fc-analysis-row {
+  display: grid;
+  grid-template-columns: 52px 72px minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid rgba(34, 211, 238, 0.12);
+  border-radius: 6px;
+  background: rgba(6, 18, 40, 0.65);
+  color: #cbd5e1;
+  font-size: 11px;
+  line-height: 1.45;
+  text-align: left;
+  cursor: pointer;
+}
+
+.emap-fc-analysis-row:hover {
+  border-color: rgba(34, 211, 238, 0.35);
+  background: rgba(10, 28, 56, 0.85);
+}
+
+.emap-fc-analysis-date {
+  color: #22d3ee;
+  font-weight: 600;
+}
+
+.emap-fc-analysis-weight {
+  color: #94a3b8;
+  white-space: nowrap;
+}
+
+.emap-fc-analysis-snippet {
+  color: #e2e8f0;
+  word-break: break-word;
 }
 
 .emap-fc-chart-actions {

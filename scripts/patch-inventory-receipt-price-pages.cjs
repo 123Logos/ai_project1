@@ -68,7 +68,7 @@ const invTemplate =
   '<span class="record-count" data-v-4b5a159b>共 <span id="inv-count" data-v-4b5a159b>0</span> 条记录</span></div>' +
   '<div class="card-body" data-v-4b5a159b><div class="table-responsive" data-v-4b5a159b>' +
   '<table class="data-table" data-v-4b5a159b><thead data-v-4b5a159b><tr data-v-4b5a159b>' +
-  '<th data-v-4b5a159b>库房名称</th><th data-v-4b5a159b>库存</th><th data-v-4b5a159b>库存日期</th>' +
+  '<th data-v-4b5a159b>库房名称</th><th data-v-4b5a159b>回收品种</th><th data-v-4b5a159b>库存</th><th data-v-4b5a159b>库存日期</th><th data-v-4b5a159b>操作</th>' +
   '</tr></thead><tbody id="inv-table-body" data-v-4b5a159b></tbody></table></div>' +
   '<div class="table-footer freight-table-footer" data-v-4b5a159b><span id="inv-page-info" data-v-4b5a159b>—</span>' +
   '<div class="freight-pagination" data-v-4b5a159b><button type="button" class="btn btn-outline btn-sm" id="inv-prev-btn" data-v-4b5a159b>上一页</button>' +
@@ -98,7 +98,7 @@ const rcpTemplate =
   '<span class="record-count" data-v-4b5a159b>共 <span id="rcp-count" data-v-4b5a159b>0</span> 条记录</span></div>' +
   '<div class="card-body" data-v-4b5a159b><div class="table-responsive" data-v-4b5a159b>' +
   '<table class="data-table" data-v-4b5a159b><thead data-v-4b5a159b><tr data-v-4b5a159b>' +
-  '<th data-v-4b5a159b>库房名称</th><th data-v-4b5a159b>回收品种</th><th data-v-4b5a159b>价格</th><th data-v-4b5a159b>操作</th>' +
+  '<th data-v-4b5a159b>库房名称</th><th data-v-4b5a159b>回收品种</th><th data-v-4b5a159b>价格</th><th data-v-4b5a159b>价格日期</th><th data-v-4b5a159b>操作</th>' +
   '</tr></thead><tbody id="rcp-table-body" data-v-4b5a159b></tbody></table></div>' +
   '<div class="table-footer freight-table-footer" data-v-4b5a159b><span id="rcp-page-info" data-v-4b5a159b>—</span>' +
   '<div class="freight-pagination" data-v-4b5a159b><button type="button" class="btn btn-outline btn-sm" id="rcp-prev-btn" data-v-4b5a159b>上一页</button>' +
@@ -207,11 +207,23 @@ function rcpEditFormHtml(){return\`
 async function invFillWarehouseSelect(e){var t=document.getElementById(e);if(!t)return;var n=await Api.request(\`GET\`,\`/tl/get_warehouses\`),r=Api.unwrapList(n).filter(function(e){return!b(T(e))});t.innerHTML=\`<option value="">请选择库房</option>\`+r.map(function(e){var n=w(e),r=T(e);return n?\`<option value="\`+String(n)+\`">\`+M(r||\`库房 #\`+n)+\`</option>\`:\`\`}).join(\`\`)}
 async function invFillCategorySelect(e){var t=document.getElementById(e);if(!t)return;var n=await Api.request(\`GET\`,\`/tl/get_category_mapping\`),r=V(Api.unwrapData(n)||{}).list,i=ue(se(Array.isArray(r)?r:[]));t.innerHTML=\`<option value="">请选择品种</option>\`+i.map(function(e){var t=e.id,n=String(e.name||\`\`).trim();return t!=null&&!isNaN(Number(t))&&n?\`<option value="\`+String(t)+\`">\`+M(n)+\`</option>\`:\`\`}).join(\`\`)}
 function invUpdatePager(){var e=document.getElementById(\`inv-page-info\`),t=document.getElementById(\`inv-prev-btn\`),n=document.getElementById(\`inv-next-btn\`),r=Math.max(1,Math.ceil((invPg.total||0)/invPg.pageSize));e&&(e.textContent=\`第 \`+invPg.page+\` / \`+r+\` 页（共 \`+invPg.total+\` 条）\`),t&&(t.disabled=invPg.page<=1),n&&(n.disabled=invPg.page>=r)}
-async function loadInventoryList(){var e=document.getElementById(\`inv-table-body\`),t=document.getElementById(\`inv-count\`),n=document.getElementById(\`inv-page-size\`);if(n&&n.value&&(invPg.pageSize=parseInt(n.value,10)||invPg.pageSize),!e)return;E(e,3,\`正在加载库存数据...\`);try{var r=document.getElementById(\`inv-keyword\`),i=new URLSearchParams;i.set(\`page\`,String(invPg.page)),i.set(\`page_size\`,String(invPg.pageSize)),r&&r.value&&r.value.trim()&&i.set(\`keyword\`,r.value.trim());var a=z(await Api.request(\`GET\`,\`/tl/warehouse_inventories?\`+i.toString())),o=a.list||[];invPg.total=a.total||0,e.innerHTML=\`\`,o.length||D(e,3,\`暂无库存数据\`),o.forEach(function(t){var n=_(t,[\`库房名称\`,\`warehouse_name\`],\`-\`),r=Number(_(t,[\`当前库存\`,\`stock\`],null)),i=_(t,[\`库存日期\`,\`inventory_date\`],\`\`)||\`-\`,a=document.createElement(\`tr\`);a.innerHTML=\`<td>\`+M(n)+\`</td><td>\`+(isNaN(r)?\`-\`:r.toLocaleString())+\`</td><td>\`+M(i)+\`</td>\`,e.appendChild(a)}),t&&(t.textContent=String(invPg.total)),invUpdatePager()}catch(n){alert(\`加载库存失败: \`+(n.message||String(n))),t&&(t.textContent=\`0\`),e.innerHTML=\`\`,D(e,3,n.message||\`加载失败\`),invUpdatePager()}}
+async function loadInventoryList(){var e=document.getElementById(\`inv-table-body\`),t=document.getElementById(\`inv-count\`),n=document.getElementById(\`inv-page-size\`);if(n&&n.value&&(invPg.pageSize=parseInt(n.value,10)||invPg.pageSize),!e)return;E(e,4,\`正在加载库存数据...\`);try{var r=document.getElementById(\`inv-keyword\`),i=new URLSearchParams;i.set(\`page\`,String(invPg.page)),i.set(\`page_size\`,String(invPg.pageSize)),r&&r.value&&r.value.trim()&&i.set(\`keyword\`,r.value.trim());var a=z(await Api.request(\`GET\`,\`/tl/warehouse_inventories?\`+i.toString())),o=a.list||[];invPg.total=a.total||0,e.innerHTML=\`\`,o.length||D(e,4,\`暂无库存数据\`),o.forEach(function(t){var n=v(t,[\`id\`,\`record_id\`]),r=_(t,[\`库房名称\`,\`warehouse_name\`],\`-\`),i=Number(_(t,[\`当前库存\`,\`stock\`],null)),a=_(t,[\`库存日期\`,\`inventory_date\`],\`\`)||\`-\`,s=document.createElement(\`tr\`);s.innerHTML=\`<td>\`+M(r)+\`</td><td>\`+(isNaN(i)?\`-\`:i.toLocaleString())+\`</td><td>\`+M(a)+\`</td><td><button class="btn btn-sm btn-outline edit-inv-btn" data-id="\`+String(n)+\`" data-stock="\`+String(isNaN(i)?0:i)+\`" data-date="\`+M(a)+\`">修改</button></td>\`,e.appendChild(s)}),t&&(t.textContent=String(invPg.total)),invUpdatePager()}catch(n){alert(\`加载库存失败: \`+(n.message||String(n))),t&&(t.textContent=\`0\`),e.innerHTML=\`\`,D(e,4,n.message||\`加载失败\`),invUpdatePager()}}
 async function invManualSubmit(){var e=parseInt(document.getElementById(\`inv-warehouse\`).value,10),t=parseFloat(document.getElementById(\`inv-stock\`).value),n=document.getElementById(\`inv-date\`),r=n&&n.value?n.value.trim():\`\`;if(!e||isNaN(e))throw Error(\`请选择库房\`);if(isNaN(t)||t<0)throw Error(\`请填写有效库存\`);var i={库房id:e,当前库存:t};r&&(i.库存日期=r),await Api.request(\`POST\`,\`/tl/warehouse_inventories\`,i),invPg.page=1,await loadInventoryList()}
+function invEditFormHtml(){return\`
+        <form id="inv-edit-form">
+            <div class="form-group">
+                <label for="inv-edit-stock">当前库存（吨） <span class="required">*</span></label>
+                <input type="number" step="0.0001" min="0" id="inv-edit-stock" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label for="inv-edit-date">库存日期</label>
+                <input type="date" id="inv-edit-date" class="form-control">
+            </div>
+        </form>\`}
+function invEditStock(e,t,n){U(\`修改库存\`,invEditFormHtml(),{onOpen:function(){var r=document.getElementById(\`inv-edit-stock\`);r&&!isNaN(t)&&(r.value=String(t));var i=document.getElementById(\`inv-edit-date\`);i&&n&&n!==\`-\`&&(i.value=n)},onConfirm:async function(){var t=parseFloat(document.getElementById(\`inv-edit-stock\`).value),n=document.getElementById(\`inv-edit-date\`),r=n&&n.value?n.value.trim():\`\`;if(isNaN(t)||t<0)throw Error(\`请填写有效库存\`);var i={库房id:e,当前库存:t};r&&(i.库存日期=r),await Api.request(\`POST\`,\`/tl/warehouse_inventories\`,i),await loadInventoryList()}})}
 async function invDownloadTemplate(){try{var e=await Api.getBlob(\`/tl/download_warehouse_inventory_template_excel\`),t=window.URL.createObjectURL(e),n=document.createElement(\`a\`);n.href=t,n.download=\`库房库存导入模板.xlsx\`,document.body.appendChild(n),n.click(),n.remove(),window.URL.revokeObjectURL(t)}catch(e){alert(\`下载模板失败: \`+(e.message||String(e)))}}
 async function invImportExcel(e){var t=e&&e[0];if(!t)return;if(!/\\.(xlsx|xls)$/i.test(String(t.name||\`\`))){alert(\`请上传 Excel 文件（.xlsx/.xls）\`);return}var n=document.getElementById(\`import-inv-btn\`),r=n?n.innerHTML:\`\`;n&&(n.disabled=!0,n.innerHTML=\`<i class="fas fa-spinner fa-spin"></i> 导入中...\`);try{var i=new FormData;i.append(\`file\`,t);var o=await Api.request(\`POST\`,\`/tl/import_warehouse_inventory_excel\`,i),s=_(o,[\`msg\`,\`message\`],\`\`)||_(Api.unwrapData(o),[\`msg\`,\`message\`],\`\`);alert(s||\`导入成功\`),invPg.page=1,await loadInventoryList()}catch(e){alert(\`导入失败: \`+(e.message||String(e)))}finally{n&&(n.disabled=!1,n.innerHTML=r||\`<i class="fas fa-file-import"></i> 导入库存表格\`)}}
-function initInventoryPage(){console.log(\`初始化当前库存管理页面\`);var e=document.getElementById(\`add-inv-btn\`);e&&e.addEventListener(\`click\`,function(){U(\`手工录入库存\`,invFormHtml(),{onOpen:async function(){await invFillWarehouseSelect(\`inv-warehouse\`);var e=document.getElementById(\`inv-date\`);e&&!e.value&&(e.value=kt())},onConfirm:function(){return invManualSubmit()}})});var t=document.getElementById(\`download-inv-template-btn\`);t&&t.addEventListener(\`click\`,function(){invDownloadTemplate()});var n=document.getElementById(\`import-inv-btn\`),r=document.getElementById(\`inv-import-input\`);n&&r&&(n.addEventListener(\`click\`,function(){r.click()}),r.addEventListener(\`change\`,function(e){invImportExcel(e&&e.target?e.target.files:null),r.value=\`\`}));var i=document.getElementById(\`inv-search-btn\`);i&&i.addEventListener(\`click\`,function(){invPg.page=1,loadInventoryList()});var a=document.getElementById(\`inv-reset-btn\`);a&&a.addEventListener(\`click\`,function(){var e=document.getElementById(\`inv-keyword\`);e&&(e.value=\`\`),invPg.page=1,loadInventoryList()});var o=document.getElementById(\`inv-prev-btn\`);o&&o.addEventListener(\`click\`,function(){invPg.page>1&&(--invPg.page,loadInventoryList())});var s=document.getElementById(\`inv-next-btn\`);s&&s.addEventListener(\`click\`,function(){invPg.page+=1,loadInventoryList()});var c=document.getElementById(\`inv-page-size\`);c&&c.addEventListener(\`change\`,function(){invPg.pageSize=parseInt(this.value,10)||20,invPg.page=1,loadInventoryList()});var l=document.getElementById(\`inv-keyword\`);l&&l.addEventListener(\`keydown\`,function(e){e.key===\`Enter\`&&(e.preventDefault(),invPg.page=1,loadInventoryList())}),loadInventoryList()}
+function initInventoryPage(){console.log(\`初始化当前库存管理页面\`);var e=document.getElementById(\`add-inv-btn\`);e&&e.addEventListener(\`click\`,function(){U(\`手工录入库存\`,invFormHtml(),{onOpen:async function(){await invFillWarehouseSelect(\`inv-warehouse\`);var e=document.getElementById(\`inv-date\`);e&&!e.value&&(e.value=kt())},onConfirm:function(){return invManualSubmit()}})});var t=document.getElementById(\`download-inv-template-btn\`);t&&t.addEventListener(\`click\`,function(){invDownloadTemplate()});var n=document.getElementById(\`import-inv-btn\`),r=document.getElementById(\`inv-import-input\`);n&&r&&(n.addEventListener(\`click\`,function(){r.click()}),r.addEventListener(\`change\`,function(e){invImportExcel(e&&e.target?e.target.files:null),r.value=\`\`}));var i=document.getElementById(\`inv-table-body\`);i&&i.addEventListener(\`click\`,function(e){var t=e.target.closest(\`.edit-inv-btn\`);if(t){var n=parseInt(t.getAttribute(\`data-id\`),10),r=parseFloat(t.getAttribute(\`data-stock\`))||0,i=t.getAttribute(\`data-date\`)||\`\`;invEditStock(n,r,i)}});var a=document.getElementById(\`inv-search-btn\`);a&&a.addEventListener(\`click\`,function(){invPg.page=1,loadInventoryList()});var o=document.getElementById(\`inv-reset-btn\`);o&&o.addEventListener(\`click\`,function(){var e=document.getElementById(\`inv-keyword\`);e&&(e.value=\`\`),invPg.page=1,loadInventoryList()});var s=document.getElementById(\`inv-prev-btn\`);s&&s.addEventListener(\`click\`,function(){invPg.page>1&&(--invPg.page,loadInventoryList())});var c=document.getElementById(\`inv-next-btn\`);c&&c.addEventListener(\`click\`,function(){invPg.page+=1,loadInventoryList()});var l=document.getElementById(\`inv-page-size\`);l&&l.addEventListener(\`change\`,function(){invPg.pageSize=parseInt(this.value,10)||20,invPg.page=1,loadInventoryList()});var u=document.getElementById(\`inv-keyword\`);u&&u.addEventListener(\`keydown\`,function(e){e.key===\`Enter\`&&(e.preventDefault(),invPg.page=1,loadInventoryList())}),loadInventoryList()}
 function rcpUpdatePager(){var e=document.getElementById(\`rcp-page-info\`),t=document.getElementById(\`rcp-prev-btn\`),n=document.getElementById(\`rcp-next-btn\`),r=Math.max(1,Math.ceil((rcpPg.total||0)/rcpPg.pageSize));e&&(e.textContent=\`第 \`+rcpPg.page+\` / \`+r+\` 页（共 \`+rcpPg.total+\` 条）\`),t&&(t.disabled=rcpPg.page<=1),n&&(n.disabled=rcpPg.page>=r)}
 async function loadReceiptPriceList(){var e=document.getElementById(\`rcp-table-body\`),t=document.getElementById(\`rcp-count\`),n=document.getElementById(\`rcp-page-size\`);if(n&&n.value&&(rcpPg.pageSize=parseInt(n.value,10)||rcpPg.pageSize),!e)return;E(e,4,\`正在加载收货价格...\`);try{var r=document.getElementById(\`rcp-keyword\`),i=new URLSearchParams;i.set(\`page\`,String(rcpPg.page)),i.set(\`page_size\`,String(rcpPg.pageSize)),r&&r.value&&r.value.trim()&&i.set(\`keyword\`,r.value.trim());var a=z(await Api.request(\`GET\`,\`/tl/warehouse_receipt_prices?\`+i.toString())),o=a.list||[];rcpPg.total=a.total||0,e.innerHTML=\`\`,o.length||D(e,4,\`暂无收货价格数据\`),o.forEach(function(t){var n=v(t,[\`id\`,\`price_id\`]),r=_(t,[\`库房名称\`,\`warehouse_name\`],\`-\`),i=_(t,[\`品类名\`,\`品类名称\`,\`category_name\`],\`-\`),a=Number(_(t,[\`价格\`,\`price\`],null)),o=document.createElement(\`tr\`);o.innerHTML=\`<td>\`+M(r)+\`</td><td>\`+M(i)+\`</td><td>\`+(isNaN(a)?\`-\`:a.toLocaleString())+\`</td><td><button class="btn btn-sm btn-outline edit-btn" data-id="\`+String(n)+\`">编辑</button> <button class="btn btn-sm btn-danger delete-btn" data-id="\`+String(n)+\`">删除</button></td>\`,e.appendChild(o)}),t&&(t.textContent=String(rcpPg.total)),rcpUpdatePager()}catch(n){alert(\`加载收货价格失败: \`+(n.message||String(n))),t&&(t.textContent=\`0\`),e.innerHTML=\`\`,D(e,4,n.message||\`加载失败\`),rcpUpdatePager()}}
 async function rcpManualSubmit(){var e=parseInt(document.getElementById(\`rcp-warehouse\`).value,10),t=parseInt(document.getElementById(\`rcp-category\`).value,10),n=parseFloat(document.getElementById(\`rcp-price\`).value);if(!e||isNaN(e))throw Error(\`请选择库房\`);if(!t||isNaN(t))throw Error(\`请选择回收品种\`);if(isNaN(n)||n<0)throw Error(\`请填写有效价格\`);await Api.request(\`POST\`,\`/tl/warehouse_receipt_prices\`,{库房id:e,品类id:t,价格:n}),rcpPg.page=1,await loadReceiptPriceList()}
@@ -223,13 +235,55 @@ function initReceiptPricePage(){console.log(\`初始化收货价格管理页面\
 `
 
 const logicAnchor = 'console.log(`AI智能比价系统逻辑已加载完成`);'
-if (!app.includes('function initInventoryPage()')) {
-  if (!app.includes(logicAnchor)) {
-    console.error('app: logic anchor not found')
-    process.exit(1)
-  }
-  app = app.split(logicAnchor).join(pageLogic + logicAnchor)
+if (!app.includes(logicAnchor)) {
+  console.error('app: logic anchor not found')
+  process.exit(1)
 }
+
+// 删除旧的函数（如果存在）
+if (app.includes('function initInventoryPage()')) {
+  // 删除旧的 loadInventoryList 函数
+  const oldLoadListStart = app.indexOf('async function loadInventoryList()')
+  const oldLoadListEnd = app.indexOf('async function invManualSubmit()', oldLoadListStart)
+  if (oldLoadListStart !== -1 && oldLoadListEnd !== -1) {
+    app = app.substring(0, oldLoadListStart) + app.substring(oldLoadListEnd)
+  }
+
+  // 删除旧的 invManualSubmit 函数
+  const oldManualSubmitStart = app.indexOf('async function invManualSubmit()')
+  const oldManualSubmitEnd = app.indexOf('function invEditFormHtml()', oldManualSubmitStart)
+  if (oldManualSubmitStart !== -1 && oldManualSubmitEnd !== -1) {
+    app = app.substring(0, oldManualSubmitStart) + app.substring(oldManualSubmitEnd)
+  }
+
+  // 删除旧的 invEditFormHtml 函数（如果存在）
+  if (app.includes('function invEditFormHtml()')) {
+    const oldEditFormStart = app.indexOf('function invEditFormHtml()')
+    const oldEditFormEnd = app.indexOf('function invEditStock(', oldEditFormStart)
+    if (oldEditFormStart !== -1 && oldEditFormEnd !== -1) {
+      app = app.substring(0, oldEditFormStart) + app.substring(oldEditFormEnd)
+    }
+  }
+
+  // 删除旧的 invEditStock 函数（如果存在）
+  if (app.includes('function invEditStock(')) {
+    const oldEditStockStart = app.indexOf('function invEditStock(')
+    const oldEditStockEnd = app.indexOf('async function invDownloadTemplate()', oldEditStockStart)
+    if (oldEditStockStart !== -1 && oldEditStockEnd !== -1) {
+      app = app.substring(0, oldEditStockStart) + app.substring(oldEditStockEnd)
+    }
+  }
+
+  // 删除旧的 initInventoryPage 函数
+  const oldInitStart = app.indexOf('function initInventoryPage()')
+  const oldInitEnd = app.indexOf('function rcpUpdatePager()', oldInitStart)
+  if (oldInitStart !== -1 && oldInitEnd !== -1) {
+    app = app.substring(0, oldInitStart) + app.substring(oldInitEnd)
+  }
+}
+
+// 添加新的函数
+app = app.split(logicAnchor).join(pageLogic + logicAnchor)
 
 fs.writeFileSync(appPath, app, 'utf8')
 fs.writeFileSync(indexPath, idx, 'utf8')

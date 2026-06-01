@@ -1512,7 +1512,11 @@ onUnmounted(() => {
                 <p class="rule-check-reason">{{ ruleCheckUserView.summary }}</p>
               </div>
 
-              <ul class="rule-check-findings">
+              <p v-if="ruleCheckPayload.available === false" class="rule-check-unavailable">
+                规则检测未执行或结果不可用
+              </p>
+
+              <ul v-else-if="ruleCheckUserView.findings.length" class="rule-check-findings">
                 <li
                   v-for="(item, idx) in ruleCheckUserView.findings"
                   :key="idx"
@@ -1527,9 +1531,17 @@ onUnmounted(() => {
                       item.title
                     }}</strong>
                     <p class="rule-check-finding-text">{{ item.text }}</p>
+                    <dl v-if="item.details && item.details.length" class="rule-check-details">
+                      <template v-for="(detail, dIdx) in item.details" :key="dIdx">
+                        <dt>{{ detail.label }}</dt>
+                        <dd>{{ detail.value }}</dd>
+                      </template>
+                    </dl>
                   </div>
                 </li>
               </ul>
+
+              <p v-else class="rule-check-no-findings">暂无检测数据</p>
             </template>
           </div>
 
@@ -3021,6 +3033,41 @@ onUnmounted(() => {
   font-size: 0.8rem;
   line-height: 1.5;
   color: var(--text-secondary);
+}
+
+.rule-check-details {
+  margin: 0.4rem 0 0;
+  padding: 0.4rem 0.6rem;
+  background: rgba(0, 0, 0, 0.03);
+  border-radius: 4px;
+  font-size: 0.75rem;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.15rem 0.5rem;
+}
+
+.rule-check-details dt {
+  color: var(--text-secondary);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.rule-check-details dd {
+  margin: 0;
+  color: var(--text);
+  word-break: break-all;
+}
+
+.rule-check-unavailable,
+.rule-check-no-findings {
+  margin: 0.5rem 0 0;
+  padding: 0.6rem 0.75rem;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: #64748b;
+  text-align: center;
 }
 
 .rule-check-times {

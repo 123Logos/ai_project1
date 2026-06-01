@@ -139,3 +139,68 @@
   font-size: 13px;
   color: #64748b;
 }
+
+/* 修改弹窗样式 */
+.dmp-edit-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.dmp-edit-dialog {
+  background: #fff;
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 480px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.dmp-edit-title {
+  margin: 0 0 20px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.dmp-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dmp-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.dmp-edit-field label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.dmp-edit-field .form-control {
+  height: 38px;
+  font-size: 14px;
+}
+
+.dmp-edit-field .form-control:disabled {
+  background: #f8fafc;
+  color: #64748b;
+}
+
+.dmp-edit-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}

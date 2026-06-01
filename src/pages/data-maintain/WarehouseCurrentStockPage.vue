@@ -88,14 +88,15 @@
               <th>当前库存</th>
               <th>库存日期</th>
               <th>更新时间</th>
+              <th>操作</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="listLoading">
-              <td colspan="5" class="text-center py-4">加载中…</td>
+              <td colspan="6" class="text-center py-4">加载中…</td>
             </tr>
             <tr v-else-if="!listRows.length">
-              <td colspan="5" class="text-center py-4 text-muted">暂无数据</td>
+              <td colspan="6" class="text-center py-4 text-muted">暂无数据</td>
             </tr>
             <tr
               v-for="row in listRows"
@@ -106,6 +107,15 @@
               <td>{{ formatNum(row.stock) }}</td>
               <td>{{ row.stockDate || '—' }}</td>
               <td>{{ formatTime(row.updatedAt) }}</td>
+              <td>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-primary"
+                  @click="openEditDialog(row)"
+                >
+                  修改
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -114,6 +124,48 @@
         <button type="button" class="btn btn-sm btn-outline-secondary" :disabled="page <= 1 || listLoading" @click="gotoPage(page - 1)">上一页</button>
         <span>第 {{ page }} / {{ totalPages }} 页（共 {{ total }} 条）</span>
         <button type="button" class="btn btn-sm btn-outline-secondary" :disabled="page >= totalPages || listLoading" @click="gotoPage(page + 1)">下一页</button>
+      </div>
+    </div>
+
+    <!-- 修改弹窗 -->
+    <div v-if="editDialogVisible" class="dmp-edit-overlay" @click.self="closeEditDialog">
+      <div class="dmp-edit-dialog">
+        <h3 class="dmp-edit-title">修改库存</h3>
+        <div class="dmp-edit-form">
+          <div class="dmp-edit-field">
+            <label>库房名称</label>
+            <input type="text" class="form-control" :value="editForm.warehouseName" disabled />
+          </div>
+          <div class="dmp-edit-field">
+            <label>回收品种</label>
+            <input type="text" class="form-control" :value="editForm.categoryName" disabled />
+          </div>
+          <div class="dmp-edit-field">
+            <label>当前库存 <span class="text-danger">*</span></label>
+            <input
+              v-model.number="editForm.stock"
+              type="number"
+              class="form-control"
+              placeholder="请输入库存数量"
+              step="0.01"
+            />
+          </div>
+          <div class="dmp-edit-field">
+            <label>库存日期</label>
+            <input
+              v-model="editForm.stockDate"
+              type="date"
+              class="form-control"
+            />
+          </div>
+        </div>
+        <p v-if="editError" class="dmp-err">{{ editError }}</p>
+        <div class="dmp-edit-actions">
+          <button type="button" class="btn btn-primary" :disabled="editLoading" @click="confirmEdit">
+            {{ editLoading ? '保存中…' : '确认修改' }}
+          </button>
+          <button type="button" class="btn btn-outline-secondary" @click="closeEditDialog">取消</button>
+        </div>
       </div>
     </div>
   </div>
@@ -126,6 +178,7 @@ import {
   downloadWarehouseInventoryTemplate,
   fetchWarehouseCurrentStockList,
   importWarehouseCurrentStockExcel,
+  saveWarehouseInventoryManual,
   type WarehouseCurrentStockRow,
 } from '@/api/warehouseCurrentStockApi'
 import { parseExcelFileForPreview } from '@/utils/excelImportPreview'
@@ -139,6 +192,19 @@ const listError = ref('')
 const importLoading = ref(false)
 const templateLoading = ref(false)
 const listLoading = ref(false)
+
+// 修改弹窗相关
+const editDialogVisible = ref(false)
+const editLoading = ref(false)
+const editError = ref('')
+const editForm = ref({
+  id: 0,
+  warehouseName: '',
+  categoryName: '',
+  categoryId: 0,
+  stock: 0,
+  stockDate: '',
+})
 
 const categories = ref<Array<{ id: number; name: string }>>([])
 const categoriesLoading = ref(false)
@@ -257,6 +323,48 @@ async function confirmImport() {
     importError.value = formatApiError(e, '导入当前库存')
   } finally {
     importLoading.value = false
+  }
+}
+
+function openEditDialog(row: WarehouseCurrentStockRow) {
+  editForm.value = {
+    id: row.id,
+    warehouseName: row.warehouseName,
+    categoryName: row.categoryName,
+    categoryId: row.categoryId ?? 0,
+    stock: row.stock ?? 0,
+    stockDate: row.stockDate || '',
+  }
+  editError.value = ''
+  editDialogVisible.value = true
+}
+
+function closeEditDialog() {
+  editDialogVisible.value = false
+  editError.value = ''
+}
+
+async function confirmEdit() {
+  if (!editForm.value.categoryId) {
+    editError.value = '品类信息缺失，无法修改'
+    return
+  }
+  editLoading.value = true
+  editError.value = ''
+  try {
+    await saveWarehouseInventoryManual({
+      warehouseId: editForm.value.id,
+      categoryId: editForm.value.categoryId,
+      stock: editForm.value.stock,
+      stockDate: editForm.value.stockDate || undefined,
+    })
+    message.value = '修改成功'
+    closeEditDialog()
+    await loadList()
+  } catch (e) {
+    editError.value = formatApiError(e, '修改库存')
+  } finally {
+    editLoading.value = false
   }
 }
 
