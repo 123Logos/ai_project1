@@ -347,7 +347,7 @@
         <div class="pagination">
           <button @click="warehouseCurrentPage--" :disabled="warehouseCurrentPage === 1">上一页</button>
           <span
-            >第 {{ warehouseCurrentPage }} / {{ warehouseTotalPages }} 页（每页 {{ pivotGroupsPerPage }} 个仓库，同仓库下多行合并展示）</span
+            >第 {{ warehouseCurrentPage }} / {{ warehouseTotalPages }} 页（每页 {{ pivotGroupsPerPage }} 个仓库；同仓库仅展示最新送货日对应的大区经理，多冶炼厂分行）</span
           >
           <button @click="warehouseCurrentPage++" :disabled="warehouseCurrentPage === warehouseTotalPages">下一页</button>
         </div>
@@ -388,6 +388,10 @@ import {
   paginatePivotRowsByGroup,
   pivotGroupTotalPages,
 } from '../utils/pivotTablePagination'
+import {
+  buildLatestRegionalManagerByWarehouse,
+  resolveRegionalManagerForWarehouse,
+} from '../utils/warehouseLatestRegionalManager'
 
 const pivotGroupsPerPage = PIVOT_GROUPS_PER_PAGE
 
@@ -1091,12 +1095,25 @@ async function queryWarehouseData() {
     // 获取所有日期
     const dates = [...new Set(items.map(item => item.delivery_date))].sort()
     warehouseDateColumns.value = dates
-    
-    // 按仓库+大区经理+冶炼厂分组汇总重量，并收集该组下所有原始记录主键 id
+
+    const latestRmByWarehouse = buildLatestRegionalManagerByWarehouse(
+      items,
+      (i) => i.warehouse,
+      (i) => i.regional_manager,
+      (i) => i.delivery_date,
+      (i) => i.id,
+    )
+
+    // 按仓库+大区经理（取最新关联）+冶炼厂分组汇总
     const groupMap = new Map<string, { dateMap: Map<string, number>; recordIds: number[] }>()
     items.forEach(item => {
       const smelter = item.smelter || '未知'
-      const key = `${item.warehouse}|${item.regional_manager}|${smelter}`
+      const rm = resolveRegionalManagerForWarehouse(
+        item.warehouse,
+        item.regional_manager,
+        latestRmByWarehouse,
+      )
+      const key = `${item.warehouse}|${rm}|${smelter}`
       if (!groupMap.has(key)) {
         groupMap.set(key, { dateMap: new Map(), recordIds: [] })
       }

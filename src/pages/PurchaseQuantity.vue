@@ -540,6 +540,10 @@ import {
   paginatePivotRowsByGroup,
   pivotGroupTotalPages,
 } from '../utils/pivotTablePagination'
+import {
+  buildLatestRegionalManagerByWarehouse,
+  resolveRegionalManagerForWarehouse,
+} from '../utils/warehouseLatestRegionalManager'
 
 const pivotGroupsPerPage = PIVOT_GROUPS_PER_PAGE
 
@@ -1367,6 +1371,13 @@ function rebuildForecastPivotFromDetail(items: ForecastDetailItem[]) {
   const mgrMap = new Map<string, Map<string, number>>()
   const whMap = new Map<string, Map<string, number>>()
 
+  const latestRmByWarehouse = buildLatestRegionalManagerByWarehouse(
+    items,
+    (i) => i.warehouse || '未知',
+    (i) => i.regional_manager || '未知',
+    (i) => i.target_date,
+  )
+
   items.forEach((item) => {
     const smelterRaw = smelterKey(item.smelter)
     const rmRaw = item.regional_manager || '未知'
@@ -1379,7 +1390,8 @@ function rebuildForecastPivotFromDetail(items: ForecastDetailItem[]) {
     const md = mgrMap.get(mk)!
     md.set(item.target_date, (md.get(item.target_date) || 0) + wt)
 
-    const wk = `${whRaw}|${rmRaw}|${smelterRaw}`
+    const whRmRaw = resolveRegionalManagerForWarehouse(whRaw, rmRaw, latestRmByWarehouse)
+    const wk = `${whRaw}|${whRmRaw}|${smelterRaw}`
     if (!whMap.has(wk)) whMap.set(wk, new Map())
     const wd = whMap.get(wk)!
     wd.set(item.target_date, (wd.get(item.target_date) || 0) + wt)
