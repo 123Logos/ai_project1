@@ -18,8 +18,27 @@
           >
             按仓库
           </div>
+          <div
+            class="menu-item"
+            :class="{ active: forecastActiveTab === 'detail' }"
+            @click="forecastActiveTab = 'detail'"
+          >
+            预测明细
+          </div>
         </div>
         <button class="btn btn-secondary" @click="exportExcel" :disabled="loading">导出Excel</button>
+      </div>
+    </div>
+
+    <div class="card chart-summary-card">
+      <div class="result-label">
+        <span>预测趋势（汇总）</span>
+        <span v-if="chartLoading" class="unit-hint">加载中…</span>
+      </div>
+      <ForecastBasisPanel :summary="chartSummaryAnalysis" :placeholder="chartBasisPlaceholder" />
+      <div class="summary-chart-wrap">
+        <p v-if="!chartLoading && chartDates.length === 0" class="chart-empty-hint">暂无趋势数据，请设置筛选条件后查询。</p>
+        <canvas v-else ref="summaryChartCanvasRef"></canvas>
       </div>
     </div>
 
@@ -370,6 +389,89 @@
       </div>
     </div>
 
+    <div v-if="forecastActiveTab === 'detail'" class="query-section">
+      <div class="card">
+        <div class="filter-row">
+          <div class="filter-item">
+            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
+            <div class="date-range">
+              <input
+                type="date"
+                v-model="detailTabFilters.startDate"
+                class="filter-input"
+                @change="validateDetailTabDateRange"
+              />
+              <span>至</span>
+              <input
+                type="date"
+                v-model="detailTabFilters.endDate"
+                class="filter-input"
+                @change="validateDetailTabDateRange"
+              />
+            </div>
+          </div>
+          <div class="filter-actions">
+            <button class="btn btn-primary" @click="handleQuery" :disabled="loading">
+              {{ loading ? '加载中...' : '查询' }}
+            </button>
+            <button class="btn btn-secondary" @click="handleReset">重置</button>
+          </div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="result-label">
+          <span>预测明细（共 {{ detailRows.length }} 条，点击行查看完整预测依据）</span>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table detail-flat-table">
+            <thead>
+              <tr>
+                <th>预测日期</th>
+                <th>仓库</th>
+                <th>大区经理</th>
+                <th>冶炼厂</th>
+                <th>品类</th>
+                <th>预测重量(吨)</th>
+                <th>预测依据</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                v-for="row in detailTablePageRows"
+                :key="rowKey(row)"
+                class="detail-row-clickable"
+                @click="openDetailAnalysis(row)"
+              >
+                <td>{{ row.targetDate }}</td>
+                <td>{{ row.warehouse }}</td>
+                <td>{{ row.regionalManager }}</td>
+                <td>{{ row.smelter || '—' }}</td>
+                <td>{{ row.productVariety }}</td>
+                <td>{{ row.predictedWeight.toFixed(2) }}</td>
+                <td class="analysis-cell" :title="row.analysis || ''">{{ truncateAnalysis(row.analysis) }}</td>
+              </tr>
+              <tr v-if="detailTablePageRows.length === 0">
+                <td colspan="7" class="empty-data">暂无数据</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination">
+          <button :disabled="detailTablePage <= 1" @click="detailTablePage--">上一页</button>
+          <span>第 {{ detailTablePage }} / {{ detailTableTotalPages }} 页（每页 {{ detailTablePageSize }} 条）</span>
+          <button :disabled="detailTablePage >= detailTableTotalPages" @click="detailTablePage++">下一页</button>
+        </div>
+      </div>
+    </div>
+
+    <PredictionAnalysisDrawer
+      :visible="analysisDrawerVisible"
+      :title="analysisDrawerTitle"
+      :analysis="analysisDrawerText"
+      :meta-lines="analysisDrawerMeta"
+      @close="closeAnalysisDrawer"
+    />
+
     <!-- 行趋势弹窗：折线图 + 仓库 / 大区经理 / 品类 -->
     <div v-if="modalVisible" class="modal" @click.self="closeModal">
       <div class="modal-content modal-content-chart">
@@ -427,6 +529,13 @@ import { ApiPaths } from '../api/paths'
 import { FORECAST_DETAILS_FETCH_PAGE_SIZE } from '../api/fetchLimits'
 import { fetchForecastDimensionOptions } from '../api/dimensionOptions'
 import {
+  fetchForecastChart,
+  normalizeForecastDetailList,
+  type PrdForecastDetailRow,
+} from '../api/forecastApi'
+import ForecastBasisPanel from '../components/ForecastBasisPanel.vue'
+import PredictionAnalysisDrawer from '../components/PredictionAnalysisDrawer.vue'
+import {
   PIVOT_GROUPS_PER_PAGE,
   paginatePivotRowsByGroup,
   pivotGroupTotalPages,
@@ -445,6 +554,7 @@ interface ForecastDetailItem {
   predicted_weight: string
   wma_base?: string
   week_coef?: string
+  analysis?: string | null
 }
 
 interface ForecastPivotCell {
@@ -480,7 +590,42 @@ interface ForecastChartMeta {
 const loading = ref(false)
 const detailData = ref<ForecastDetailItem[]>([])
 
-const forecastActiveTab = ref<'manager' | 'warehouse'>('manager')
+const detailTableTotalPages = computed(() =>
+  Math.max(1, Math.ceil(detailRows.value.length / detailTablePageSize)),
+)
+const detailTablePageRows = computed(() => {
+  const start = (detailTablePage.value - 1) * detailTablePageSize
+  return detailRows.value.slice(start, start + detailTablePageSize)
+})
+
+const chartBasisPlaceholder = computed(() => {
+  if (chartLoadFailed.value) {
+    return '汇总依据加载失败，请检查 GET /forecast/chart 是否可用（需返回 summary_analysis）。'
+  }
+  if (chartDates.value.length > 0 && !chartSummaryAnalysis.value.trim()) {
+    return 'chart 接口已返回趋势数据，但未包含 summary_analysis 字段，请确认后端已按 v1.1.0 联调说明部署。'
+  }
+  return '暂无预测依据'
+})
+
+const forecastActiveTab = ref<'manager' | 'warehouse' | 'detail'>('manager')
+
+const chartLoading = ref(false)
+const chartLoadFailed = ref(false)
+const chartSummaryAnalysis = ref('')
+const chartDates = ref<string[]>([])
+const chartTotalByDate = ref<number[]>([])
+const summaryChartCanvasRef = ref<HTMLCanvasElement | null>(null)
+
+const detailRows = ref<PrdForecastDetailRow[]>([])
+const detailTabFilters = ref({ startDate: '', endDate: '' })
+const detailTablePage = ref(1)
+const detailTablePageSize = 20
+
+const analysisDrawerVisible = ref(false)
+const analysisDrawerTitle = ref('预测依据详情')
+const analysisDrawerText = ref<string | null>(null)
+const analysisDrawerMeta = ref<string[]>([])
 const forecastDateColumns = ref<string[]>([])
 const forecastManagerTableRows = ref<ForecastManagerTableRow[]>([])
 const forecastWarehouseTableRows = ref<ForecastWarehouseTableRow[]>([])
@@ -681,6 +826,22 @@ const closeErrorModal = () => {
   errorModalDetails.value = []
 }
 
+/** PRD：默认 [当天, 当天+14天]（共 15 天） */
+function defaultForecastDateRange(): { startDate: string; endDate: string } {
+  const start = new Date()
+  const end = new Date(start)
+  end.setDate(end.getDate() + 14)
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  return { startDate: fmt(start), endDate: fmt(end) }
+}
+
+function applyDefaultForecastDateRange() {
+  const range = defaultForecastDateRange()
+  forecastMgrFilters.value = { ...range }
+  forecastWhFilters.value = { ...range }
+  detailTabFilters.value = { ...range }
+}
+
 // ==================== 验证日期范围（预测最多 15 天） ====================
 function validateForecastDateRange(f: Ref<{ startDate: string; endDate: string }>) {
   const startStr = f.value.startDate
@@ -709,6 +870,135 @@ function validateMgrForecastDateRange() {
 function validateWhForecastDateRange() {
   validateForecastDateRange(forecastWhFilters)
 }
+
+function validateDetailTabDateRange() {
+  validateForecastDateRange(detailTabFilters)
+}
+
+function rowKey(row: PrdForecastDetailRow) {
+  return `${row.targetDate}|${row.warehouse}|${row.productVariety}|${row.regionalManager}|${row.smelter ?? ''}`
+}
+
+function truncateAnalysis(analysis: string | null | undefined, maxLen = 80) {
+  const t = (analysis ?? '').trim()
+  if (!t) return '—'
+  return t.length <= maxLen ? t : `${t.slice(0, maxLen)}…`
+}
+
+function openDetailAnalysis(row: PrdForecastDetailRow) {
+  analysisDrawerTitle.value = `预测依据 · ${row.targetDate}`
+  analysisDrawerText.value = row.analysis
+  analysisDrawerMeta.value = [
+    `仓库：${row.warehouse}`,
+    `大区经理：${row.regionalManager}`,
+    `品类：${row.productVariety}`,
+    ...(row.smelter ? [`冶炼厂：${row.smelter}`] : []),
+    `预测重量：${row.predictedWeight.toFixed(2)} 吨`,
+  ]
+  analysisDrawerVisible.value = true
+}
+
+function closeAnalysisDrawer() {
+  analysisDrawerVisible.value = false
+}
+
+function drawSummaryChart() {
+  const canvas = summaryChartCanvasRef.value
+  if (!canvas) return
+  const dates = chartDates.value
+  const values = chartTotalByDate.value
+  if (dates.length === 0) return
+
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  const wrap = canvas.parentElement
+  const width = Math.max((wrap?.clientWidth ?? 560) - 8, 320)
+  const height = 280
+  canvas.width = width
+  canvas.height = height
+
+  const margin = { t: 20, r: 16, b: 44, l: 64 }
+  const W = width - margin.l - margin.r
+  const H = height - margin.t - margin.b
+  const n = dates.length
+  const maxV = Math.max(...values, 0)
+  const maxY = maxV <= 0 ? 1 : maxV * 1.08
+
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, width, height)
+  ctx.strokeStyle = '#d1d5db'
+  ctx.lineWidth = 1
+  ctx.beginPath()
+  ctx.moveTo(margin.l, margin.t)
+  ctx.lineTo(margin.l, margin.t + H)
+  ctx.lineTo(margin.l + W, margin.t + H)
+  ctx.stroke()
+
+  const ySteps = 5
+  ctx.font = '11px system-ui, sans-serif'
+  ctx.fillStyle = '#64748b'
+  for (let i = 0; i <= ySteps; i++) {
+    const y = margin.t + H - (i / ySteps) * H
+    const val = (i / ySteps) * maxY
+    ctx.strokeStyle = '#f1f5f9'
+    ctx.beginPath()
+    ctx.moveTo(margin.l, y)
+    ctx.lineTo(margin.l + W, y)
+    ctx.stroke()
+    ctx.fillText(val.toFixed(2), 4, y + 4)
+  }
+
+  const xStep = n <= 1 ? W / 2 : W / (n - 1)
+  ctx.strokeStyle = '#1476db'
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  values.forEach((v, i) => {
+    const x = margin.l + i * xStep
+    const y = margin.t + H - (v / maxY) * H
+    if (i === 0) ctx.moveTo(x, y)
+    else ctx.lineTo(x, y)
+  })
+  ctx.stroke()
+
+  ctx.fillStyle = '#1476db'
+  values.forEach((v, i) => {
+    const x = margin.l + i * xStep
+    const y = margin.t + H - (v / maxY) * H
+    ctx.beginPath()
+    ctx.arc(x, y, 4, 0, Math.PI * 2)
+    ctx.fill()
+  })
+
+  const maxLabs = Math.max(2, Math.floor(W / 56))
+  const labStep = Math.max(1, Math.ceil(n / maxLabs))
+  ctx.fillStyle = '#64748b'
+  dates.forEach((d, i) => {
+    if (i % labStep !== 0 && i !== n - 1) return
+    const x = margin.l + i * xStep
+    const label = d.length >= 10 ? d.slice(5) : d
+    ctx.fillText(label, x - 16, margin.t + H + 28)
+  })
+
+  ctx.fillStyle = '#475569'
+  ctx.font = '12px system-ui, sans-serif'
+  ctx.fillText('预测重量（吨）', margin.l, margin.t - 6)
+  ctx.fillText('预测日期', margin.l + W / 2 - 28, height - 8)
+}
+
+let summaryChartResizeHandler: (() => void) | null = null
+
+watch([chartDates, chartTotalByDate], () => {
+  if (chartDates.value.length > 0) {
+    nextTick(() => {
+      drawSummaryChart()
+      if (!summaryChartResizeHandler) {
+        summaryChartResizeHandler = () => drawSummaryChart()
+        window.addEventListener('resize', summaryChartResizeHandler)
+      }
+    })
+  }
+})
 
 // ==================== 过滤选项 ====================
 function filterOptionsBySearch(options: string[], searchLower: string) {
@@ -1014,6 +1304,22 @@ const focusWhSmelterInput = () => {
 // ==================== 构建筛选参数 ====================
 function buildForecastFilterParams(): Record<string, any> {
   const params: Record<string, any> = {}
+  if (forecastActiveTab.value === 'detail') {
+    const f = detailTabFilters.value
+    if (f.startDate) params.date_from = f.startDate
+    if (f.endDate) params.date_to = f.endDate
+    // 维度筛选与「按仓库」页签一致（与 chart/export 同源）
+    if (forecastWhSelectedWarehouses.value.length > 0) {
+      params.warehouses = forecastWhSelectedWarehouses.value
+    }
+    if (forecastWhSelectedManagers.value.length > 0) {
+      params.regional_managers = forecastWhSelectedManagers.value
+    }
+    if (forecastWhSelectedSmelters.value.length > 0) {
+      params.smelters = forecastWhSelectedSmelters.value
+    }
+    return params
+  }
   if (forecastActiveTab.value === 'manager') {
     const f = forecastMgrFilters.value
     if (f.startDate) params.date_from = f.startDate
@@ -1108,47 +1414,88 @@ function rebuildForecastPivotFromDetail(items: ForecastDetailItem[]) {
   forecastWarehouseCurrentPage.value = 1
 }
 
-// ==================== 从「送货量预测/明细」拉取并填充透视表 ====================
+function detailRowToLegacy(row: PrdForecastDetailRow): ForecastDetailItem {
+  return {
+    target_date: row.targetDate,
+    regional_manager: row.regionalManager,
+    smelter: row.smelter,
+    warehouse: row.warehouse,
+    product_variety: row.productVariety,
+    predicted_weight: String(row.predictedWeight),
+    wma_base: row.wmaBase != null ? String(row.wmaBase) : undefined,
+    week_coef: row.weekCoef != null ? String(row.weekCoef) : undefined,
+    analysis: row.analysis,
+  }
+}
+
+async function fetchAllDetailRows(
+  base: Record<string, string | number | string[] | undefined>,
+): Promise<PrdForecastDetailRow[]> {
+  const page_size = FORECAST_DETAILS_FETCH_PAGE_SIZE
+  const rawItems: unknown[] = []
+  let page = 1
+  while (page <= 200) {
+    const params: Record<string, unknown> = { ...base, page, page_size }
+    const response = await axios.get(ApiPaths.forecastDetail, { params })
+    const data = response.data as { items?: unknown[]; total?: number }
+    const items = data.items ?? []
+    rawItems.push(...items)
+    if (items.length === 0) break
+    if (items.length < page_size) break
+    if (typeof data.total === 'number' && rawItems.length >= data.total) break
+    page++
+  }
+  return normalizeForecastDetailList(rawItems)
+}
+
+// ==================== 从 chart + 明细拉取并填充 ====================
 async function fetchDetailData() {
   loading.value = true
+  chartLoadFailed.value = false
+  const base = buildForecastFilterParams()
+  const emptyChart = {
+    dates: [] as string[],
+    totalByDate: [] as number[],
+    byRegionalManager: [] as { regionalManager: string; totals: number[] }[],
+    warehouseProfiles: [] as unknown[],
+    summaryAnalysis: '',
+  }
+
+  const chartResult = await fetchForecastChart(base).catch((e: unknown) => {
+    console.error('获取预测图表失败', e)
+    chartLoadFailed.value = true
+    return emptyChart
+  })
+  chartSummaryAnalysis.value = chartResult.summaryAnalysis
+  chartDates.value = chartResult.dates
+  chartTotalByDate.value = chartResult.totalByDate
+  await nextTick()
+  drawSummaryChart()
+
   try {
-    const base = buildForecastFilterParams()
-    const page_size = FORECAST_DETAILS_FETCH_PAGE_SIZE
-    const all: ForecastDetailItem[] = []
-    let page = 1
-
-    while (page <= 200) {
-      const params: Record<string, any> = {
-        ...base,
-        page,
-        page_size,
-      }
-      const response = await axios.get(ApiPaths.forecastDetail, { params })
-      const data = response.data as { items?: ForecastDetailItem[]; total?: number }
-      const items = data.items || []
-      all.push(...items)
-      if (items.length === 0) break
-      if (items.length < page_size) break
-      if (typeof data.total === 'number' && all.length >= data.total) break
-      page++
-    }
-
-    detailData.value = all
-    rebuildForecastPivotFromDetail(all)
-    mergeSmelterOptionsFromForecastItems(all)
-  } catch (error: any) {
+    const normalized = await fetchAllDetailRows(base)
+    detailRows.value = normalized
+    const legacy = normalized.map(detailRowToLegacy)
+    detailData.value = legacy
+    rebuildForecastPivotFromDetail(legacy)
+    mergeSmelterOptionsFromForecastItems(legacy)
+    detailTablePage.value = 1
+  } catch (error: unknown) {
     console.error('获取预测明细失败', error)
+    detailRows.value = []
     detailData.value = []
     rebuildForecastPivotFromDetail([])
-    const data = error.response?.data
+    const err = error as { response?: { data?: { message?: string; detail?: string } }; message?: string }
+    const data = err.response?.data
     const msg =
       (typeof data?.message === 'string' && data.message) ||
       (typeof data?.detail === 'string' && data.detail) ||
-      error.message ||
+      err.message ||
       '获取预测明细失败'
-    showError(msg, ['请检查网络或筛选条件后重试'])
+    showError(msg, ['汇总趋势与预测依据仍来自 chart 接口；请检查明细接口或筛选条件'])
   } finally {
     loading.value = false
+    chartLoading.value = false
   }
 }
 
@@ -1158,7 +1505,9 @@ async function handleQuery() {
 }
 
 function handleReset() {
-  if (forecastActiveTab.value === 'manager') {
+  if (forecastActiveTab.value === 'detail') {
+    detailTabFilters.value = { startDate: '', endDate: '' }
+  } else if (forecastActiveTab.value === 'manager') {
     forecastMgrFilters.value = { startDate: '', endDate: '' }
     forecastMgrSelectedManagers.value = []
     forecastMgrSelectedSmelters.value = []
@@ -1381,6 +1730,10 @@ onBeforeUnmount(() => {
     window.removeEventListener('resize', trendResizeHandler)
     trendResizeHandler = null
   }
+  if (summaryChartResizeHandler) {
+    window.removeEventListener('resize', summaryChartResizeHandler)
+    summaryChartResizeHandler = null
+  }
 })
 
 // ==================== 导出预测明细（服务端 Excel） ====================
@@ -1444,11 +1797,15 @@ function exportRowTrendCsv() {
   URL.revokeObjectURL(link.href)
 }
 
-watch(forecastActiveTab, () => {
+watch(forecastActiveTab, (tab) => {
+  if (tab === 'detail' && !detailTabFilters.value.startDate && forecastWhFilters.value.startDate) {
+    detailTabFilters.value = { ...forecastWhFilters.value }
+  }
   void fetchDetailData()
 })
 
 onMounted(async () => {
+  applyDefaultForecastDateRange()
   await fetchOptions()
   await handleQuery()
 })
@@ -1492,6 +1849,47 @@ onMounted(async () => {
 .menu-item.active {
   background-color: #1476db;
   color: white;
+}
+
+.chart-summary-card .result-label {
+  color: #1f2d3d;
+}
+
+.summary-chart-wrap {
+  min-height: 200px;
+  margin-top: 8px;
+}
+
+.summary-chart-wrap canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.chart-empty-hint {
+  margin: 24px 0;
+  text-align: center;
+  font-size: 13px;
+  color: #909399;
+}
+
+.detail-flat-table .analysis-cell {
+  max-width: 280px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: #475569;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.detail-row-clickable {
+  cursor: pointer;
+}
+
+.detail-row-clickable:hover {
+  background-color: #e8f4fc;
 }
 
 .result-label {
