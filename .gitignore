@@ -14,9 +14,6 @@ lerna-debug.log*
 PD_max_fronted/.env*
 !PD_max_fronted/.env.example
 upload_frontend.cmd
-deploy.ps1
-deploy-redspiderbc.ps1
-PD_max_fronted/deploy.ps1
 
 .cursor
 .cursor\skills
@@ -37,3 +34,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+*.cmd
