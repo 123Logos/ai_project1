@@ -46,7 +46,7 @@
     <div class="card">
       <div class="filter-row">
         <div class="filter-item">
-          <label>定价日期</label>
+          <label>定价日期 <span class="date-hint">(最多15天)</span></label>
           <div class="date-range">
             <input v-model="filters.dateFrom" type="date" class="filter-input date-input" />
             <span>至</span>
@@ -231,11 +231,16 @@ function formatFetchTime(iso: string | null): string {
 }
 
 function defaultChartDateRange(): { from: string; to: string } {
-  const to = new Date()
-  const from = new Date()
-  from.setMonth(from.getMonth() - 3)
+  const end = new Date()
+  const start = new Date(end)
+  start.setDate(start.getDate() - 29)
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
-  return { from: fmt(from), to: fmt(to) }
+  return { from: fmt(start), to: fmt(end) }
+}
+
+function applyDefaultFilters() {
+  const { from, to } = defaultChartDateRange()
+  filters.value = { dateFrom: from, dateTo: to }
 }
 
 function rowChange(row: SmmLeadReferencePrice, idx: number): number | null {
@@ -306,7 +311,7 @@ async function handleQuery() {
 }
 
 function resetFilters() {
-  filters.value = { dateFrom: '', dateTo: '' }
+  applyDefaultFilters()
   listPage.value = 1
   void loadChart()
   void loadList()
@@ -546,6 +551,7 @@ watch(chartSeries, () => {
 })
 
 onMounted(async () => {
+  applyDefaultFilters()
   await loadLatest()
   await Promise.all([loadChart(), loadList()])
   chartResizeHandler = () => drawChart(chartHoverIndex.value)
@@ -578,6 +584,7 @@ onBeforeUnmount(() => {
 .filter-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px; }
 .filter-item { display: flex; flex-direction: column; gap: 4px; }
 .filter-item label { font-size: 12px; font-weight: 500; color: #606266; }
+.date-hint { font-size: 11px; color: #909399; font-weight: normal; }
 .date-range { display: flex; gap: 6px; align-items: center; }
 .filter-input { padding: 6px 10px; border: 1px solid #e5e9f2; border-radius: 4px; font-size: 13px; }
 .date-input { width: 130px; }

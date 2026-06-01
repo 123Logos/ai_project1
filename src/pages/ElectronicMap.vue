@@ -730,7 +730,20 @@
           <p v-if="forecastError" class="emap-side-error mb-2">{{ forecastError }}</p>
           <div class="emap-fc-chart-wrap">
             <p v-if="forecastLoading" class="emap-fc-chart-empty text-muted mb-0">预测中，请稍候…</p>
-            <canvas v-else-if="forecastModalDates.length" ref="forecastTrendCanvasRef"></canvas>
+            <canvas
+              v-else-if="forecastModalDates.length"
+              ref="forecastTrendCanvasRef"
+              @mousemove="onTrendChartMouseMove"
+              @mouseleave="onTrendChartMouseLeave"
+            ></canvas>
+            <div
+              v-if="trendHoverIndex >= 0"
+              class="emap-chart-tooltip"
+              :style="trendTooltipStyle"
+            >
+              <div class="emap-chart-tooltip-date">{{ forecastModalDates[trendHoverIndex] }}</div>
+              <div class="emap-chart-tooltip-price">{{ formatTrendValue(forecastModalValues[trendHoverIndex]) }} 吨</div>
+            </div>
             <p v-else class="emap-fc-chart-empty text-muted mb-0">当前库房暂无可用预测明细。</p>
           </div>
           <div v-if="forecastModalMeta" class="emap-fc-chart-meta">
@@ -1198,6 +1211,25 @@ const forecastSectionCollapsed = ref(false)
 /** 比价表单元格点击后展示的完整文案（列标题 + 正文） */
 const comparisonCellDetail = ref<{ label: string; text: string } | null>(null)
 const forecastTrendCanvasRef = ref<HTMLCanvasElement | null>(null)
+const trendHoverIndex = ref(-1)
+const trendTooltipStyle = ref<Record<string, string>>({})
+const TREND_HIT_RADIUS = 16
+
+interface TrendChartLayout {
+  margin: { t: number; r: number; b: number; l: number }
+  W: number
+  H: number
+  maxY: number
+  xStep: number
+  toX: (i: number) => number
+  toY: (v: number) => number
+}
+let trendChartLayout: TrendChartLayout | null = null
+
+function formatTrendValue(v: number | undefined): string {
+  if (v === undefined || !Number.isFinite(v)) return '0.00'
+  return v.toFixed(2)
+}
 const enableCoordPick = ref(false)
 const enableAutoZoomOnPointClick = ref(false)
 /** false: 仅前3条；true: 展示全部（第4条起细灰线） */
@@ -4987,7 +5019,7 @@ function closeComparisonModal() {
   warehouseDistanceTableRows.value = []
 }
 
-function drawForecastTrendChart() {
+function drawForecastTrendChart(highlightIndex = -1) {
   const canvas = forecastTrendCanvasRef.value
   if (!canvas) return
   const dates = forecastModalDates.value
@@ -4999,106 +5031,223 @@ function drawForecastTrendChart() {
 
   const wrap = canvas.parentElement
   const width = Math.max((wrap?.clientWidth ?? 560) - 8, 320)
-  const height = 300
+  const height = 320
   canvas.width = width
   canvas.height = height
 
-  const margin = { t: 20, r: 16, b: 44, l: 64 }
+  const dpr = window.devicePixelRatio || 1
+  if (dpr > 1) {
+    canvas.width = width * dpr
+    canvas.height = height * dpr
+    canvas.style.width = width + 'px'
+    canvas.style.height = height + 'px'
+    ctx.scale(dpr, dpr)
+  }
+
+  const margin = { t: 28, r: 20, b: 44, l: 60 }
   const W = width - margin.l - margin.r
   const H = height - margin.t - margin.b
   const n = dates.length
 
   const maxV = Math.max(...values, 0)
-  const maxY = maxV <= 0 ? 1 : maxV * 1.08
+  const maxY = maxV <= 0 ? 1 : maxV * 1.1
+  const xStep = n <= 1 ? W / 2 : W / (n - 1)
+  const toX = (i: number) => margin.l + i * xStep
+  const toY = (v: number) => margin.t + H - (v / maxY) * H
 
+  trendChartLayout = { margin, W, H, maxY, xStep, toX, toY }
+
+  // 背景
   ctx.fillStyle = '#0c1a2e'
   ctx.fillRect(0, 0, width, height)
 
-  ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(margin.l, margin.t)
-  ctx.lineTo(margin.l, margin.t + H)
-  ctx.lineTo(margin.l + W, margin.t + H)
-  ctx.stroke()
-
+  // Y 轴网格 + 标签
   const ySteps = 5
-  ctx.font = '11px system-ui, sans-serif'
-  ctx.fillStyle = '#94a3b8'
+  ctx.lineWidth = 1
   for (let i = 0; i <= ySteps; i++) {
     const y = margin.t + H - (i / ySteps) * H
     const val = (i / ySteps) * maxY
-    ctx.strokeStyle = 'rgba(34, 211, 238, 0.08)'
+    ctx.strokeStyle = i === 0 ? 'rgba(56, 189, 248, 0.25)' : 'rgba(34, 211, 238, 0.06)'
     ctx.beginPath()
     ctx.moveTo(margin.l, y)
     ctx.lineTo(margin.l + W, y)
     ctx.stroke()
-    ctx.fillText(val.toFixed(2), 4, y + 4)
+    ctx.font = '11px system-ui, sans-serif'
+    ctx.fillStyle = '#64748b'
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(val.toFixed(1), margin.l - 8, y)
   }
 
-  const xStep = n <= 1 ? W / 2 : W / (n - 1)
-
-  ctx.strokeStyle = '#22d3ee'
-  ctx.lineWidth = 2
-  ctx.shadowColor = 'rgba(34, 211, 238, 0.45)'
-  ctx.shadowBlur = 8
+  // X 轴基线
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)'
+  ctx.lineWidth = 1
   ctx.beginPath()
-  values.forEach((v, i) => {
-    const x = margin.l + i * xStep
-    const y = margin.t + H - (v / maxY) * H
-    if (i === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  })
+  ctx.moveTo(margin.l, margin.t + H)
+  ctx.lineTo(margin.l + W, margin.t + H)
+  ctx.stroke()
+
+  // 悬浮竖线
+  if (highlightIndex >= 0 && highlightIndex < n) {
+    const hx = toX(highlightIndex)
+    ctx.strokeStyle = 'rgba(34, 211, 238, 0.25)'
+    ctx.lineWidth = 1
+    ctx.setLineDash([4, 3])
+    ctx.beginPath()
+    ctx.moveTo(hx, margin.t)
+    ctx.lineTo(hx, margin.t + H)
+    ctx.stroke()
+    ctx.setLineDash([])
+  }
+
+  // 面积渐变（暗色主题）
+  const gradient = ctx.createLinearGradient(0, margin.t, 0, margin.t + H)
+  gradient.addColorStop(0, 'rgba(34, 211, 238, 0.15)')
+  gradient.addColorStop(0.7, 'rgba(34, 211, 238, 0.03)')
+  gradient.addColorStop(1, 'rgba(34, 211, 238, 0)')
+  ctx.beginPath()
+  ctx.moveTo(toX(0), margin.t + H)
+  ctx.lineTo(toX(0), toY(values[0]))
+  for (let i = 1; i < n; i++) {
+    const cpX = (toX(i - 1) + toX(i)) / 2
+    ctx.bezierCurveTo(cpX, toY(values[i - 1]), cpX, toY(values[i]), toX(i), toY(values[i]))
+  }
+  ctx.lineTo(toX(n - 1), margin.t + H)
+  ctx.closePath()
+  ctx.fillStyle = gradient
+  ctx.fill()
+
+  // 折线（平滑曲线 + 发光）
+  ctx.beginPath()
+  ctx.moveTo(toX(0), toY(values[0]))
+  for (let i = 1; i < n; i++) {
+    const cpX = (toX(i - 1) + toX(i)) / 2
+    ctx.bezierCurveTo(cpX, toY(values[i - 1]), cpX, toY(values[i]), toX(i), toY(values[i]))
+  }
+  ctx.strokeStyle = '#22d3ee'
+  ctx.lineWidth = 2.5
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  ctx.shadowColor = 'rgba(34, 211, 238, 0.45)'
+  ctx.shadowBlur = 10
   ctx.stroke()
   ctx.shadowBlur = 0
 
-  ctx.fillStyle = '#38bdf8'
+  // 数据点
   values.forEach((v, i) => {
-    const x = margin.l + i * xStep
-    const y = margin.t + H - (v / maxY) * H
-    ctx.beginPath()
-    ctx.arc(x, y, 4, 0, Math.PI * 2)
-    ctx.fill()
+    const x = toX(i)
+    const y = toY(v)
+    const active = i === highlightIndex
+    if (active) {
+      ctx.fillStyle = 'rgba(34, 211, 238, 0.2)'
+      ctx.beginPath()
+      ctx.arc(x, y, 10, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#0c1a2e'
+      ctx.beginPath()
+      ctx.arc(x, y, 5.5, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#22d3ee'
+      ctx.beginPath()
+      ctx.arc(x, y, 4, 0, Math.PI * 2)
+      ctx.fill()
+    } else {
+      ctx.fillStyle = '#0c1a2e'
+      ctx.beginPath()
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#38bdf8'
+      ctx.beginPath()
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
   })
 
-  // 每个趋势点常显具体数值（与用户需求一致）
-  ctx.font = '11px system-ui, sans-serif'
+  // X 轴标签
   ctx.textAlign = 'center'
-  ctx.textBaseline = 'bottom'
-  values.forEach((v, i) => {
-    const x = margin.l + i * xStep
-    const y = margin.t + H - (v / maxY) * H
-    const label = Number.isFinite(v) ? v.toFixed(2) : '0.00'
-    const boxW = Math.max(28, label.length * 7 + 6)
-    const boxH = 16
-    const by = Math.max(margin.t + 2, y - 8 - boxH)
-    const bx = Math.max(margin.l, Math.min(margin.l + W - boxW, x - boxW / 2))
-    ctx.fillStyle = 'rgba(2, 6, 23, 0.72)'
-    ctx.fillRect(bx, by, boxW, boxH)
-    ctx.fillStyle = '#e2e8f0'
-    ctx.fillText(label, x, by + boxH - 3)
-  })
-  ctx.textAlign = 'start'
-  ctx.textBaseline = 'alphabetic'
-
-  const maxLabs = Math.max(2, Math.floor(W / 56))
+  ctx.textBaseline = 'top'
+  ctx.font = '11px system-ui, sans-serif'
+  const maxLabs = Math.max(2, Math.floor(W / 50))
   const labStep = Math.max(1, Math.ceil(n / maxLabs))
-  ctx.fillStyle = '#94a3b8'
   dates.forEach((d, i) => {
     if (i % labStep !== 0 && i !== n - 1) return
-    const x = margin.l + i * xStep
+    const x = toX(i)
     const label = d.length >= 10 ? d.slice(5) : d
-    ctx.fillText(label, x - 16, margin.t + H + 28)
+    ctx.fillStyle = i === highlightIndex ? '#22d3ee' : '#64748b'
+    ctx.fillText(label, x, margin.t + H + 10)
   })
 
-  // 左上角横排显示纵轴含义，避免竖排遮挡
-  ctx.fillStyle = '#7dd3fc'
-  ctx.font = '12px system-ui, sans-serif'
-  ctx.fillText('重量（吨）', margin.l, margin.t - 6)
+  // 轴标题
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = '#64748b'
+  ctx.font = '11px system-ui, sans-serif'
+  ctx.fillText('重量（吨）', margin.l, margin.t - 10)
+  ctx.textAlign = 'center'
+  ctx.fillText('预测日期', margin.l + W / 2, height - 6)
+  ctx.textAlign = 'start'
+}
 
-  ctx.fillStyle = '#7dd3fc'
-  ctx.font = '12px system-ui, sans-serif'
-  ctx.fillText('预测日期', margin.l + W / 2 - 28, height - 8)
+function trendCanvasPointer(ev: MouseEvent): { x: number; y: number } {
+  const canvas = forecastTrendCanvasRef.value!
+  const rect = canvas.getBoundingClientRect()
+  const dpr = window.devicePixelRatio || 1
+  const scaleX = (canvas.width / dpr) / rect.width
+  const scaleY = (canvas.height / dpr) / rect.height
+  return {
+    x: (ev.clientX - rect.left) * scaleX,
+    y: (ev.clientY - rect.top) * scaleY,
+  }
+}
+
+function findNearestTrendPoint(px: number, py: number): number {
+  if (!trendChartLayout) return -1
+  const values = forecastModalValues.value
+  let best = -1
+  let bestDist = TREND_HIT_RADIUS
+  values.forEach((v, i) => {
+    const dx = px - trendChartLayout!.toX(i)
+    const dy = py - trendChartLayout!.toY(v)
+    const d = Math.hypot(dx, dy)
+    if (d < bestDist) {
+      bestDist = d
+      best = i
+    }
+  })
+  return best
+}
+
+function updateTrendTooltipPosition(index: number) {
+  const canvas = forecastTrendCanvasRef.value
+  if (!canvas || !trendChartLayout || index < 0) return
+  const rect = canvas.getBoundingClientRect()
+  const dpr = window.devicePixelRatio || 1
+  const scaleX = rect.width / (canvas.width / dpr)
+  const scaleY = rect.height / (canvas.height / dpr)
+  const left = trendChartLayout.toX(index) * scaleX
+  const top = trendChartLayout.toY(forecastModalValues.value[index] ?? 0) * scaleY
+  trendTooltipStyle.value = {
+    left: `${left}px`,
+    top: `${top}px`,
+    transform: 'translate(-50%, calc(-100% - 14px))',
+  }
+}
+
+function onTrendChartMouseMove(ev: MouseEvent) {
+  if (!trendChartLayout || forecastModalValues.value.length === 0) return
+  const { x, y } = trendCanvasPointer(ev)
+  const hit = findNearestTrendPoint(x, y)
+  if (hit === trendHoverIndex.value) return
+  trendHoverIndex.value = hit
+  if (hit >= 0) updateTrendTooltipPosition(hit)
+  drawForecastTrendChart(hit)
+}
+
+function onTrendChartMouseLeave() {
+  if (trendHoverIndex.value < 0) return
+  trendHoverIndex.value = -1
+  trendTooltipStyle.value = {}
+  drawForecastTrendChart(-1)
 }
 
 function escapeForecastCsvCell(s: string): string {
@@ -5137,9 +5286,11 @@ function exportForecastTrendCsv() {
 
 watch(comparisonModalVisible, (v) => {
   if (v) {
+    trendHoverIndex.value = -1
+    trendTooltipStyle.value = {}
     nextTick(() => {
       drawForecastTrendChart()
-      forecastTrendResizeHandler = () => drawForecastTrendChart()
+      forecastTrendResizeHandler = () => drawForecastTrendChart(trendHoverIndex.value)
       window.addEventListener('resize', forecastTrendResizeHandler)
     })
   } else if (forecastTrendResizeHandler) {
@@ -5150,6 +5301,8 @@ watch(comparisonModalVisible, (v) => {
 
 watch([forecastModalDates, forecastModalValues, forecastSectionCollapsed], () => {
   if (comparisonModalVisible.value && !forecastSectionCollapsed.value && forecastModalDates.value.length > 0) {
+    trendHoverIndex.value = -1
+    trendTooltipStyle.value = {}
     nextTick(() => drawForecastTrendChart())
   }
 })
@@ -6961,6 +7114,7 @@ onBeforeUnmount(() => {
 }
 
 .emap-fc-chart-wrap {
+  position: relative;
   width: 100%;
   min-height: 300px;
   margin-bottom: 16px;
@@ -6970,6 +7124,34 @@ onBeforeUnmount(() => {
   display: block;
   width: 100%;
   height: auto;
+  cursor: crosshair;
+}
+
+.emap-chart-tooltip {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  padding: 7px 11px;
+  background: rgba(15, 23, 42, 0.92);
+  color: #e2e8f0;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+}
+
+.emap-chart-tooltip-date {
+  color: #64748b;
+  font-size: 11px;
+  margin-bottom: 1px;
+}
+
+.emap-chart-tooltip-price {
+  font-weight: 600;
+  font-size: 13px;
+  color: #e2e8f0;
 }
 
 .emap-fc-chart-empty {
