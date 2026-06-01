@@ -202,10 +202,12 @@ export function mapApiRecordToEntry(r: DetectionHistoryApiRecord): DetectionHist
     error_msg: oc.error_msg ?? null,
   }
   const name = r.original_filename?.trim()
+  const ruleFromLinked = r.linked_rule_checks ?? null
   const ruleFromRecord = isRuleHistoryMode(r.mode) ? ruleChecksFromHistoryRecord(r) : null
-  const ruleFromAi = isPrimaryHistoryMode(r.mode)
-    ? ruleChecksFromV3Result(payload.result)
-    : null
+  const ruleFromAi =
+    !ruleFromLinked && isPrimaryHistoryMode(r.mode)
+      ? ruleChecksFromV3Result(payload.result)
+      : null
 
   return {
     id: String(r.id),
@@ -216,7 +218,7 @@ export function mapApiRecordToEntry(r: DetectionHistoryApiRecord): DetectionHist
     payload,
     status: r.status?.toUpperCase() === 'FAILED' ? 'FAILED' : 'COMPLETED',
     mode: r.mode,
-    ruleCheck: ruleFromRecord ?? ruleFromAi ?? null,
+    ruleCheck: ruleFromLinked ?? ruleFromRecord ?? ruleFromAi ?? null,
   }
 }
 
@@ -244,6 +246,8 @@ export function mergeHistoryEntriesForDisplay(
   const primary = all.filter((e) => isPrimaryHistoryMode(e.mode))
 
   for (const ai of primary) {
+    if (ai.ruleCheck) continue
+
     const aiTime = parseHistoryTime(ai.savedAt)
     const aiListIdx = all.findIndex((x) => x.id === ai.id)
     let picked: RuleRow | undefined

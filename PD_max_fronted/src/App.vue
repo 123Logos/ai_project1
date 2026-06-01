@@ -224,9 +224,24 @@ function isDetectionMockMode(): boolean {
   return String(import.meta.env.VITE_USE_MOCK ?? '').trim() === '1'
 }
 
-function detectSubmitOpts(signal: AbortSignal) {
+function detectSubmitOpts(signal: AbortSignal, withRuleChecks = false) {
   const t = documentTime.value.trim()
-  return { signal, document_time: t || null }
+  return {
+    signal,
+    document_time: t || null,
+    with_rule_checks: withRuleChecks,
+  }
+}
+
+function applyLinkedRuleChecksFromPoll(linked: RuleChecksData | null | undefined) {
+  if (linked) {
+    ruleCheckPayload.value = linked
+    ruleCheckError.value = null
+  } else {
+    ruleCheckPayload.value = null
+    ruleCheckError.value = null
+  }
+  ruleCheckLoading.value = false
 }
 
 /** 与主鉴伪并行：规则检测失败不阻断 AI 结果展示 */
@@ -360,9 +375,12 @@ async function runV3AsyncOne(
   bbox: BboxXYXY | null,
   progressPrefix: string,
   signal: AbortSignal,
+  withRuleChecks = false,
 ): Promise<{ taskId: string; payload: V3ViewPayload }> {
-  pollStatus.value = `${progressPrefix}：提交任务…`
-  const submit = await submitV3Detect(file, bbox, detectSubmitOpts(signal))
+  pollStatus.value = withRuleChecks
+    ? `${progressPrefix}：提交检测与辅助核查…`
+    : `${progressPrefix}：提交任务…`
+  const submit = await submitV3Detect(file, bbox, detectSubmitOpts(signal, withRuleChecks))
   const taskId = submit.task_id?.trim()
   if (!taskId) throw new Error(`${progressPrefix}：未返回任务 ID`)
   await waitWithCountdown(
@@ -370,11 +388,15 @@ async function runV3AsyncOne(
     (remain) => {
       const mm = Math.floor(remain / 60)
       const ss = remain % 60
-      pollStatus.value = `${progressPrefix}：预计等待 ${mm}:${String(ss).padStart(2, '0')} 后查询结果`
+      pollStatus.value = withRuleChecks
+        ? `${progressPrefix}：检测与辅助核查预计 ${mm}:${String(ss).padStart(2, '0')} 后完成`
+        : `${progressPrefix}：预计等待 ${mm}:${String(ss).padStart(2, '0')} 后查询结果`
     },
     signal,
   )
-  pollStatus.value = `${progressPrefix}：查询结果中…`
+  pollStatus.value = withRuleChecks
+    ? `${progressPrefix}：查询检测与辅助核查结果…`
+    : `${progressPrefix}：查询结果中…`
   const data = await getV3Result(taskId, { signal })
   if (data.error_msg?.trim() && !data.result && !(data.multi_results?.length)) {
     throw new Error(data.error_msg)
@@ -389,6 +411,9 @@ async function runV3AsyncOne(
     result: data.result ?? null,
     multi: data.multi_results,
     error_msg: data.error_msg ?? null,
+  }
+  if (withRuleChecks) {
+    applyLinkedRuleChecksFromPoll(data.linked_rule_checks)
   }
   return { taskId, payload }
 }
@@ -944,12 +969,18 @@ async function runV3() {
   const ac = new AbortController()
   detectAbort.value = ac
   pollStatus.value = ''
-  if (runRule) startRuleChecks(one, bbox, ac.signal)
-  else resetRuleCheck()
+  if (runRule) {
+    resetRuleCheck()
+    ruleCheckLoading.value = true
+  } else {
+    resetRuleCheck()
+  }
   try {
-    pollStatus.value = '预计等待约 1 分钟（按每张约 1 分钟估算）'
+    pollStatus.value = runRule
+      ? '预计等待约 1 分钟（含辅助核查，按每张约 1 分钟估算）'
+      : '预计等待约 1 分钟（按每张约 1 分钟估算）'
     await waitMs(300)
-    const { taskId, payload } = await runV3AsyncOne(one, bbox, '检测', ac.signal)
+    const { taskId, payload } = await runV3AsyncOne(one, bbox, '检测', ac.signal, runRule)
     v3TaskId.value = taskId
     v3Payload.value = payload
     pollStatus.value = '分析完成'
@@ -959,10 +990,11 @@ async function runV3() {
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') {
       pollStatus.value = '已取消'
-      return
+    } else {
+      errorMsg.value = e instanceof Error ? e.message : String(e)
+      pollStatus.value = ''
     }
-    errorMsg.value = e instanceof Error ? e.message : String(e)
-    pollStatus.value = ''
+    if (runRule) ruleCheckLoading.value = false
   } finally {
     detectAbort.value = null
     busy.value = false
@@ -981,7 +1013,12 @@ async function runV3Batch(files: File[]) {
   viewingHistoryId.value = null
   v3Payload.value = null
   v3TaskId.value = null
-  if (!runRule) resetRuleCheck()
+  if (runRule) {
+    resetRuleCheck()
+    ruleCheckLoading.value = true
+  } else {
+    resetRuleCheck()
+  }
   if (vizObjectUrl.value) {
     URL.revokeObjectURL(vizObjectUrl.value)
     vizObjectUrl.value = null
@@ -994,14 +1031,15 @@ async function runV3Batch(files: File[]) {
   let lastTaskId: string | null = null
   let lastPayload: V3ViewPayload | null = null
   try {
-    pollStatus.value = `预计等待约 ${files.length} 分钟（按每张约 1 分钟估算）`
+    pollStatus.value = runRule
+      ? `预计等待约 ${files.length} 分钟（含辅助核查，按每张约 1 分钟估算）`
+      : `预计等待约 ${files.length} 分钟（按每张约 1 分钟估算）`
     await waitMs(300)
     for (let i = 0; i < files.length; i++) {
       const f = files[i]!
       const prefix = `批量检测 ${i + 1}/${files.length}`
       try {
-        if (runRule) startRuleChecks(f, null, ac.signal)
-        const { taskId, payload } = await runV3AsyncOne(f, null, prefix, ac.signal)
+        const { taskId, payload } = await runV3AsyncOne(f, null, prefix, ac.signal, runRule)
         success += 1
         lastTaskId = taskId
         lastPayload = payload
@@ -1022,10 +1060,11 @@ async function runV3Batch(files: File[]) {
   } catch (e) {
     if (e instanceof DOMException && e.name === 'AbortError') {
       pollStatus.value = '已取消'
-      return
+    } else {
+      errorMsg.value = e instanceof Error ? e.message : String(e)
+      pollStatus.value = ''
     }
-    errorMsg.value = e instanceof Error ? e.message : String(e)
-    pollStatus.value = ''
+    if (runRule) ruleCheckLoading.value = false
   } finally {
     detectAbort.value = null
     busy.value = false

@@ -109,6 +109,9 @@
       <section v-else-if="activeSection === 'prediction' && predictionSubTab === 'leadPrice'" class="panel inner-page">
         <LeadPriceQuery />
       </section>
+      <section v-else-if="activeSection === 'prediction' && predictionSubTab === 'smelterPrice'" class="panel inner-page">
+        <SmelterPriceQuery @maintain="openAiPricingSmelterMaintain" />
+      </section>
       <section v-else-if="activeSection === 'map'" class="panel emap-panel">
         <ElectronicMap />
       </section>
@@ -176,6 +179,7 @@ import HistoryManage from './pages/HistoryManage.vue'
 import HistoryQuery from './pages/HistoryQuery.vue'
 import PurchaseQuantity from './pages/PurchaseQuantity.vue'
 import LeadPriceQuery from './pages/LeadPriceQuery.vue'
+import SmelterPriceQuery from './pages/SmelterPriceQuery.vue'
 import ElectronicMap from './pages/ElectronicMap.vue'
 import UserManage from './pages/UserManage.vue'
 import WarehouseDistanceConfig from './components/WarehouseDistanceConfig.vue'
@@ -216,6 +220,7 @@ const predictionSubTabs: Array<{ key: PredictionSubKey; label: string }> = [
   { key: 'historyQuery', label: '历史数据查询' },
   { key: 'forecast', label: '送货量预测' },
   { key: 'leadPrice', label: '铅价格查询' },
+  { key: 'smelterPrice', label: '冶炼厂价格查询' },
 ]
 
 const activeSection = ref<SectionKey>('map')
@@ -269,6 +274,11 @@ function onPageShow(ev: PageTransitionEvent) {
 function onSelectPredictionSub(key: PredictionSubKey) {
   activeSection.value = 'prediction'
   predictionSubTab.value = key
+}
+
+function openAiPricingSmelterMaintain() {
+  sessionStorage.setItem('ai_pricing_active_page', 'smelterPrice')
+  activeSection.value = 'aiPricing'
 }
 
 onMounted(() => {

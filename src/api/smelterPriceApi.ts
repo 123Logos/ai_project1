@@ -103,6 +103,42 @@ function unwrapList(data: unknown): Record<string, unknown>[] {
   return []
 }
 
+export class SmelterCalibrationApiError extends Error {
+  status: number
+
+  constructor(message: string, status: number) {
+    super(message)
+    this.name = 'SmelterCalibrationApiError'
+    this.status = status
+  }
+}
+
+function throwIfFailed(res: Response, data: unknown, ctx: string): void {
+  if (res.ok) return
+  throw new SmelterCalibrationApiError(readMsg(data) || `${ctx}（HTTP ${res.status}）`, res.status)
+}
+
+function filterCalibrationRows(
+  rows: SmelterPriceRow[],
+  opts: { smelter_id?: number; date_from?: string; date_to?: string },
+): SmelterPriceRow[] {
+  return rows.filter((r) => {
+    if (opts.smelter_id != null && opts.smelter_id > 0 && r.smelterId !== opts.smelter_id) return false
+    if (opts.date_from && r.date < opts.date_from) return false
+    if (opts.date_to && r.date > opts.date_to) return false
+    return true
+  })
+}
+
+export function formatSmelterCalibrationError(e: unknown): string {
+  if (e instanceof SmelterCalibrationApiError) {
+    if (e.status === 404) return '冶炼厂标定价格接口尚未部署（HTTP 404）。请确认后端已发布对应路由，或联系管理员。'
+    return e.message
+  }
+  if (e instanceof Error) return e.message
+  return '请稍后重试'
+}
+
 export async function fetchSmelterPrice(): Promise<SmelterPriceRow[]> {
   const q = new URLSearchParams({ page: '1', page_size: '500', only_latest: 'true' })
   const { res, data } = await fetchJson(`${BASE}?${q.toString()}`, {
@@ -111,7 +147,49 @@ export async function fetchSmelterPrice(): Promise<SmelterPriceRow[]> {
   })
   if (!res.ok) throw new Error(readMsg(data) || `获取冶炼厂标定价格失败（HTTP ${res.status}）`)
   const rows = unwrapList(data)
-  return rows.map(pickSmelterRow).filter(r => r.isLatest)
+  return rows.map(pickSmelterRow).filter((r) => r.isLatest)
+}
+
+/** 查询页：拉取标定价格列表（支持筛选；服务端未识别筛选参数时在前端二次过滤） */
+export async function fetchSmelterCalibrationForQuery(params: {
+  smelter_id?: number
+  date_from?: string
+  date_to?: string
+  page_size?: number
+}): Promise<SmelterPriceRow[]> {
+  const q = new URLSearchParams()
+  q.set('page', '1')
+  q.set('page_size', String(params.page_size ?? 500))
+  if (params.smelter_id) q.set('冶炼厂id', String(params.smelter_id))
+  if (params.date_from) q.set('date_from', params.date_from)
+  if (params.date_to) q.set('date_to', params.date_to)
+  const { res, data } = await fetchJson(`${BASE}?${q.toString()}`, {
+    method: 'GET',
+    headers: { ...authHeaders() },
+  })
+  throwIfFailed(res, data, '获取冶炼厂标定价格列表失败')
+  const rows = unwrapList(data).map(pickSmelterRow)
+  return filterCalibrationRows(rows, params).sort((a, b) => b.date.localeCompare(a.date))
+}
+
+export async function fetchLatestCalibrationForSmelter(smelterId: number): Promise<SmelterPriceRow | null> {
+  const rows = await fetchSmelterPrice()
+  return rows.find((r) => r.smelterId === smelterId) ?? null
+}
+
+/** 走势图：按定价日期升序 */
+export async function fetchSmelterCalibrationChartSeries(
+  smelterId: number,
+  dateFrom: string,
+  dateTo: string,
+): Promise<SmelterPriceRow[]> {
+  const rows = await fetchSmelterCalibrationForQuery({
+    smelter_id: smelterId,
+    date_from: dateFrom,
+    date_to: dateTo,
+    page_size: 500,
+  })
+  return [...rows].sort((a, b) => a.date.localeCompare(b.date))
 }
 
 export async function createSmelterPrice(smelterId: number, price: number, date: string): Promise<void> {

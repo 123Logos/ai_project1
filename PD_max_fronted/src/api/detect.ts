@@ -634,6 +634,8 @@ export type DetectSubmitOpts = {
   signal?: AbortSignal
   /** 单据/回单时间（如付款截图交易时间），有业务需要时随 FormData 提交 */
   document_time?: string | null
+  /** 为 true 时后端在 v3 完成后自动跑规则并写入同一 task_id */
+  with_rule_checks?: boolean
 }
 
 function appendDocumentTime(fd: FormData, documentTime?: string | null): void {
@@ -674,6 +676,7 @@ export async function submitV3Detect(
   fd.append('file', file)
   if (bbox != null) fd.append('bbox', JSON.stringify(bbox))
   appendDocumentTime(fd, opts?.document_time)
+  if (opts?.with_rule_checks) fd.append('with_rule_checks', 'true')
   const res = await fetch(aiDetectionUrl('/api/v3/detect'), {
     method: 'POST',
     body: fd,
@@ -798,6 +801,8 @@ export interface V3PollBody {
   result?: V3ResultItem | null
   multi_results?: V3ResultItem[]
   error_msg?: string | null
+  /** 与 task_id 关联的规则检测结果（with_rule_checks 或历史聚合） */
+  linked_rule_checks?: RuleChecksData | null
 }
 
 function resultSeverity(label: unknown): number {
@@ -865,6 +870,7 @@ function normalizeV3PollJson(json: unknown): V3PollBody {
     result,
     multi_results: multi,
     error_msg: errorMsg,
+    linked_rule_checks: parseLinkedRuleChecksField(o.linked_rule_checks ?? o.linkedRuleChecks),
   }
 }
 
@@ -950,6 +956,8 @@ export interface DetectionHistoryApiRecord {
   bbox?: unknown
   status: string
   outcome?: DetectionHistoryOutcome | null
+  /** async_v3 等主记录上由后端聚合的规则结果 */
+  linked_rule_checks?: RuleChecksData | null
 }
 
 export interface DetectionHistoryListResult {
@@ -1036,6 +1044,10 @@ function coerceApiRecord(raw: Record<string, unknown>): DetectionHistoryApiRecor
       reason: typeof oc.reason === 'string' ? oc.reason : undefined,
     }
   }
+  const linkedRuleChecks =
+    parseLinkedRuleChecksField(raw.linked_rule_checks ?? raw.linkedRuleChecks) ??
+    (outcome?.rule_checks ? parseLinkedRuleChecksField(outcome.rule_checks) : null)
+
   return {
     id: String(id),
     created_at: created,
@@ -1046,6 +1058,7 @@ function coerceApiRecord(raw: Record<string, unknown>): DetectionHistoryApiRecor
     bbox: raw.bbox,
     status: st,
     outcome,
+    linked_rule_checks: linkedRuleChecks,
   }
 }
 
@@ -1191,6 +1204,34 @@ function normalizeRuleChecksJson(json: unknown): RuleChecksData {
       ? (o.hard_tamper_flags as Record<string, boolean>)
       : undefined,
     reason: typeof o.reason === 'string' ? o.reason : undefined,
+  }
+}
+
+/** 解析 GET result / 历史列表中的 linked_rule_checks（对象或数组取首项） */
+export function parseLinkedRuleChecksField(raw: unknown): RuleChecksData | null {
+  if (raw == null) return null
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      const parsed = parseLinkedRuleChecksField(item)
+      if (parsed) return parsed
+    }
+    return null
+  }
+  try {
+    return normalizeRuleChecksJson(isRecord(raw) ? { data: raw } : raw)
+  } catch {
+    if (!isRecord(raw)) return null
+    if (raw.pixel_overlap == null && raw.timestamp == null && typeof raw.reason !== 'string') {
+      return null
+    }
+    return {
+      pixel_overlap: (raw.pixel_overlap as RuleChecksPixelOverlap | null | undefined) ?? null,
+      timestamp: isRecord(raw.timestamp) ? (raw.timestamp as RuleChecksTimestamp) : undefined,
+      hard_tamper_flags: isRecord(raw.hard_tamper_flags)
+        ? (raw.hard_tamper_flags as Record<string, boolean>)
+        : undefined,
+      reason: typeof raw.reason === 'string' ? raw.reason : undefined,
+    }
   }
 }
 

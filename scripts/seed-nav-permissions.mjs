@@ -35,6 +35,7 @@ const NAV_PERMISSION_SEED = [
   { label: '历史数据查询', field_name: 'perm_nav_ai_prediction_history_query' },
   { label: '送货量预测', field_name: 'perm_nav_ai_prediction_forecast' },
   { label: '铅价格查询', field_name: 'perm_nav_ai_prediction_lead_price_query' },
+  { label: '冶炼厂价格查询', field_name: 'perm_nav_ai_prediction_smelter_price_query' },
 
   { label: '图片真伪检查', field_name: 'perm_nav_ai_security_image_detect' },
 

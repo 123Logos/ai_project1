@@ -1076,7 +1076,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import { warehouseDisplayName } from '@/utils/warehouseDisplayName'
 import { useChinaRegion } from '@/composables/useChinaRegion'
 import {
@@ -1119,6 +1119,14 @@ import {
 } from '@/api/warehouseMarginApi'
 
 const activePage = ref('')
+
+onMounted(() => {
+  const key = sessionStorage.getItem('ai_pricing_active_page')
+  if (key === 'smelterPrice') {
+    activePage.value = 'smelterPrice'
+    sessionStorage.removeItem('ai_pricing_active_page')
+  }
+})
 
 const pageMeta: Record<string, { title: string; icon: string }> = {
   benchmarkAnalysis: { title: '库房AI定价对标分析', icon: 'bi bi-bar-chart-line' },
