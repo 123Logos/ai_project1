@@ -15,6 +15,7 @@ import {
 } from './api/detect'
 import {
   historyEntryHasAi,
+  historyEntryHasRule,
   historyEntryKindLabel,
   mergeHistoryEntriesForDisplay,
   type DetectionHistoryEntry,
@@ -222,8 +223,21 @@ function detectSubmitOpts(signal: AbortSignal, withRuleChecks = false) {
   }
 }
 
-function applyLinkedRuleChecksFromPoll(linked: RuleChecksData | null | undefined) {
-  ruleCheckPayload.value = linked ?? null
+function emptyLinkedRuleChecks(reason?: string): RuleChecksData {
+  return reason?.trim() ? { available: false, reason: reason.trim() } : { available: false }
+}
+
+function applyLinkedRuleChecksFromPoll(
+  linked: RuleChecksData | null | undefined,
+  expected = true,
+) {
+  if (linked != null) {
+    ruleCheckPayload.value = linked
+  } else if (expected) {
+    ruleCheckPayload.value = emptyLinkedRuleChecks()
+  } else {
+    ruleCheckPayload.value = null
+  }
   ruleCheckError.value = null
   ruleCheckLoading.value = false
 }
@@ -236,26 +250,7 @@ function v3PayloadFromPoll(data: Awaited<ReturnType<typeof getV3Result>>): V3Vie
   }
 }
 
-/** 与主鉴伪并行：规则检测失败不阻断 AI 结果展示 */
-function startRuleChecks(file: File, bbox: BboxXYXY | null, signal: AbortSignal) {
-  resetRuleCheck()
-  ruleCheckLoading.value = true
-  void submitRuleChecks(file, bbox, detectSubmitOpts(signal))
-    .then((data) => {
-      if (signal.aborted) return
-      ruleCheckPayload.value = data
-      ruleCheckError.value = null
-    })
-    .catch((e) => {
-      if (e instanceof DOMException && e.name === 'AbortError') return
-      ruleCheckPayload.value = null
-      ruleCheckError.value = e instanceof Error ? e.message : String(e)
-    })
-    .finally(() => {
-      if (!signal.aborted) ruleCheckLoading.value = false
-    })
-}
-
+/** 与主鉴伪并行调用 rule-checks 已废弃：AI+规则 请用 v3/detect?with_rule_checks=true */
 async function runRuleSingle(file: File) {
   const bbox: BboxXYXY | null = v3SpecifyBbox.value ? (userBbox.value ?? fullImageBbox()) : null
   if (v3SpecifyBbox.value && !bbox) {
@@ -401,7 +396,7 @@ async function runV3AsyncOne(
   }
   const payload = v3PayloadFromPoll(data)
   if (withRuleChecks) {
-    applyLinkedRuleChecksFromPoll(data.linked_rule_checks)
+    applyLinkedRuleChecksFromPoll(data.linked_rule_checks, true)
   }
   return { taskId, payload }
 }
@@ -841,27 +836,37 @@ async function applyHistoryEntry(entry: DetectionHistoryEntry) {
   v3TaskId.value = entry.taskId || null
   if (historyEntryHasAi(entry)) {
     const taskId = entry.taskId?.trim()
+    const expectRule = historyEntryHasRule(entry)
     if (taskId && !isDetectionMockMode()) {
-      ruleCheckLoading.value = !!entry.ruleCheck || String(entry.mode ?? '').includes('v3')
+      if (expectRule) ruleCheckLoading.value = true
+      else {
+        ruleCheckPayload.value = null
+        ruleCheckLoading.value = false
+      }
       try {
         const data = await getV3Result(taskId)
         v3Payload.value = v3PayloadFromPoll(data)
         if (data.linked_rule_checks != null) {
-          applyLinkedRuleChecksFromPoll(data.linked_rule_checks)
+          applyLinkedRuleChecksFromPoll(data.linked_rule_checks, expectRule)
+        } else if (expectRule) {
+          applyLinkedRuleChecksFromPoll(entry.ruleCheck ?? null, true)
         } else {
-          ruleCheckPayload.value = entry.ruleCheck ?? null
-          ruleCheckLoading.value = false
+          applyLinkedRuleChecksFromPoll(null, false)
         }
       } catch (e) {
         v3Payload.value = clonePayloadForView(entry.payload)
-        ruleCheckPayload.value = entry.ruleCheck ?? null
+        if (expectRule) {
+          applyLinkedRuleChecksFromPoll(entry.ruleCheck ?? null, true)
+        } else {
+          applyLinkedRuleChecksFromPoll(null, false)
+        }
         ruleCheckError.value =
           e instanceof Error ? e.message : '刷新检测结果失败，已显示历史缓存'
-        ruleCheckLoading.value = false
       }
     } else {
       v3Payload.value = clonePayloadForView(entry.payload)
-      ruleCheckPayload.value = entry.ruleCheck ?? null
+      ruleCheckPayload.value = expectRule ? entry.ruleCheck ?? emptyLinkedRuleChecks() : null
+      ruleCheckLoading.value = false
     }
     if (entry.taskId) void loadViz(entry.taskId)
   } else {
@@ -923,8 +928,7 @@ async function runV3() {
     const ac = new AbortController()
     detectAbort.value = ac
     pollStatus.value = ''
-    if (runRule) startRuleChecks(one, bbox, ac.signal)
-    else resetRuleCheck()
+    resetRuleCheck()
     try {
       pollStatus.value = '正在提交检测…'
       const data = await submitV1ImageDetectSync(one, bbox, detectSubmitOpts(ac.signal))
@@ -943,6 +947,9 @@ async function runV3() {
       v3TaskId.value = taskId || null
       pollStatus.value = '分析完成'
       viewingHistoryId.value = null
+      if (runRule) {
+        applyLinkedRuleChecksFromPoll(emptyLinkedRuleChecks(), true)
+      }
       void refreshHistoryList()
       if (taskId) void loadViz(taskId)
     } catch (e) {
@@ -1154,7 +1161,7 @@ onUnmounted(() => {
       <aside class="sidebar">
         <section class="card side-section">
           <h2 class="section-title">检测方式</h2>
-          <p class="detect-type-hint">可多选；勾选哪种使用哪种，两项都选则并行检测。</p>
+          <p class="detect-type-hint">可多选；勾选哪种使用哪种，两项都选则 AI 完成后自动关联规则核查。</p>
           <div class="detect-type-list">
             <label class="detect-type-item">
               <input
@@ -1182,7 +1189,7 @@ onUnmounted(() => {
               <span class="detect-type-body">
                 <span class="detect-type-title">规则检测</span>
                 <span class="detect-type-desc"
-                  >核查拼接痕迹、时间一致性等规则项，速度较快</span
+                  >核查拼接痕迹、时间一致性、像素重叠等规则项，速度较快</span
                 >
               </span>
             </label>
@@ -1440,7 +1447,7 @@ onUnmounted(() => {
               </div>
               <p class="report-reason">{{ aiReportResult.reason || '—' }}</p>
               <div v-if="summaryExtendedLines.length" class="detect-ext-block">
-                <h4 class="detect-ext-title">增强检测项</h4>
+                <h4 class="detect-ext-title">扩展字段</h4>
                 <dl class="detect-ext-dl">
                   <template v-for="row in summaryExtendedLines" :key="'sum-' + row.label">
                     <dt>{{ row.label }}</dt>
@@ -1491,16 +1498,8 @@ onUnmounted(() => {
             <h3 id="rule-check-heading" class="rule-check-heading">
               {{ hasAiReport ? '辅助核查' : '规则检测' }}
             </h3>
-            <p class="rule-check-desc">
-              <template v-if="hasAiReport">
-                从「是否被拼接贴图」「画面时间是否与单据一致」等角度做补充检查，结论供参考，不替代上方 AI 检测。
-              </template>
-              <template v-else>
-                从「是否被拼接贴图」「画面时间是否与单据一致」等角度做规则核查，结论供参考。
-              </template>
-            </p>
 
-            <p v-if="ruleCheckLoading" class="rule-check-status">辅助核查进行中，请稍候…</p>
+            <p v-if="ruleCheckLoading" class="rule-check-status">加载中…</p>
             <p v-else-if="ruleCheckError" class="rule-check-error">{{ ruleCheckError }}</p>
 
             <template v-else-if="ruleCheckPayload && ruleCheckUserView">
@@ -1524,21 +1523,13 @@ onUnmounted(() => {
                     item.status === 'ok' ? '✓' : item.status === 'warn' ? '!' : '×'
                   }}</span>
                   <div class="rule-check-finding-body">
-                    <strong class="rule-check-finding-title">{{ item.title }}</strong>
+                    <strong v-if="item.title" class="rule-check-finding-title">{{
+                      item.title
+                    }}</strong>
                     <p class="rule-check-finding-text">{{ item.text }}</p>
                   </div>
                 </li>
               </ul>
-
-              <div v-if="ruleCheckUserView.timeFacts.length" class="rule-check-times">
-                <p class="rule-check-times-title">画面中识别到的时间</p>
-                <ul class="rule-check-times-list">
-                  <li v-for="(t, ti) in ruleCheckUserView.timeFacts" :key="ti">
-                    <span class="rule-check-times-label">{{ t.label }}</span>
-                    <span class="rule-check-times-value">{{ t.value }}</span>
-                  </li>
-                </ul>
-              </div>
             </template>
           </div>
 
@@ -1653,7 +1644,7 @@ onUnmounted(() => {
               {{ historyLoading ? '加载中…' : '刷新' }}
             </button>
           </div>
-          <p class="history-api-hint">来自服务端近 7 日记录；同一次检测会合并，仅 AI 或仅规则也会单独展示</p>
+          <p class="history-api-hint">来自服务端近 7 日记录；AI+规则 仅展示 async_v3 主记录，附属 rule_checks 已合并或隐藏</p>
           <p v-if="historyError" class="history-error">{{ historyError }}</p>
           <p
             v-if="!historyLoading && !historyEntries.length && !historyError"

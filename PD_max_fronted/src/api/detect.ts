@@ -1450,7 +1450,7 @@ async function postRuleCheckMultipart(
   return normalizeRuleChecksJson(json)
 }
 
-/** 聚合规则检测：推荐与 v3 并行调用 */
+/** 仅规则检测：POST rule-checks。AI+规则 请用 v3/detect + with_rule_checks=true，勿并行调用本接口。 */
 export async function submitRuleChecks(
   file: File,
   bbox?: BboxXYXY | null,

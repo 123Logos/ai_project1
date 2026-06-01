@@ -1147,8 +1147,10 @@ const provinceOutlineLayerRef = shallowRef<L.GeoJSON | null>(null)
 const flowPathSvgRendererRef = shallowRef<L.SVG | null>(null)
 const distanceLinePaneName = 'emap-distance-line-pane'
 const distanceLabelPaneName = 'emap-distance-label-pane'
-/** 低于 Leaflet 默认 popupPane(~700)，库房信息弹窗保持在比价冶炼厂常驻卡片之上 */
+/** 低于 Leaflet 默认 popupPane(~700)，比价冶炼厂常驻卡片不遮挡库房点击弹窗 */
 const emapRankComparisonTipPaneName = 'emap-rank-comparison-tip-pane'
+/** 库房悬浮卡片：高于比价 tip(680) 与默认 tooltipPane(~650)，与点击弹窗同级略高 */
+const emapWarehouseHoverTipPaneName = 'emap-warehouse-hover-tip-pane'
 /** 高于 markerPane(~600)，使比价流向线画在库房/冶炼厂打点之上 */
 const emapComparisonFlowPaneName = 'emap-comparison-flow-pane'
 const loading = ref(false)
@@ -2334,6 +2336,11 @@ function initMap() {
     p.style.zIndex = '680'
     p.style.pointerEvents = 'none'
   }
+  if (!map.getPane(emapWarehouseHoverTipPaneName)) {
+    const p = map.createPane(emapWarehouseHoverTipPaneName)
+    p.style.zIndex = '710'
+    p.style.pointerEvents = 'none'
+  }
   if (!map.getPane(emapComparisonFlowPaneName)) {
     const p = map.createPane(emapComparisonFlowPaneName)
     p.style.zIndex = '620'
@@ -2684,6 +2691,12 @@ function smelterIcon(dimmed = false, large = false): L.DivIcon {
   })
 }
 
+function liftWarehouseHoverTooltip(marker: L.Marker) {
+  const tip = marker.getTooltip()
+  const el = tip?.getElement?.() as HTMLElement | null | undefined
+  if (el?.parentElement) el.parentElement.appendChild(el)
+}
+
 function renderMarkers(points: MapPoint[], options?: { preserveMapView?: boolean }) {
   const map = mapRef.value
   const markerLayer = markerLayerRef.value
@@ -2708,17 +2721,28 @@ function renderMarkers(points: MapPoint[], options?: { preserveMapView?: boolean
         : smelterPopupHtml(p)
     const tooltipHtml = popupHtml
     marker.bindPopup(popupHtml)
-    marker.bindTooltip(tooltipHtml, {
-      sticky: false,
-      direction: 'top',
-      opacity: 1,
-      className: 'emap-marker-hover-tip',
-    })
+    if (p.kind === 'warehouse') {
+      marker.bindTooltip(tooltipHtml, {
+        sticky: false,
+        direction: 'top',
+        opacity: 1,
+        className: 'emap-marker-hover-tip',
+        pane: emapWarehouseHoverTipPaneName,
+      })
+    } else {
+      marker.bindTooltip(tooltipHtml, {
+        sticky: false,
+        direction: 'top',
+        opacity: 1,
+        className: 'emap-marker-hover-tip',
+      })
+    }
     marker.on('popupopen', () => {
       marker.closeTooltip()
     })
     marker.on('tooltipopen', () => {
       if (marker.isPopupOpen()) marker.closeTooltip()
+      if (p.kind === 'warehouse') liftWarehouseHoverTooltip(marker)
     })
     if (p.kind === 'warehouse') {
       marker.on('click', () => {

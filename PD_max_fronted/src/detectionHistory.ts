@@ -1,9 +1,8 @@
-import type {
-  DetectionHistoryApiRecord,
-  RuleChecksData,
-  RuleChecksPixelOverlap,
-  RuleChecksTimestamp,
-  V3ResultItem,
+import {
+  parseLinkedRuleChecksField,
+  type DetectionHistoryApiRecord,
+  type RuleChecksData,
+  type V3ResultItem,
 } from './api/detect'
 
 export type HistoryPayload = {
@@ -100,24 +99,6 @@ function withinPairWindow(aiTime: number, ruleTime: number, maxMs = PAIR_MAX_MS)
   return Math.abs(aiTime - ruleTime) <= maxMs
 }
 
-function extractRuleCheckFromObject(obj: Record<string, unknown>): RuleChecksData {
-  const pixel = obj.pixel_overlap
-  const ts = obj.timestamp
-  return {
-    pixel_overlap:
-      pixel === null || pixel === undefined
-        ? null
-        : isRecord(pixel)
-          ? (pixel as RuleChecksPixelOverlap)
-          : null,
-    timestamp: isRecord(ts) ? (ts as RuleChecksTimestamp) : undefined,
-    hard_tamper_flags: isRecord(obj.hard_tamper_flags)
-      ? (obj.hard_tamper_flags as Record<string, boolean>)
-      : undefined,
-    reason: typeof obj.reason === 'string' ? obj.reason : undefined,
-  }
-}
-
 /** 从 rule_* 模式的历史 outcome 解析 */
 export function ruleChecksFromHistoryRecord(r: DetectionHistoryApiRecord): RuleChecksData | null {
   const mode = String(r.mode ?? '').trim().toLowerCase()
@@ -125,89 +106,13 @@ export function ruleChecksFromHistoryRecord(r: DetectionHistoryApiRecord): RuleC
   if (!isRecord(oc)) return null
 
   if (mode === 'rule_checks') {
-    return extractRuleCheckFromObject(oc)
-  }
-  if (mode === 'rule_pixel_overlap') {
-    return {
-      pixel_overlap: oc as RuleChecksPixelOverlap,
-      reason: typeof oc.reason === 'string' ? oc.reason : undefined,
-    }
-  }
-  if (mode === 'rule_timestamp') {
-    return {
-      timestamp: oc as RuleChecksTimestamp,
-      reason: typeof oc.reason === 'string' ? oc.reason : undefined,
-    }
+    return parseLinkedRuleChecksField(oc)
   }
 
-  if (isRecord(oc.rule_checks)) {
-    return extractRuleCheckFromObject(oc.rule_checks)
-  }
-  if (oc.pixel_overlap != null || oc.timestamp != null) {
-    return extractRuleCheckFromObject(oc)
-  }
-  return null
-}
+  const nested = isRecord(oc.rule_checks) ? parseLinkedRuleChecksField(oc.rule_checks) : null
+  if (nested) return nested
 
-/** AI 结果里附带的 timestamp_check / pixel_overlap_score 等，转为辅助核查展示 */
-export function ruleChecksFromV3Result(item: V3ResultItem | null | undefined): RuleChecksData | null {
-  if (!item) return null
-  const tc = item.timestamp_check
-  const score = item.pixel_overlap_score
-  const flags = item.hard_tamper_flags
-  const hasFlags =
-    flags != null &&
-    typeof flags === 'object' &&
-    !Array.isArray(flags) &&
-    Object.keys(flags as object).length > 0
-  if (!tc && score == null && !hasFlags) return null
-
-  const flagObj =
-    flags != null && typeof flags === 'object' && !Array.isArray(flags)
-      ? (flags as Record<string, boolean>)
-      : undefined
-
-  const reasonParts: string[] = []
-  const fullReason = String(item.reason ?? '')
-  if (fullReason.includes('像素重叠') || fullReason.includes('拼接')) {
-    for (const part of fullReason.split('；')) {
-      if (part.includes('像素') || part.includes('拼接')) reasonParts.push(part.trim())
-    }
-  }
-
-  const pixel: RuleChecksPixelOverlap | null =
-    score != null && Number.isFinite(Number(score))
-      ? {
-          pixel_overlap_score: Number(score),
-          alert: Number(score) >= 0.55,
-          hard_tamper: flagObj?.pixel_overlap === true,
-          reasons: reasonParts.length ? reasonParts : undefined,
-        }
-      : null
-
-  const timestamp: RuleChecksTimestamp | undefined = tc
-    ? {
-        timestamp_check: tc as RuleChecksTimestamp['timestamp_check'],
-        hard_tamper: flagObj?.timestamp === true,
-        business_mismatch:
-          tc.business_mismatch === true ||
-          (Array.isArray(tc.anomalies) && tc.anomalies.length > 0),
-        anomalies: Array.isArray(tc.anomalies) ? tc.anomalies.map(String) : [],
-        reasons: [],
-      }
-    : undefined
-
-  const summaryParts = [...reasonParts]
-  if (timestamp?.business_mismatch) {
-    summaryParts.push('时间与单据信息存在不一致')
-  }
-
-  return {
-    pixel_overlap: pixel,
-    timestamp,
-    hard_tamper_flags: flagObj,
-    reason: summaryParts.length ? summaryParts.join('；') : undefined,
-  }
+  return parseLinkedRuleChecksField(oc)
 }
 
 export function mapApiRecordToEntry(r: DetectionHistoryApiRecord): DetectionHistoryEntry {
@@ -218,12 +123,10 @@ export function mapApiRecordToEntry(r: DetectionHistoryApiRecord): DetectionHist
     error_msg: oc.error_msg ?? null,
   }
   const name = r.original_filename?.trim()
-  const ruleFromLinked = r.linked_rule_checks ?? null
+  const ruleFromLinked =
+    parseLinkedRuleChecksField(r.linked_rule_checks) ??
+    (isRecord(oc) ? parseLinkedRuleChecksField(oc.linked_rule_checks) : null)
   const ruleFromRecord = isRuleHistoryMode(r.mode) ? ruleChecksFromHistoryRecord(r) : null
-  const ruleFromAi =
-    !ruleFromLinked && isPrimaryHistoryMode(r.mode)
-      ? ruleChecksFromV3Result(payload.result)
-      : null
 
   return {
     id: String(r.id),
@@ -234,7 +137,7 @@ export function mapApiRecordToEntry(r: DetectionHistoryApiRecord): DetectionHist
     payload,
     status: r.status?.toUpperCase() === 'FAILED' ? 'FAILED' : 'COMPLETED',
     mode: r.mode,
-    ruleCheck: ruleFromLinked ?? ruleFromRecord ?? ruleFromAi ?? null,
+    ruleCheck: ruleFromLinked ?? ruleFromRecord ?? null,
   }
 }
 
@@ -323,12 +226,6 @@ export function mergeHistoryEntriesForDisplay(
     if (picked?.entry.ruleCheck) {
       ai.ruleCheck = picked.entry.ruleCheck
       picked.used = true
-      continue
-    }
-
-    // 5) AI outcome 内嵌字段兜底
-    if (!ai.ruleCheck && ai.payload.result) {
-      ai.ruleCheck = ruleChecksFromV3Result(ai.payload.result)
     }
   }
 
