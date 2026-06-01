@@ -357,7 +357,7 @@ function gotoPage(p: number) {
 function buildChartLayout(
   width: number,
   height: number,
-  prices: number[],
+  _prices: number[],
   n: number,
 ): ChartLayout & { W: number; H: number; yMin: number; yMax: number; yRange: number } {
   const margin = { t: 24, r: 20, b: 44, l: 72 }
