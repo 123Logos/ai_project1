@@ -1504,3 +1504,95 @@ export async function submitTimestampCheck(
   const json: unknown = await res.json()
   return ruleCheckDataLayer(json) as RuleChecksTimestamp
 }
+
+// ---- 反馈标注 ----
+
+export interface FeedbackResult {
+  status: string
+  entry?: Record<string, unknown>
+}
+
+export async function submitFeedback(
+  taskId: string,
+  judgment: 'correct' | 'wrong' | 'suspicious',
+  bbox?: BboxXYXY | null,
+  note?: string,
+): Promise<FeedbackResult> {
+  const body: Record<string, unknown> = {
+    task_id: taskId,
+    judgment,
+    note: note ?? '',
+  }
+  if (bbox != null) body.bbox = bbox
+  const res = await fetch(aiDetectionUrl('/api/v3/feedback/judge'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  return res.json() as Promise<FeedbackResult>
+}
+
+// ---- 运维与监控 ----
+
+export interface HealthStatus {
+  status: string
+  font_lib_ready: boolean
+  font_lib_size: number
+  global_model_loaded: boolean
+  ocr_available: boolean
+}
+
+export async function fetchHealth(): Promise<HealthStatus> {
+  const res = await fetch(aiDetectionUrl('/api/v3/health'))
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  return res.json() as Promise<HealthStatus>
+}
+
+export interface ModelVersions {
+  versions: Array<Record<string, unknown>>
+  current_model?: string
+}
+
+export async function fetchModels(): Promise<ModelVersions> {
+  const res = await fetch(aiDetectionUrl('/api/v3/models'))
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  return res.json() as Promise<ModelVersions>
+}
+
+export async function reloadModels(version?: string): Promise<{ status: string; detail: Record<string, unknown> }> {
+  const fd = new FormData()
+  if (version) fd.append('version', version)
+  const res = await fetch(aiDetectionUrl('/api/v3/reload'), {
+    method: 'POST',
+    body: fd,
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  return res.json() as Promise<{ status: string; detail: Record<string, unknown> }>
+}
+
+export async function triggerTraining(confirm: boolean): Promise<{ status: string; warning?: string; summary?: Record<string, unknown> }> {
+  const fd = new FormData()
+  fd.append('confirm', String(confirm))
+  const res = await fetch(aiDetectionUrl('/api/v3/train'), {
+    method: 'POST',
+    body: fd,
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  return res.json() as Promise<{ status: string; warning?: string; summary?: Record<string, unknown> }>
+}

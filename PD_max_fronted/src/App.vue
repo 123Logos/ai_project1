@@ -3,13 +3,19 @@ import { computed, nextTick, onMounted, onUnmounted, ref, toRaw } from 'vue'
 import {
   deleteV3Task,
   fetchDetectionHistory,
+  fetchHealth,
+  fetchModels,
   getV3Result,
   getVisualizationBlob,
   pollV3UntilComplete,
+  reloadModels,
+  submitFeedback,
   submitRuleChecks,
   submitV1ImageDetectSync,
   submitV3Detect,
+  triggerTraining,
   type BboxXYXY,
+  type HealthStatus,
   type RuleChecksData,
   type V3ResultItem,
 } from './api/detect'
@@ -107,6 +113,12 @@ const historyError = ref<string | null>(null)
 const historyTotal = ref(0)
 /** 当前列表页码（从 1 起，每页仅展示本页 9 条） */
 const historyPage = ref(1)
+
+// 健康检查与模型管理
+const health = ref<HealthStatus | null>(null)
+const healthError = ref<string | null>(null)
+const modelInfo = ref<string>('加载中...')
+const feedbackSubmitting = ref<Record<string, boolean>>({})
 const HISTORY_PAGE_SIZE = 9
 
 const historyTotalPages = computed(() =>
@@ -214,6 +226,21 @@ function isDetectionMockMode(): boolean {
   return String(import.meta.env.VITE_USE_MOCK ?? '').trim() === '1'
 }
 
+async function checkHealth() {
+  if (isDetectionMockMode()) {
+    health.value = { status: 'mock', font_lib_ready: true, font_lib_size: 0, global_model_loaded: true, ocr_available: true }
+    healthError.value = null
+    return
+  }
+  try {
+    health.value = await fetchHealth()
+    healthError.value = null
+  } catch (e) {
+    healthError.value = (e as Error).message || '健康检查失败'
+    health.value = null
+  }
+}
+
 function detectSubmitOpts(signal: AbortSignal, withRuleChecks = false) {
   const t = documentTime.value.trim()
   return {
@@ -296,63 +323,61 @@ async function runRuleSingle(file: File) {
   }
 }
 
-async function runRuleBatch(picked: File[]) {
-  if (v3SpecifyBbox.value) {
-    errorMsg.value = '批量检测暂不支持“仅分析框选区域”，请关闭后重试。'
+async function loadModelInfo() {
+  if (isDetectionMockMode()) {
+    modelInfo.value = '演示模式'
     return
   }
-
-  busy.value = true
-  errorMsg.value = null
-  viewingHistoryId.value = null
-  v3Payload.value = null
-  v3TaskId.value = null
-  if (vizObjectUrl.value) {
-    URL.revokeObjectURL(vizObjectUrl.value)
-    vizObjectUrl.value = null
-  }
-  detectAbort.value?.abort()
-  const ac = new AbortController()
-  detectAbort.value = ac
-  resetRuleCheck()
-  ruleCheckLoading.value = true
-  let success = 0
-  const failed: string[] = []
-  let lastData: RuleChecksData | null = null
   try {
-    pollStatus.value = `批量规则检测 0/${picked.length}…`
-    for (let i = 0; i < picked.length; i++) {
-      const f = picked[i]!
-      pollStatus.value = `批量规则检测 ${i + 1}/${picked.length}…`
-      try {
-        const data = await submitRuleChecks(f, null, detectSubmitOpts(ac.signal))
-        success += 1
-        lastData = data
-        void refreshHistoryList()
-      } catch (e) {
-        if (e instanceof DOMException && e.name === 'AbortError') throw e
-        failed.push(`${f.name}: ${e instanceof Error ? e.message : String(e)}`)
-      }
-    }
-    if (lastData) {
-      ruleCheckPayload.value = lastData
-      ruleCheckError.value = null
-    }
-    pollStatus.value = `批量规则检测完成：成功 ${success}/${picked.length}`
-    if (failed.length) {
-      errorMsg.value = `以下文件失败（${failed.length}）：\n${failed.slice(0, 5).join('\n')}${failed.length > 5 ? '\n…' : ''}`
-    }
+    const data = await fetchModels()
+    const vCount = Array.isArray(data.versions) ? data.versions.length : 0
+    const cur = data.current_model?.split('/').pop() || 'N/A'
+    modelInfo.value = `版本数: ${vCount} | 当前: ${cur}`
+  } catch {
+    modelInfo.value = '无法获取模型信息'
+  }
+}
+
+async function handleReload() {
+  if (isDetectionMockMode()) return
+  try {
+    await reloadModels()
+    modelInfo.value = '模型已重载'
+    await checkHealth()
+    await loadModelInfo()
   } catch (e) {
-    if (e instanceof DOMException && e.name === 'AbortError') {
-      pollStatus.value = '已取消'
-      return
+    errorMsg.value = '模型重载失败: ' + (e as Error).message
+  }
+}
+
+async function handleTraining() {
+  if (isDetectionMockMode()) return
+  if (!confirm('训练将重新训练模型，可能影响正在进行的检测任务。确认继续？')) return
+  try {
+    const res = await triggerTraining(true)
+    if (res.status === 'completed') {
+      alert('训练完成')
+    } else if (res.status === 'failed') {
+      alert('训练失败: ' + (res.warning || ''))
+    } else {
+      alert('训练状态: ' + res.status)
     }
-    errorMsg.value = e instanceof Error ? e.message : String(e)
-    pollStatus.value = ''
+    await loadModelInfo()
+  } catch (e) {
+    errorMsg.value = '训练触发失败: ' + (e as Error).message
+  }
+}
+
+async function handleFeedback(taskId: string, resultIndex: number, judgment: 'correct' | 'wrong' | 'suspicious') {
+  if (isDetectionMockMode()) return
+  const key = `${taskId}-${resultIndex}`
+  feedbackSubmitting.value[key] = true
+  try {
+    await submitFeedback(taskId, judgment, null, `result_index:${resultIndex}`)
+  } catch (e) {
+    errorMsg.value = '反馈提交失败: ' + (e as Error).message
   } finally {
-    ruleCheckLoading.value = false
-    detectAbort.value = null
-    busy.value = false
+    feedbackSubmitting.value[key] = false
   }
 }
 
@@ -876,6 +901,8 @@ async function applyHistoryEntry(entry: DetectionHistoryEntry) {
 
 onMounted(() => {
   void refreshHistoryList()
+  void checkHealth()
+  void loadModelInfo()
 })
 
 async function runV3() {
@@ -1153,6 +1180,14 @@ onUnmounted(() => {
             <h1 class="brand-title">图像真伪检测</h1>
             <p class="brand-sub">检测图像是否存在后期篡改风险</p>
           </div>
+          <div class="topbar-health">
+            <span v-if="health" class="health-dot" :class="{ 'health-ok': health.status === 'ok', 'health-mock': health.status === 'mock' }" />
+            <span v-if="health" class="health-text">
+              字体库: {{ health.font_lib_size }} 条 | 模型: {{ health.global_model_loaded ? '已加载' : '未加载' }}
+            </span>
+            <span v-else-if="healthError" class="health-text health-err">{{ healthError }}</span>
+            <span v-else class="health-text">检查中...</span>
+          </div>
         </div>
       </div>
     </header>
@@ -1299,6 +1334,31 @@ onUnmounted(() => {
             {{ pollStatus }}
           </div>
           <p v-if="errorMsg" class="alert">{{ errorMsg }}</p>
+        </section>
+
+        <section class="card side-section">
+          <h2 class="section-title">模型管理</h2>
+          <div class="model-info-line">
+            <span class="model-info-text">{{ modelInfo }}</span>
+          </div>
+          <div class="model-actions">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              :disabled="busy || isDetectionMockMode()"
+              @click="handleReload"
+            >
+              热重载模型
+            </button>
+            <button
+              type="button"
+              class="btn btn-warning"
+              :disabled="busy || isDetectionMockMode()"
+              @click="handleTraining"
+            >
+              触发训练
+            </button>
+          </div>
         </section>
       </aside>
 
@@ -3255,5 +3315,130 @@ onUnmounted(() => {
   font-size: 0.78rem;
   color: #94a3b8;
   text-align: center;
+}
+
+/* ---- 顶部健康状态 ---- */
+
+.topbar-health {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: #cbd5e1;
+}
+
+.health-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+  flex-shrink: 0;
+}
+
+.health-dot.health-ok {
+  background: #4ade80;
+}
+
+.health-dot.health-mock {
+  background: #facc15;
+}
+
+.health-text {
+  white-space: nowrap;
+}
+
+.health-err {
+  color: #fca5a5;
+}
+
+/* ---- 模型管理 ---- */
+
+.model-info-line {
+  margin-bottom: 0.65rem;
+}
+
+.model-info-text {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+  word-break: break-all;
+}
+
+.model-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.btn-warning {
+  background: #f59e0b;
+  color: #fff;
+}
+
+.btn-warning:hover:not(:disabled) {
+  background: #d97706;
+}
+
+/* ---- 反馈按钮 ---- */
+
+.feedback-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-top: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.feedback-label {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  margin-right: 0.25rem;
+}
+
+.btn-feedback {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.15s;
+  font-family: inherit;
+}
+
+.btn-feedback:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-feedback-correct {
+  background: #f0fdf4;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.btn-feedback-correct:hover:not(:disabled) {
+  background: #dcfce7;
+}
+
+.btn-feedback-suspicious {
+  background: #fffbeb;
+  color: #92400e;
+  border-color: #fde68a;
+}
+
+.btn-feedback-suspicious:hover:not(:disabled) {
+  background: #fef3c7;
+}
+
+.btn-feedback-wrong {
+  background: #fef2f2;
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.btn-feedback-wrong:hover:not(:disabled) {
+  background: #fee2e2;
 }
 </style>

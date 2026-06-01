@@ -8,9 +8,10 @@ export default defineConfig(({ mode, command }) => {
     base: command === 'build' ? '/project3/' : '/',
     plugins: [vue()],
     server: {
+      port: 3030,
       proxy: {
         '/ai-detection': {
-          target: env.VITE_PROXY_TARGET || 'http://127.0.0.1:8000',
+          target: env.VITE_PROXY_TARGET || 'http://127.0.0.1:8030',
           changeOrigin: true,
           proxyTimeout: 600_000,
           timeout: 600_000,

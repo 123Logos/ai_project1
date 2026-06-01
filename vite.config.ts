@@ -63,7 +63,7 @@ function buildPredictProxy(env: Record<string, string>): Record<string, ProxyOpt
 
 /** AI 鉴伪接口代理 */
 function buildAiDetectionProxy(env: Record<string, string>): Record<string, ProxyOptions> {
-  const raw = (env.VITE_API_TARGET || DEFAULT_API_ORIGIN).trim()
+  const raw = (env.VITE_AI_DETECTION_TARGET || env.VITE_API_TARGET || DEFAULT_API_ORIGIN).trim()
   const target = raw.replace(/\/+$/, '')
   const secure = proxySecureFlag(env)
   const common = { target, changeOrigin: true, secure } satisfies ProxyOptions
