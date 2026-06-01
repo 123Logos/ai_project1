@@ -209,18 +209,6 @@ async function waitMs(ms: number): Promise<void> {
   await new Promise<void>((resolve) => setTimeout(resolve, ms))
 }
 
-async function waitWithCountdown(
-  totalSeconds: number,
-  render: (remainSeconds: number) => void,
-  signal?: AbortSignal,
-): Promise<void> {
-  for (let remain = totalSeconds; remain > 0; remain--) {
-    if (signal?.aborted) throw new DOMException('Aborted', 'AbortError')
-    render(remain)
-    await waitMs(1000)
-  }
-}
-
 function isDetectionMockMode(): boolean {
   return String(import.meta.env.VITE_USE_MOCK ?? '').trim() === '1'
 }
