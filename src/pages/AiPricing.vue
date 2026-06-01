@@ -1848,8 +1848,8 @@ function selectWarehouse(item: { id: number; name: string }) {
   }
 }
 
-async function loadMargins() {
-  marginLoading.value = true
+async function loadMargins(silent = false) {
+  if (!silent) marginLoading.value = true
   try {
     const res = await fetchWarehouseMargins({
       province: marginFilterProvince.value || undefined,
@@ -1864,7 +1864,7 @@ async function loadMargins() {
     marginTotal.value = 0
     console.error('加载库房差价和毛利失败:', e)
   } finally {
-    marginLoading.value = false
+    if (!silent) marginLoading.value = false
   }
 }
 
@@ -1908,7 +1908,7 @@ async function submitMarginForm() {
       await createWarehouseMargin({ ...f, warehouse_id: f.warehouse_id })
     }
     showMarginForm.value = false
-    await loadMargins()
+    await loadMargins(true)
   } catch (e) {
     marginFormError.value = e instanceof Error ? e.message : String(e)
   } finally {
@@ -1920,7 +1920,7 @@ async function handleMarginDelete(row: WarehouseMarginRow) {
   if (!confirm(`确定删除「${row.warehouse_name} - ${row.benchmark_city}」吗？`)) return
   try {
     await deleteWarehouseMargin(row.id)
-    await loadMargins()
+    await loadMargins(true)
   } catch (e) {
     alert(e instanceof Error ? e.message : String(e))
   }

@@ -27,7 +27,7 @@
       <p v-if="latestError && !latest" class="inline-error">{{ latestError }}</p>
       <p v-else-if="latestError && latest" class="inline-warn">{{ latestError }}</p>
 
-      <div v-if="latestLoading" class="summary-loading">正在加载最新标定价格…</div>
+      <div v-if="latestLoading" class="summary-loading">正在查询最新标定价格…</div>
       <div v-else-if="latest" class="price-summary">
         <div class="price-cell price-cell--main">
           <span class="price-label">标定价格</span>
@@ -53,7 +53,7 @@
         </div>
         <div class="filter-actions">
           <button class="btn btn-primary" :disabled="!selectedSmelterId || chartLoading || listLoading" @click="handleQuery">
-            查询
+            {{ chartLoading || listLoading ? '正在查询...' : '查询' }}
           </button>
           <button class="btn btn-secondary" :disabled="!selectedSmelterId" @click="resetFilters">重置</button>
         </div>
@@ -68,7 +68,7 @@
         </div>
         <p v-if="chartError" class="inline-error">{{ chartError }}</p>
         <div v-if="!selectedSmelterId" class="chart-empty">请先选择冶炼厂</div>
-        <div v-else-if="chartLoading" class="chart-empty">加载走势数据…</div>
+        <div v-else-if="chartLoading" class="chart-empty">正在查询走势数据…</div>
         <div v-else-if="chartSeries.length === 0" class="chart-empty">暂无走势数据，请调整日期范围后查询</div>
         <div v-else class="chart-wrap">
           <canvas
@@ -109,7 +109,7 @@
           </thead>
           <tbody>
             <tr v-if="listLoading">
-              <td colspan="4" class="empty-data">加载中…</td>
+              <td colspan="4" class="empty-data">正在查询…</td>
             </tr>
             <tr v-else-if="!selectedSmelterId">
               <td colspan="4" class="empty-data">请先选择冶炼厂</td>
@@ -235,8 +235,8 @@ function formatChange(n: number): string {
 
 function defaultChartDateRange(): { from: string; to: string } {
   const to = new Date()
-  const from = new Date()
-  from.setMonth(from.getMonth() - 3)
+  const from = new Date(to)
+  from.setDate(from.getDate() - 29)
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
   return { from: fmt(from), to: fmt(to) }
 }

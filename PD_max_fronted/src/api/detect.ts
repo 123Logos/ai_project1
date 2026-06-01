@@ -638,6 +638,11 @@ export type DetectSubmitOpts = {
   with_rule_checks?: boolean
 }
 
+export type RuleCheckSubmitOpts = DetectSubmitOpts & {
+  /** 与 async_v3 主鉴伪任务关联，便于历史记录聚合展示 */
+  task_id?: string | null
+}
+
 function appendDocumentTime(fd: FormData, documentTime?: string | null): void {
   const t = typeof documentTime === 'string' ? documentTime.trim() : ''
   if (t) fd.append('document_time', t)
@@ -1429,7 +1434,7 @@ async function postRuleCheckMultipart(
   path: string,
   file: File,
   fields: Record<string, string | undefined>,
-  opts?: DetectSubmitOpts,
+  opts?: RuleCheckSubmitOpts,
 ): Promise<RuleChecksData> {
   const fd = new FormData()
   fd.append('file', file)
@@ -1437,6 +1442,8 @@ async function postRuleCheckMultipart(
     if (v != null && v !== '') fd.append(k, v)
   }
   appendDocumentTime(fd, opts?.document_time)
+  const taskId = typeof opts?.task_id === 'string' ? opts.task_id.trim() : ''
+  if (taskId) fd.append('task_id', taskId)
   const res = await fetch(aiDetectionUrl(path), {
     method: 'POST',
     body: fd,
@@ -1454,7 +1461,7 @@ async function postRuleCheckMultipart(
 export async function submitRuleChecks(
   file: File,
   bbox?: BboxXYXY | null,
-  opts?: DetectSubmitOpts,
+  opts?: RuleCheckSubmitOpts,
 ): Promise<RuleChecksData> {
   const fields: Record<string, string | undefined> = {}
   if (bbox != null) fields.bbox = JSON.stringify(bbox)
@@ -1503,4 +1510,285 @@ export async function submitTimestampCheck(
   }
   const json: unknown = await res.json()
   return ruleCheckDataLayer(json) as RuleChecksTimestamp
+}
+
+// ---- 反馈标注 ----
+
+export interface FeedbackResult {
+  status: string
+  entry?: FeedbackEntry
+}
+
+export type FeedbackJudgment = 'correct' | 'wrong' | 'suspicious'
+
+export interface FeedbackEntry {
+  task_id?: string
+  judgment: FeedbackJudgment
+  timestamp?: string
+  updated_at?: string
+  confirmed_at?: string
+  bbox?: BboxXYXY | number[] | null
+  engine_result?: V3ResultItem | Record<string, unknown> | null
+  user_note?: string
+  entry_id?: string
+  folder_name: string
+  original_image?: string
+  cropped_roi?: string | null
+  image_url?: string | null
+  roi_url?: string | null
+  can_confirm?: boolean
+}
+
+export interface FeedbackListResult {
+  total: number
+  items: FeedbackEntry[]
+}
+
+export async function submitFeedback(
+  taskId: string,
+  judgment: FeedbackJudgment,
+  bbox?: BboxXYXY | null,
+  note?: string,
+): Promise<FeedbackResult> {
+  const body: Record<string, unknown> = {
+    task_id: taskId,
+    judgment,
+    note: note ?? '',
+  }
+  if (bbox != null) body.bbox = bbox
+  const res = await fetch(aiDetectionUrl('/api/v3/feedback/judge'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  return res.json() as Promise<FeedbackResult>
+}
+
+export async function fetchFeedbackEntries(
+  judgment?: FeedbackJudgment | 'all',
+): Promise<FeedbackListResult> {
+  const q = new URLSearchParams()
+  if (judgment && judgment !== 'all') q.set('judgment', judgment)
+  const suffix = q.toString()
+  const res = await fetch(`${aiDetectionUrl('/api/v3/feedback/list')}${suffix ? `?${suffix}` : ''}`)
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  const json = (await res.json()) as FeedbackListResult
+  return {
+    total: Number(json.total ?? 0),
+    items: Array.isArray(json.items) ? json.items : [],
+  }
+}
+
+export async function updateFeedbackEntry(
+  folderName: string,
+  judgment: FeedbackJudgment,
+  note?: string,
+): Promise<FeedbackResult> {
+  const res = await fetch(aiDetectionUrl(`/api/v3/feedback/${encodeURIComponent(folderName)}`), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ judgment, note }),
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  return res.json() as Promise<FeedbackResult>
+}
+
+export async function deleteFeedbackEntry(folderName: string): Promise<void> {
+  const res = await fetch(aiDetectionUrl(`/api/v3/feedback/${encodeURIComponent(folderName)}`), {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+}
+
+export async function deleteDetectionHistory(recordId: string | number): Promise<void> {
+  const res = await fetch(aiDetectionUrl(`/api/v1/history/${encodeURIComponent(String(recordId))}`), {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+}
+
+// ---- 训练集管理 ----
+
+export type TrainingDatasetLabel = 0 | 1
+export type TrainingDatasetFilter = TrainingDatasetLabel | 'all'
+
+export interface TrainingDatasetEntry {
+  filename: string
+  stem: string
+  base_stem: string
+  label: TrainingDatasetLabel
+  label_text: string
+  is_enhanced: boolean
+  has_annotation: boolean
+  json_name?: string | null
+  size_bytes: number
+  width?: number | null
+  height?: number | null
+  modified_at?: number
+  image_url?: string | null
+  json_url?: string | null
+}
+
+export interface TrainingDatasetSummary {
+  total: number
+  normal: number
+  tampered: number
+  annotations: number
+}
+
+export interface TrainingDatasetListResult {
+  status?: string
+  total: number
+  summary: TrainingDatasetSummary
+  items: TrainingDatasetEntry[]
+}
+
+function normalizeDatasetSummary(raw: Partial<TrainingDatasetSummary> | undefined): TrainingDatasetSummary {
+  return {
+    total: Number(raw?.total ?? 0),
+    normal: Number(raw?.normal ?? 0),
+    tampered: Number(raw?.tampered ?? 0),
+    annotations: Number(raw?.annotations ?? 0),
+  }
+}
+
+export async function fetchTrainingDatasetEntries(
+  label: TrainingDatasetFilter = 'all',
+  includeEnhanced = true,
+): Promise<TrainingDatasetListResult> {
+  const q = new URLSearchParams()
+  if (label !== 'all') q.set('label', String(label))
+  q.set('include_enhanced', includeEnhanced ? 'true' : 'false')
+  const res = await fetch(`${aiDetectionUrl('/api/v3/training-dataset/list')}?${q}`)
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  const json = (await res.json()) as TrainingDatasetListResult
+  return {
+    status: json.status,
+    total: Number(json.total ?? 0),
+    summary: normalizeDatasetSummary(json.summary),
+    items: Array.isArray(json.items) ? json.items : [],
+  }
+}
+
+export async function fetchTrainingDatasetAnnotation(filename: string): Promise<unknown> {
+  const res = await fetch(aiDetectionUrl(`/api/v3/training-dataset/${encodeURIComponent(filename)}/annotation`))
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  const json = (await res.json()) as { annotation?: unknown }
+  return json.annotation ?? null
+}
+
+export async function updateTrainingDatasetEntry(
+  filename: string,
+  label: TrainingDatasetLabel,
+): Promise<{ entry?: TrainingDatasetEntry; summary?: TrainingDatasetSummary }> {
+  const res = await fetch(aiDetectionUrl(`/api/v3/training-dataset/${encodeURIComponent(filename)}`), {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ label }),
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  const json = (await res.json()) as { entry?: TrainingDatasetEntry; summary?: TrainingDatasetSummary }
+  return { entry: json.entry, summary: json.summary ? normalizeDatasetSummary(json.summary) : undefined }
+}
+
+export async function deleteTrainingDatasetEntry(
+  filename: string,
+  deleteFamily = true,
+): Promise<{ summary?: TrainingDatasetSummary }> {
+  const q = new URLSearchParams({ delete_family: deleteFamily ? 'true' : 'false' })
+  const res = await fetch(`${aiDetectionUrl(`/api/v3/training-dataset/${encodeURIComponent(filename)}`)}?${q}`, {
+    method: 'DELETE',
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  const json = (await res.json()) as { summary?: TrainingDatasetSummary }
+  return { summary: json.summary ? normalizeDatasetSummary(json.summary) : undefined }
+}
+
+// ---- 运维与监控 ----
+
+export interface HealthStatus {
+  status: string
+  font_lib_ready: boolean
+  font_lib_size: number
+  global_model_loaded: boolean
+  ocr_available: boolean
+}
+
+export async function fetchHealth(): Promise<HealthStatus> {
+  const res = await fetch(aiDetectionUrl('/api/v3/health'))
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  return res.json() as Promise<HealthStatus>
+}
+
+export interface ModelVersions {
+  versions: Array<Record<string, unknown>>
+  current_model?: string
+}
+
+export async function fetchModels(): Promise<ModelVersions> {
+  const res = await fetch(aiDetectionUrl('/api/v3/models'))
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  return res.json() as Promise<ModelVersions>
+}
+
+export async function reloadModels(version?: string): Promise<{ status: string; detail: Record<string, unknown> }> {
+  const fd = new FormData()
+  if (version) fd.append('version', version)
+  const res = await fetch(aiDetectionUrl('/api/v3/reload'), {
+    method: 'POST',
+    body: fd,
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  return res.json() as Promise<{ status: string; detail: Record<string, unknown> }>
+}
+
+export async function triggerTraining(confirm: boolean): Promise<{ status: string; warning?: string; summary?: Record<string, unknown> }> {
+  const fd = new FormData()
+  fd.append('confirm', String(confirm))
+  const res = await fetch(aiDetectionUrl('/api/v3/train'), {
+    method: 'POST',
+    body: fd,
+  })
+  if (!res.ok) {
+    const t = await res.text()
+    throw new Error(httpFailMessage(res.status, t))
+  }
+  return res.json() as Promise<{ status: string; warning?: string; summary?: Record<string, unknown> }>
 }

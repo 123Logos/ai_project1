@@ -24,23 +24,36 @@
 
     <!-- ==================== 按大区经理查询 ==================== -->
     <div v-if="activeTab === 'manager'" class="query-section">
-      <div class="card">
+      <div class="card filter-card">
         <div class="filter-row">
           <div class="filter-item">
-            <label>送货日期</label>
+            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
             <div class="date-range">
-              <input type="date" v-model="managerFilters.startDate" class="filter-input" />
+              <input
+                type="date"
+                v-model="managerFilters.startDate"
+                class="filter-input"
+                @change="validateManagerDateRange"
+              />
               <span>至</span>
-              <input type="date" v-model="managerFilters.endDate" class="filter-input" />
+              <input
+                type="date"
+                v-model="managerFilters.endDate"
+                class="filter-input"
+                @change="validateManagerDateRange"
+              />
             </div>
           </div>
 
-          <!-- 大区经理多选 -->
           <div class="filter-item multi-select-item">
-            <label>大区经理</label>
+            <label>大区经理 <span class="filter-required">*</span></label>
             <div class="multi-select-container">
-              <div class="selected-tags" @click="focusManagerInput">
-                <span v-for="item in mfManagersTagsPreview" :key="item" class="tag tag-shrink">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(managerSelectedManagers)"
+                @click="focusManagerInput"
+              >
+                <span v-for="item in mfManagersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
                   {{ item }}
                   <button type="button" class="tag-remove" @click.stop="removeManager(item)">×</button>
                 </span>
@@ -49,12 +62,12 @@
                   class="tag tag-more tag-shrink"
                   :title="'还有：' + mfManagersTagsRest.join('、')"
                 >+{{ mfManagersTagsMore }}</span>
-                <input 
+                <input
                   ref="managerInputRef"
                   v-model="managerSearchText"
                   type="text"
                   class="multi-input"
-                  placeholder="搜索并选择"
+                  :placeholder="multiSelectPlaceholder(managerSelectedManagers)"
                   @input="onManagerSearchInput"
                   @focus="onManagerFocus"
                   @blur="closeManagerDropdown"
@@ -75,12 +88,15 @@
             </div>
           </div>
 
-          <!-- 冶炼厂多选 -->
-          <div class="filter-item multi-select-item">
-            <label>冶炼厂</label>
-            <div class="multi-select-container">
-              <div class="selected-tags" @click="focusSmelterInput">
-                <span v-for="item in mfSmeltersTagsPreview" :key="item" class="tag tag-shrink">
+          <div class="filter-item multi-select-item multi-select-item--wide">
+            <label>冶炼厂 <span class="filter-required">*</span></label>
+            <div class="multi-select-container multi-select-container--wide">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(managerSelectedSmelters)"
+                @click="focusSmelterInput"
+              >
+                <span v-for="item in mfSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
                   {{ item }}
                   <button type="button" class="tag-remove" @click.stop="removeSmelter(item)">×</button>
                 </span>
@@ -89,12 +105,12 @@
                   class="tag tag-more tag-shrink"
                   :title="'还有：' + mfSmeltersTagsRest.join('、')"
                 >+{{ mfSmeltersTagsMore }}</span>
-                <input 
+                <input
                   ref="smelterInputRef"
                   v-model="smelterSearchText"
                   type="text"
                   class="multi-input"
-                  placeholder="搜索并选择"
+                  :placeholder="multiSelectPlaceholder(managerSelectedSmelters)"
                   @input="onSmelterSearchInput"
                   @focus="onSmelterFocus"
                   @blur="closeSmelterDropdown"
@@ -116,16 +132,19 @@
           </div>
 
           <div class="filter-actions">
-            <button class="btn btn-primary" @click="queryManagerData" :disabled="loading">查询</button>
+            <button class="btn btn-primary" @click="queryManagerData" :disabled="loading || !canQueryHistory">
+              {{ loading ? '加载中...' : '查询' }}
+            </button>
             <button class="btn btn-secondary" @click="resetManagerFilters">重置</button>
             <button class="btn btn-danger" :disabled="managerSelectedRows.length === 0" @click="handleManagerBatchDelete">
               批量删除 ({{ managerSelectedRows.length }})
             </button>
           </div>
         </div>
+        <p v-if="activeTab === 'manager' && filterValidationHint" class="filter-validation-hint">{{ filterValidationHint }}</p>
       </div>
 
-      <div class="card">
+      <div class="card result-card">
         <div class="result-label">
           <span>有效合同明细（共 {{ managerTotal }} 条记录）</span>
           <span class="unit-hint">表中数量为重量(吨)</span>
@@ -169,23 +188,36 @@
 
     <!-- ==================== 按仓库查询 ==================== -->
     <div v-if="activeTab === 'warehouse'" class="query-section">
-      <div class="card">
+      <div class="card filter-card">
         <div class="filter-row">
           <div class="filter-item">
-            <label>送货日期</label>
+            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
             <div class="date-range">
-              <input type="date" v-model="warehouseFilters.startDate" class="filter-input" />
+              <input
+                type="date"
+                v-model="warehouseFilters.startDate"
+                class="filter-input"
+                @change="validateWarehouseDateRange"
+              />
               <span>至</span>
-              <input type="date" v-model="warehouseFilters.endDate" class="filter-input" />
+              <input
+                type="date"
+                v-model="warehouseFilters.endDate"
+                class="filter-input"
+                @change="validateWarehouseDateRange"
+              />
             </div>
           </div>
 
-          <!-- 仓库多选 -->
           <div class="filter-item multi-select-item">
-            <label>仓库</label>
+            <label>仓库 <span class="filter-required">*</span></label>
             <div class="multi-select-container">
-              <div class="selected-tags" @click="focusWarehouseInput">
-                <span v-for="item in wfWarehousesTagsPreview" :key="item" class="tag tag-shrink">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(warehouseSelectedWarehouses)"
+                @click="focusWarehouseInput"
+              >
+                <span v-for="item in wfWarehousesTagsPreview" :key="item" class="tag tag-shrink" :title="item">
                   {{ item }}
                   <button type="button" class="tag-remove" @click.stop="removeWarehouse(item)">×</button>
                 </span>
@@ -194,12 +226,12 @@
                   class="tag tag-more tag-shrink"
                   :title="'还有：' + wfWarehousesTagsRest.join('、')"
                 >+{{ wfWarehousesTagsMore }}</span>
-                <input 
+                <input
                   ref="warehouseInputRef"
                   v-model="warehouseSearchText"
                   type="text"
                   class="multi-input"
-                  placeholder="搜索并选择"
+                  :placeholder="multiSelectPlaceholder(warehouseSelectedWarehouses)"
                   @input="onWarehouseSearchInput"
                   @focus="onWarehouseFocus"
                   @blur="closeWarehouseDropdown"
@@ -220,12 +252,15 @@
             </div>
           </div>
 
-          <!-- 大区经理多选 -->
           <div class="filter-item multi-select-item">
-            <label>大区经理</label>
+            <label>大区经理 <span class="filter-required">*</span></label>
             <div class="multi-select-container">
-              <div class="selected-tags" @click="focusWarehouseManagerInput">
-                <span v-for="item in wfManagersTagsPreview" :key="item" class="tag tag-shrink">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(warehouseSelectedManagers)"
+                @click="focusWarehouseManagerInput"
+              >
+                <span v-for="item in wfManagersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
                   {{ item }}
                   <button type="button" class="tag-remove" @click.stop="removeWarehouseManager(item)">×</button>
                 </span>
@@ -234,12 +269,12 @@
                   class="tag tag-more tag-shrink"
                   :title="'还有：' + wfManagersTagsRest.join('、')"
                 >+{{ wfManagersTagsMore }}</span>
-                <input 
+                <input
                   ref="warehouseManagerInputRef"
                   v-model="warehouseManagerSearchText"
                   type="text"
                   class="multi-input"
-                  placeholder="搜索并选择"
+                  :placeholder="multiSelectPlaceholder(warehouseSelectedManagers)"
                   @input="onWarehouseManagerSearchInput"
                   @focus="onWarehouseManagerFocus"
                   @blur="closeWarehouseManagerDropdown"
@@ -260,12 +295,15 @@
             </div>
           </div>
 
-          <!-- 冶炼厂多选 -->
-          <div class="filter-item multi-select-item">
-            <label>冶炼厂</label>
-            <div class="multi-select-container">
-              <div class="selected-tags" @click="focusWarehouseSmelterInput">
-                <span v-for="item in wfSmeltersTagsPreview" :key="item" class="tag tag-shrink">
+          <div class="filter-item multi-select-item multi-select-item--wide">
+            <label>冶炼厂 <span class="filter-required">*</span></label>
+            <div class="multi-select-container multi-select-container--wide">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(warehouseSelectedSmelters)"
+                @click="focusWarehouseSmelterInput"
+              >
+                <span v-for="item in wfSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
                   {{ item }}
                   <button type="button" class="tag-remove" @click.stop="removeWarehouseSmelter(item)">×</button>
                 </span>
@@ -274,12 +312,12 @@
                   class="tag tag-more tag-shrink"
                   :title="'还有：' + wfSmeltersTagsRest.join('、')"
                 >+{{ wfSmeltersTagsMore }}</span>
-                <input 
+                <input
                   ref="warehouseSmelterInputRef"
                   v-model="warehouseSmelterSearchText"
                   type="text"
                   class="multi-input"
-                  placeholder="搜索并选择"
+                  :placeholder="multiSelectPlaceholder(warehouseSelectedSmelters)"
                   @input="onWarehouseSmelterSearchInput"
                   @focus="onWarehouseSmelterFocus"
                   @blur="closeWarehouseSmelterDropdown"
@@ -301,16 +339,19 @@
           </div>
 
           <div class="filter-actions">
-            <button class="btn btn-primary" @click="queryWarehouseData" :disabled="loading">查询</button>
+            <button class="btn btn-primary" @click="queryWarehouseData" :disabled="loading || !canQueryHistory">
+              {{ loading ? '加载中...' : '查询' }}
+            </button>
             <button class="btn btn-secondary" @click="resetWarehouseFilters">重置</button>
             <button class="btn btn-danger" :disabled="warehouseSelectedRows.length === 0" @click="handleWarehouseBatchDelete">
               批量删除 ({{ warehouseSelectedRows.length }})
             </button>
           </div>
         </div>
+        <p v-if="activeTab === 'warehouse' && filterValidationHint" class="filter-validation-hint">{{ filterValidationHint }}</p>
       </div>
 
-      <div class="card">
+      <div class="card result-card">
         <div class="result-label">
           <span>有效合同明细（共 {{ warehouseTotal }} 条记录）</span>
           <span class="unit-hint">表中数量为重量(吨)</span>
@@ -378,7 +419,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, type Ref } from 'vue'
 import axios from 'axios'
 import { ApiPaths } from '../api/paths'
 import { DELIVERY_HISTORY_FETCH_PAGE_SIZE } from '../api/fetchLimits'
@@ -485,6 +526,124 @@ const closeErrorModal = () => {
   errorModalVisible.value = false
   errorModalMessage.value = ''
   errorModalDetails.value = []
+}
+
+const DEFAULT_SMELTER = '河南金利金铅集团有限公司'
+
+function defaultHistoryDateRange(): { startDate: string; endDate: string } {
+  const start = new Date()
+  const end = new Date(start)
+  end.setDate(end.getDate() + 14)
+  const fmt = (d: Date) => d.toISOString().slice(0, 10)
+  return { startDate: fmt(start), endDate: fmt(end) }
+}
+
+function applyDefaultHistoryDateRange() {
+  const range = defaultHistoryDateRange()
+  managerFilters.value = { ...range }
+  warehouseFilters.value = { ...range }
+}
+
+function validateHistoryDateRange(f: Ref<{ startDate: string; endDate: string }>) {
+  const startStr = f.value.startDate
+  const endStr = f.value.endDate
+  if (!startStr || !endStr) return
+  const start = new Date(startStr)
+  const end = new Date(endStr)
+  if (start > end) {
+    showError('开始日期不能晚于结束日期', [])
+    f.value.endDate = startStr
+    return
+  }
+  const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+  if (days > 14) {
+    showError('日期范围最多可选15天（含起止日）', [])
+    const cap = new Date(start)
+    cap.setDate(cap.getDate() + 14)
+    f.value.endDate = cap.toISOString().slice(0, 10)
+  }
+}
+
+function validateManagerDateRange() {
+  validateHistoryDateRange(managerFilters)
+}
+
+function validateWarehouseDateRange() {
+  validateHistoryDateRange(warehouseFilters)
+}
+
+function multiSelectTagsClass(selected: string[]) {
+  return { 'selected-tags--single': selected.length === 1 }
+}
+
+function multiSelectPlaceholder(selected: string[]) {
+  return selected.length > 0 ? '' : '搜索并选择'
+}
+
+function applyDefaultSmelterSelection() {
+  if (!allSmelterOptions.value.includes(DEFAULT_SMELTER)) {
+    allSmelterOptions.value = [...allSmelterOptions.value, DEFAULT_SMELTER].sort((a, b) =>
+      a.localeCompare(b, 'zh-CN'),
+    )
+    filterSmelterOptions()
+    filterWarehouseSmelterOptions()
+  }
+  managerSelectedSmelters.value = [DEFAULT_SMELTER]
+  warehouseSelectedSmelters.value = [DEFAULT_SMELTER]
+}
+
+function getHistoryFilterValidationError(tab: 'manager' | 'warehouse' = activeTab.value as 'manager' | 'warehouse'): string | null {
+  if (tab === 'manager') {
+    const missing: string[] = []
+    if (managerSelectedManagers.value.length === 0) missing.push('大区经理')
+    if (managerSelectedSmelters.value.length === 0) missing.push('冶炼厂')
+    if (missing.length > 0) return `请先选择${missing.join('、')}后再查询`
+    const f = managerFilters.value
+    if (!f.startDate || !f.endDate) return '请选择送货日期范围'
+    return null
+  }
+  const missing: string[] = []
+  if (warehouseSelectedWarehouses.value.length === 0) missing.push('仓库')
+  if (warehouseSelectedManagers.value.length === 0) missing.push('大区经理')
+  if (warehouseSelectedSmelters.value.length === 0) missing.push('冶炼厂')
+  if (missing.length > 0) return `请先选择${missing.join('、')}后再查询`
+  const f = warehouseFilters.value
+  if (!f.startDate || !f.endDate) return '请选择送货日期范围'
+  return null
+}
+
+const filterValidationHint = computed(() => getHistoryFilterValidationError() ?? '')
+
+const canQueryHistory = computed(() => getHistoryFilterValidationError() === null)
+
+function clearManagerQueryResults() {
+  managerTableRows.value = []
+  managerDateColumns.value = []
+  managerTotal.value = 0
+  managerCurrentPage.value = 1
+  managerSelectedRows.value = []
+}
+
+function clearWarehouseQueryResults() {
+  warehouseTableRows.value = []
+  warehouseDateColumns.value = []
+  warehouseTotal.value = 0
+  warehouseCurrentPage.value = 1
+  warehouseSelectedRows.value = []
+}
+
+function applyInitialHistoryFilterDefaults() {
+  if (!managerFilters.value.startDate || !managerFilters.value.endDate) {
+    const range = defaultHistoryDateRange()
+    managerFilters.value = { ...range }
+  }
+  if (!warehouseFilters.value.startDate || !warehouseFilters.value.endDate) {
+    const range = defaultHistoryDateRange()
+    warehouseFilters.value = { ...range }
+  }
+  if (managerSelectedSmelters.value.length === 0 || warehouseSelectedSmelters.value.length === 0) {
+    applyDefaultSmelterSelection()
+  }
 }
 
 // ==================== 按大区经理查询 ====================
@@ -676,6 +835,11 @@ const focusSmelterInput = () => {
 
 // 按大区经理查询
 async function queryManagerData() {
+  const err = getHistoryFilterValidationError('manager')
+  if (err) {
+    showError(err)
+    return
+  }
   loading.value = true
   try {
     const baseParams: Record<string, unknown> = {}
@@ -747,15 +911,12 @@ async function queryManagerData() {
 }
 
 function resetManagerFilters() {
-  managerFilters.value = {
-    startDate: '',
-    endDate: ''
-  }
   managerSelectedManagers.value = []
-  managerSelectedSmelters.value = []
   managerSearchText.value = ''
   smelterSearchText.value = ''
-  queryManagerData()
+  applyDefaultHistoryDateRange()
+  applyDefaultSmelterSelection()
+  clearManagerQueryResults()
 }
 
 function toggleManagerSelectAll() {
@@ -1070,6 +1231,11 @@ const focusWarehouseSmelterInput = () => {
 
 // 按仓库查询
 async function queryWarehouseData() {
+  const err = getHistoryFilterValidationError('warehouse')
+  if (err) {
+    showError(err)
+    return
+  }
   loading.value = true
   try {
     const baseParams: Record<string, unknown> = {}
@@ -1158,17 +1324,14 @@ async function queryWarehouseData() {
 }
 
 function resetWarehouseFilters() {
-  warehouseFilters.value = {
-    startDate: '',
-    endDate: ''
-  }
   warehouseSelectedWarehouses.value = []
   warehouseSelectedManagers.value = []
-  warehouseSelectedSmelters.value = []
   warehouseSearchText.value = ''
   warehouseManagerSearchText.value = ''
   warehouseSmelterSearchText.value = ''
-  queryWarehouseData()
+  applyDefaultHistoryDateRange()
+  applyDefaultSmelterSelection()
+  clearWarehouseQueryResults()
 }
 
 function toggleWarehouseSelectAll() {
@@ -1300,8 +1463,7 @@ watch(
 onMounted(async () => {
   loadPersistedHistoryQuery()
   await refreshDeliveryHistoryDimensionFilters()
-  queryManagerData()
-  queryWarehouseData()
+  applyInitialHistoryFilterDefaults()
 })
 
 onBeforeUnmount(() => {
@@ -1312,7 +1474,19 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .history-query-page { width: 100%; animation: fadeIn 0.25s ease both; }
+.query-section { width: 100%; overflow: visible; }
 .card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); animation: fadeInUp 0.3s ease both; }
+
+.filter-card {
+  position: relative;
+  z-index: 40;
+  overflow: visible;
+}
+
+.result-card {
+  position: relative;
+  z-index: 1;
+}
 
 .menu-search-bar {
   display: flex;
@@ -1352,7 +1526,8 @@ onBeforeUnmount(() => {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
-  align-items: center;
+  align-items: flex-start;
+  overflow: visible;
 }
 
 .filter-item {
@@ -1360,12 +1535,31 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 6px;
   min-width: 140px;
+  overflow: visible;
 }
 
 .filter-item label {
   font-size: 13px;
   font-weight: 500;
   color: #606266;
+}
+
+.date-hint {
+  font-size: 11px;
+  color: #909399;
+  font-weight: normal;
+}
+
+.filter-required {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.filter-validation-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #b45309;
 }
 
 .date-range {
@@ -1395,10 +1589,21 @@ onBeforeUnmount(() => {
   max-width: 280px;
 }
 
+.multi-select-item--wide {
+  min-width: 300px;
+  max-width: 380px;
+  flex: 1 1 300px;
+}
+
 .multi-select-container {
   position: relative;
   width: 100%;
   max-width: 280px;
+  overflow: visible;
+}
+
+.multi-select-container--wide {
+  max-width: 100%;
 }
 
 .selected-tags {
@@ -1416,6 +1621,28 @@ onBeforeUnmount(() => {
   overflow: hidden;
   cursor: text;
   box-sizing: border-box;
+}
+
+.selected-tags--single {
+  height: auto;
+  min-height: 32px;
+  max-height: none;
+  flex-wrap: nowrap;
+  overflow: visible;
+}
+
+.selected-tags--single .tag {
+  max-width: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.selected-tags--single .multi-input {
+  flex: 0 0 24px;
+  min-width: 24px;
+  width: 24px;
 }
 
 .tag {
@@ -1480,13 +1707,13 @@ onBeforeUnmount(() => {
   top: 100%;
   left: 0;
   right: 0;
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
   background: white;
   border: 1px solid #E5E9F2;
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 2500;
   margin-top: 2px;
 }
 
@@ -1496,6 +1723,8 @@ onBeforeUnmount(() => {
   font-size: 13px;
   color: #606266;
   text-align: left;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
 .dropdown-item:hover {

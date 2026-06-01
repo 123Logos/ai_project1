@@ -30,21 +30,8 @@
       </div>
     </div>
 
-    <div class="card chart-summary-card">
-      <div class="result-label">
-        <span>预测趋势（汇总）</span>
-        <span v-if="chartLoading" class="unit-hint">加载中…</span>
-      </div>
-      <ForecastBasisPanel :summary="chartSummaryAnalysis" :placeholder="chartBasisPlaceholder" />
-      <div class="summary-chart-wrap">
-        <p v-if="!chartLoading && chartDates.length === 0" class="chart-empty-hint">暂无趋势数据，请设置筛选条件后查询。</p>
-        <canvas v-else ref="summaryChartCanvasRef"></canvas>
-      </div>
-    </div>
-
-    <div v-if="forecastActiveTab === 'manager'" class="query-section">
-      <div class="card">
-        <div class="filter-row">
+    <div v-if="forecastActiveTab === 'manager'" class="card filter-card">
+      <div class="filter-row">
           <div class="filter-item">
             <label>送货日期 <span class="date-hint">(最多15天)</span></label>
             <div class="date-range">
@@ -65,10 +52,14 @@
           </div>
 
           <div class="filter-item multi-select-item">
-            <label>大区经理</label>
+            <label>大区经理 <span class="filter-required">*</span></label>
             <div class="multi-select-container">
-              <div class="selected-tags" @click="focusMgrManagerInput">
-                <span v-for="item in mgrManagersTagsPreview" :key="item" class="tag tag-shrink">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(forecastMgrSelectedManagers)"
+                @click="focusMgrManagerInput"
+              >
+                <span v-for="item in mgrManagersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
                   {{ item }}
                   <button type="button" class="tag-remove" @click.stop="removeMgrManager(item)">×</button>
                 </span>
@@ -82,7 +73,7 @@
                   v-model="mgrManagerSearchText"
                   type="text"
                   class="multi-input"
-                  placeholder="搜索并选择"
+                  :placeholder="multiSelectPlaceholder(forecastMgrSelectedManagers)"
                   @input="onMgrManagerSearchInput"
                   @focus="onMgrManagerFocus"
                   @blur="closeMgrManagerDropdown"
@@ -103,11 +94,15 @@
             </div>
           </div>
 
-          <div class="filter-item multi-select-item">
-            <label>冶炼厂</label>
-            <div class="multi-select-container">
-              <div class="selected-tags" @click="focusMgrSmelterInput">
-                <span v-for="item in mgrSmeltersTagsPreview" :key="item" class="tag tag-shrink">
+          <div class="filter-item multi-select-item multi-select-item--wide">
+            <label>冶炼厂 <span class="filter-required">*</span></label>
+            <div class="multi-select-container multi-select-container--wide">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(forecastMgrSelectedSmelters)"
+                @click="focusMgrSmelterInput"
+              >
+                <span v-for="item in mgrSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
                   {{ item }}
                   <button type="button" class="tag-remove" @click.stop="removeMgrSmelter(item)">×</button>
                 </span>
@@ -121,7 +116,7 @@
                   v-model="mgrSmelterSearchText"
                   type="text"
                   class="multi-input"
-                  placeholder="搜索并选择"
+                  :placeholder="multiSelectPlaceholder(forecastMgrSelectedSmelters)"
                   @input="onMgrSmelterSearchInput"
                   @focus="onMgrSmelterFocus"
                   @blur="closeMgrSmelterDropdown"
@@ -143,14 +138,228 @@
           </div>
 
           <div class="filter-actions">
-            <button class="btn btn-primary" @click="handleQuery" :disabled="loading">
+            <button class="btn btn-primary" @click="handleQuery" :disabled="loading || !canQueryForecast">
               {{ loading ? '加载中...' : '查询' }}
             </button>
             <button class="btn btn-secondary" @click="handleReset">重置</button>
           </div>
         </div>
-      </div>
+      <p v-if="filterValidationHint" class="filter-validation-hint">{{ filterValidationHint }}</p>
+    </div>
 
+    <div v-if="forecastActiveTab === 'warehouse'" class="card filter-card">
+      <div class="filter-row">
+          <div class="filter-item">
+            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
+            <div class="date-range">
+              <input
+                type="date"
+                v-model="forecastWhFilters.startDate"
+                class="filter-input"
+                @change="validateWhForecastDateRange"
+              />
+              <span>至</span>
+              <input
+                type="date"
+                v-model="forecastWhFilters.endDate"
+                class="filter-input"
+                @change="validateWhForecastDateRange"
+              />
+            </div>
+          </div>
+
+          <div class="filter-item multi-select-item">
+            <label>仓库 <span class="filter-required">*</span></label>
+            <div class="multi-select-container">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(forecastWhSelectedWarehouses)"
+                @click="focusWhWarehouseInput"
+              >
+                <span v-for="item in whWarehousesTagsPreview" :key="item" class="tag tag-shrink" :title="item">
+                  {{ item }}
+                  <button type="button" class="tag-remove" @click.stop="removeWhWarehouse(item)">×</button>
+                </span>
+                <span
+                  v-if="whWarehousesTagsMore > 0"
+                  class="tag tag-more tag-shrink"
+                  :title="'还有：' + whWarehousesTagsRest.join('、')"
+                >+{{ whWarehousesTagsMore }}</span>
+                <input
+                  ref="whWarehouseInputRef"
+                  v-model="whWarehouseSearchText"
+                  type="text"
+                  class="multi-input"
+                  :placeholder="multiSelectPlaceholder(forecastWhSelectedWarehouses)"
+                  @input="onWhWarehouseSearchInput"
+                  @focus="onWhWarehouseFocus"
+                  @blur="closeWhWarehouseDropdown"
+                  @keydown.enter="handleWhWarehouseKeydown"
+                />
+              </div>
+              <div v-show="whWarehouseDropdownVisible && filteredWhWarehouseOptions.length > 0" class="dropdown-list">
+                <div
+                  v-for="item in filteredWhWarehouseOptions"
+                  :key="item"
+                  class="dropdown-item"
+                  :class="{ 'dropdown-item--selected': forecastWhSelectedWarehouses.includes(item) }"
+                  @mousedown.prevent="onWhWarehouseDropdownPick(item)"
+                >
+                  {{ item }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-item multi-select-item">
+            <label>大区经理 <span class="filter-required">*</span></label>
+            <div class="multi-select-container">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(forecastWhSelectedManagers)"
+                @click="focusWhManagerInput"
+              >
+                <span v-for="item in whManagersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
+                  {{ item }}
+                  <button type="button" class="tag-remove" @click.stop="removeWhManager(item)">×</button>
+                </span>
+                <span
+                  v-if="whManagersTagsMore > 0"
+                  class="tag tag-more tag-shrink"
+                  :title="'还有：' + whManagersTagsRest.join('、')"
+                >+{{ whManagersTagsMore }}</span>
+                <input
+                  ref="whManagerInputRef"
+                  v-model="whManagerSearchText"
+                  type="text"
+                  class="multi-input"
+                  :placeholder="multiSelectPlaceholder(forecastWhSelectedManagers)"
+                  @input="onWhManagerSearchInput"
+                  @focus="onWhManagerFocus"
+                  @blur="closeWhManagerDropdown"
+                  @keydown.enter="handleWhManagerKeydown"
+                />
+              </div>
+              <div v-show="whManagerDropdownVisible && filteredWhManagerOptions.length > 0" class="dropdown-list">
+                <div
+                  v-for="item in filteredWhManagerOptions"
+                  :key="item"
+                  class="dropdown-item"
+                  :class="{ 'dropdown-item--selected': forecastWhSelectedManagers.includes(item) }"
+                  @mousedown.prevent="onWhManagerDropdownPick(item)"
+                >
+                  {{ item }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-item multi-select-item multi-select-item--wide">
+            <label>冶炼厂 <span class="filter-required">*</span></label>
+            <div class="multi-select-container multi-select-container--wide">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(forecastWhSelectedSmelters)"
+                @click="focusWhSmelterInput"
+              >
+                <span v-for="item in whSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
+                  {{ item }}
+                  <button type="button" class="tag-remove" @click.stop="removeWhSmelter(item)">×</button>
+                </span>
+                <span
+                  v-if="whSmeltersTagsMore > 0"
+                  class="tag tag-more tag-shrink"
+                  :title="'还有：' + whSmeltersTagsRest.join('、')"
+                >+{{ whSmeltersTagsMore }}</span>
+                <input
+                  ref="whSmelterInputRef"
+                  v-model="whSmelterSearchText"
+                  type="text"
+                  class="multi-input"
+                  :placeholder="multiSelectPlaceholder(forecastWhSelectedSmelters)"
+                  @input="onWhSmelterSearchInput"
+                  @focus="onWhSmelterFocus"
+                  @blur="closeWhSmelterDropdown"
+                  @keydown.enter="handleWhSmelterKeydown"
+                />
+              </div>
+              <div v-show="whSmelterDropdownVisible && filteredWhSmelterOptions.length > 0" class="dropdown-list">
+                <div
+                  v-for="item in filteredWhSmelterOptions"
+                  :key="item"
+                  class="dropdown-item"
+                  :class="{ 'dropdown-item--selected': forecastWhSelectedSmelters.includes(item) }"
+                  @mousedown.prevent="onWhSmelterDropdownPick(item)"
+                >
+                  {{ item }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-actions">
+            <button class="btn btn-primary" @click="handleQuery" :disabled="loading || !canQueryForecast">
+              {{ loading ? '加载中...' : '查询' }}
+            </button>
+            <button class="btn btn-secondary" @click="handleReset">重置</button>
+          </div>
+        </div>
+      <p v-if="filterValidationHint" class="filter-validation-hint">{{ filterValidationHint }}</p>
+    </div>
+
+    <div v-if="forecastActiveTab === 'detail'" class="card filter-card">
+      <div class="filter-row">
+          <div class="filter-item">
+            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
+            <div class="date-range">
+              <input
+                type="date"
+                v-model="detailTabFilters.startDate"
+                class="filter-input"
+                @change="validateDetailTabDateRange"
+              />
+              <span>至</span>
+              <input
+                type="date"
+                v-model="detailTabFilters.endDate"
+                class="filter-input"
+                @change="validateDetailTabDateRange"
+              />
+            </div>
+          </div>
+          <div class="filter-actions">
+            <span v-if="loading" class="filter-auto-hint">加载中…</span>
+            <button class="btn btn-secondary" @click="handleReset">重置</button>
+          </div>
+        </div>
+    </div>
+
+    <div class="card chart-summary-card">
+      <div class="result-label">
+        <span>预测趋势（汇总）</span>
+        <span v-if="chartLoading" class="unit-hint">加载中…</span>
+      </div>
+      <ForecastBasisPanel :summary="chartSummaryAnalysis" :placeholder="chartBasisPlaceholder" />
+      <div class="summary-chart-wrap">
+        <p v-if="!chartLoading && chartDates.length === 0" class="chart-empty-hint">{{ chartEmptyHint }}</p>
+        <canvas
+          v-else
+          ref="summaryChartCanvasRef"
+          @mousemove="onSummaryChartMouseMove"
+          @mouseleave="onSummaryChartMouseLeave"
+        ></canvas>
+        <div
+          v-if="summaryHoverIndex >= 0"
+          class="summary-chart-tooltip"
+          :style="summaryTooltipStyle"
+        >
+          <div class="summary-tooltip-date">{{ chartDates[summaryHoverIndex] }}</div>
+          <div class="summary-tooltip-value">{{ formatTrendValue(chartTotalByDate[summaryHoverIndex]) }} 吨</div>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="forecastActiveTab === 'manager'" class="query-section">
       <div class="card">
         <div class="result-label">
           <span>按大区经理（共 {{ forecastManagerTotal }} 行）</span>
@@ -196,153 +405,6 @@
     </div>
 
     <div v-if="forecastActiveTab === 'warehouse'" class="query-section">
-      <div class="card">
-        <div class="filter-row">
-          <div class="filter-item">
-            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
-            <div class="date-range">
-              <input
-                type="date"
-                v-model="forecastWhFilters.startDate"
-                class="filter-input"
-                @change="validateWhForecastDateRange"
-              />
-              <span>至</span>
-              <input
-                type="date"
-                v-model="forecastWhFilters.endDate"
-                class="filter-input"
-                @change="validateWhForecastDateRange"
-              />
-            </div>
-          </div>
-
-          <div class="filter-item multi-select-item">
-            <label>仓库</label>
-            <div class="multi-select-container">
-              <div class="selected-tags" @click="focusWhWarehouseInput">
-                <span v-for="item in whWarehousesTagsPreview" :key="item" class="tag tag-shrink">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeWhWarehouse(item)">×</button>
-                </span>
-                <span
-                  v-if="whWarehousesTagsMore > 0"
-                  class="tag tag-more tag-shrink"
-                  :title="'还有：' + whWarehousesTagsRest.join('、')"
-                >+{{ whWarehousesTagsMore }}</span>
-                <input
-                  ref="whWarehouseInputRef"
-                  v-model="whWarehouseSearchText"
-                  type="text"
-                  class="multi-input"
-                  placeholder="搜索并选择"
-                  @input="onWhWarehouseSearchInput"
-                  @focus="onWhWarehouseFocus"
-                  @blur="closeWhWarehouseDropdown"
-                  @keydown.enter="handleWhWarehouseKeydown"
-                />
-              </div>
-              <div v-show="whWarehouseDropdownVisible && filteredWhWarehouseOptions.length > 0" class="dropdown-list">
-                <div
-                  v-for="item in filteredWhWarehouseOptions"
-                  :key="item"
-                  class="dropdown-item"
-                  :class="{ 'dropdown-item--selected': forecastWhSelectedWarehouses.includes(item) }"
-                  @mousedown.prevent="onWhWarehouseDropdownPick(item)"
-                >
-                  {{ item }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="filter-item multi-select-item">
-            <label>大区经理</label>
-            <div class="multi-select-container">
-              <div class="selected-tags" @click="focusWhManagerInput">
-                <span v-for="item in whManagersTagsPreview" :key="item" class="tag tag-shrink">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeWhManager(item)">×</button>
-                </span>
-                <span
-                  v-if="whManagersTagsMore > 0"
-                  class="tag tag-more tag-shrink"
-                  :title="'还有：' + whManagersTagsRest.join('、')"
-                >+{{ whManagersTagsMore }}</span>
-                <input
-                  ref="whManagerInputRef"
-                  v-model="whManagerSearchText"
-                  type="text"
-                  class="multi-input"
-                  placeholder="搜索并选择"
-                  @input="onWhManagerSearchInput"
-                  @focus="onWhManagerFocus"
-                  @blur="closeWhManagerDropdown"
-                  @keydown.enter="handleWhManagerKeydown"
-                />
-              </div>
-              <div v-show="whManagerDropdownVisible && filteredWhManagerOptions.length > 0" class="dropdown-list">
-                <div
-                  v-for="item in filteredWhManagerOptions"
-                  :key="item"
-                  class="dropdown-item"
-                  :class="{ 'dropdown-item--selected': forecastWhSelectedManagers.includes(item) }"
-                  @mousedown.prevent="onWhManagerDropdownPick(item)"
-                >
-                  {{ item }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="filter-item multi-select-item">
-            <label>冶炼厂</label>
-            <div class="multi-select-container">
-              <div class="selected-tags" @click="focusWhSmelterInput">
-                <span v-for="item in whSmeltersTagsPreview" :key="item" class="tag tag-shrink">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeWhSmelter(item)">×</button>
-                </span>
-                <span
-                  v-if="whSmeltersTagsMore > 0"
-                  class="tag tag-more tag-shrink"
-                  :title="'还有：' + whSmeltersTagsRest.join('、')"
-                >+{{ whSmeltersTagsMore }}</span>
-                <input
-                  ref="whSmelterInputRef"
-                  v-model="whSmelterSearchText"
-                  type="text"
-                  class="multi-input"
-                  placeholder="搜索并选择"
-                  @input="onWhSmelterSearchInput"
-                  @focus="onWhSmelterFocus"
-                  @blur="closeWhSmelterDropdown"
-                  @keydown.enter="handleWhSmelterKeydown"
-                />
-              </div>
-              <div v-show="whSmelterDropdownVisible && filteredWhSmelterOptions.length > 0" class="dropdown-list">
-                <div
-                  v-for="item in filteredWhSmelterOptions"
-                  :key="item"
-                  class="dropdown-item"
-                  :class="{ 'dropdown-item--selected': forecastWhSelectedSmelters.includes(item) }"
-                  @mousedown.prevent="onWhSmelterDropdownPick(item)"
-                >
-                  {{ item }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="filter-actions">
-            <button class="btn btn-primary" @click="handleQuery" :disabled="loading">
-              {{ loading ? '加载中...' : '查询' }}
-            </button>
-            <button class="btn btn-secondary" @click="handleReset">重置</button>
-          </div>
-        </div>
-      </div>
-
       <div class="card">
         <div class="result-label">
           <span>按仓库（共 {{ forecastWarehouseTotal }} 行）</span>
@@ -391,34 +453,6 @@
 
     <div v-if="forecastActiveTab === 'detail'" class="query-section">
       <div class="card">
-        <div class="filter-row">
-          <div class="filter-item">
-            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
-            <div class="date-range">
-              <input
-                type="date"
-                v-model="detailTabFilters.startDate"
-                class="filter-input"
-                @change="validateDetailTabDateRange"
-              />
-              <span>至</span>
-              <input
-                type="date"
-                v-model="detailTabFilters.endDate"
-                class="filter-input"
-                @change="validateDetailTabDateRange"
-              />
-            </div>
-          </div>
-          <div class="filter-actions">
-            <button class="btn btn-primary" @click="handleQuery" :disabled="loading">
-              {{ loading ? '加载中...' : '查询' }}
-            </button>
-            <button class="btn btn-secondary" @click="handleReset">重置</button>
-          </div>
-        </div>
-      </div>
-      <div class="card">
         <div class="result-label">
           <span>预测明细（共 {{ detailRows.length }} 条，点击行查看完整预测依据）</span>
         </div>
@@ -448,7 +482,10 @@
                 <td>{{ row.smelter || '—' }}</td>
                 <td>{{ row.productVariety }}</td>
                 <td>{{ row.predictedWeight.toFixed(2) }}</td>
-                <td class="analysis-cell" :title="row.analysis || ''">{{ truncateAnalysis(row.analysis) }}</td>
+                <td class="analysis-cell">
+                  <span class="analysis-cell-preview">{{ truncateAnalysis(row.analysis) }}</span>
+                  <span class="analysis-cell-action">查看</span>
+                </td>
               </tr>
               <tr v-if="detailTablePageRows.length === 0">
                 <td colspan="7" class="empty-data">暂无数据</td>
@@ -481,20 +518,42 @@
         </div>
         <div class="modal-body">
           <div class="modal-chart-wrap">
-            <canvas ref="rowTrendCanvas"></canvas>
+            <canvas
+              ref="rowTrendCanvas"
+              @mousemove="onTrendChartMouseMove"
+              @mouseleave="onTrendChartMouseLeave"
+            ></canvas>
+            <div
+              v-if="trendHoverIndex >= 0"
+              class="chart-tooltip"
+              :style="trendTooltipStyle"
+            >
+              <div class="chart-tooltip-date">{{ modalChartDates[trendHoverIndex] }}</div>
+              <div class="chart-tooltip-price">{{ formatTrendValue(modalChartValues[trendHoverIndex]) }} 吨</div>
+            </div>
           </div>
           <div class="modal-chart-meta">
-            <p><strong>仓库：</strong>{{ modalChartMeta?.warehouse }}</p>
-            <p><strong>大区经理：</strong>{{ modalChartMeta?.regional_manager }}</p>
-            <p><strong>品类：</strong>{{ modalChartMeta?.product_variety }}</p>
-            <p v-if="modalChartMeta?.smelter"><strong>冶炼厂：</strong>{{ modalChartMeta.smelter }}</p>
+            <div class="meta-row">
+              <span class="meta-label">大区经理：</span>
+              <span class="meta-value">{{ modalChartMeta?.regional_manager || '—' }}</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-label">冶炼厂：</span>
+              <span class="meta-value">{{ modalChartMeta?.smelter || '—' }}</span>
+            </div>
+            <div class="meta-row">
+              <span class="meta-label">品类：</span>
+              <span class="meta-value">{{ modalChartMeta?.product_variety || '—' }}</span>
+            </div>
+            <div class="meta-row meta-row-warehouse">
+              <span class="meta-label">仓库：</span>
+              <span class="meta-value">{{ modalChartMeta?.warehouse || '—' }}</span>
+            </div>
           </div>
           <div class="modal-chart-actions">
-            <button class="btn btn-sm btn-secondary" @click="exportRowTrendCsv">导出趋势CSV</button>
+            <button class="btn btn-secondary" @click="exportRowTrendCsv">导出趋势CSV</button>
+            <button class="btn btn-primary" @click="closeModal">关闭</button>
           </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" @click="closeModal">关闭</button>
         </div>
       </div>
     </div>
@@ -603,6 +662,9 @@ const detailTablePageRows = computed(() => {
 })
 
 const chartBasisPlaceholder = computed(() => {
+  if (!forecastQueried.value) {
+    return '请先选择筛选条件并点击「查询」。'
+  }
   if (chartLoadFailed.value) {
     return '汇总依据加载失败，请检查 GET /forecast/chart 是否可用（需返回 summary_analysis）。'
   }
@@ -612,6 +674,44 @@ const chartBasisPlaceholder = computed(() => {
   return '暂无预测依据'
 })
 
+const chartEmptyHint = computed(() =>
+  forecastQueried.value
+    ? '暂无趋势数据，请调整筛选条件后重新查询。'
+    : '请先完成筛选条件并点击「查询」获取预测数据。',
+)
+
+function getForecastFilterValidationError(): string | null {
+  const tab = forecastActiveTab.value
+  if (tab === 'detail') {
+    const f = detailTabFilters.value
+    if (!f.startDate || !f.endDate) return '请选择送货日期范围'
+    return null
+  }
+  if (tab === 'manager') {
+    const missing: string[] = []
+    if (forecastMgrSelectedManagers.value.length === 0) missing.push('大区经理')
+    if (forecastMgrSelectedSmelters.value.length === 0) missing.push('冶炼厂')
+    if (missing.length > 0) return `请先选择${missing.join('、')}后再查询`
+    const f = forecastMgrFilters.value
+    if (!f.startDate || !f.endDate) return '请选择送货日期范围'
+    return null
+  }
+  const missing: string[] = []
+  if (forecastWhSelectedWarehouses.value.length === 0) missing.push('仓库')
+  if (forecastWhSelectedManagers.value.length === 0) missing.push('大区经理')
+  if (forecastWhSelectedSmelters.value.length === 0) missing.push('冶炼厂')
+  if (missing.length > 0) return `请先选择${missing.join('、')}后再查询`
+  const f = forecastWhFilters.value
+  if (!f.startDate || !f.endDate) return '请选择送货日期范围'
+  return null
+}
+
+const filterValidationHint = computed(() => getForecastFilterValidationError() ?? '')
+
+const canQueryForecast = computed(() => getForecastFilterValidationError() === null)
+
+const forecastQueried = ref(false)
+
 const forecastActiveTab = ref<'manager' | 'warehouse' | 'detail'>('manager')
 
 const chartLoading = ref(false)
@@ -620,6 +720,20 @@ const chartSummaryAnalysis = ref('')
 const chartDates = ref<string[]>([])
 const chartTotalByDate = ref<number[]>([])
 const summaryChartCanvasRef = ref<HTMLCanvasElement | null>(null)
+const summaryHoverIndex = ref(-1)
+const summaryTooltipStyle = ref<Record<string, string>>({})
+const SUMMARY_HIT_RADIUS = 16
+
+interface SummaryChartLayout {
+  margin: { t: number; r: number; b: number; l: number }
+  W: number
+  H: number
+  maxY: number
+  xStep: number
+  toX: (i: number) => number
+  toY: (v: number) => number
+}
+let summaryChartLayout: SummaryChartLayout | null = null
 
 const detailRows = ref<PrdForecastDetailRow[]>([])
 const detailTabFilters = ref({ startDate: '', endDate: '' })
@@ -778,6 +892,26 @@ const allManagerOptions = ref<string[]>([])
 const allSmelterOptions = ref<string[]>([])
 
 const MULTI_PREVIEW_TAG_COUNT = 1
+const DEFAULT_SMELTER = '河南金利金铅集团有限公司'
+
+function multiSelectTagsClass(selected: string[]) {
+  return { 'selected-tags--single': selected.length === 1 }
+}
+
+function multiSelectPlaceholder(selected: string[]) {
+  return selected.length > 0 ? '' : '搜索并选择'
+}
+
+function applyDefaultSmelterSelection() {
+  if (!allSmelterOptions.value.includes(DEFAULT_SMELTER)) {
+    allSmelterOptions.value = [...allSmelterOptions.value, DEFAULT_SMELTER].sort((a, b) =>
+      a.localeCompare(b, 'zh-CN'),
+    )
+    refreshAllFilterOptionLists()
+  }
+  forecastMgrSelectedSmelters.value = [DEFAULT_SMELTER]
+  forecastWhSelectedSmelters.value = [DEFAULT_SMELTER]
+}
 
 const mgrManagersTagsPreview = computed(() => forecastMgrSelectedManagers.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
 const mgrManagersTagsMore = computed(() =>
@@ -816,6 +950,25 @@ const modalChartMeta = ref<ForecastChartMeta | null>(null)
 const modalChartDates = ref<string[]>([])
 const modalChartValues = ref<number[]>([])
 const rowTrendCanvas = ref<HTMLCanvasElement>()
+const trendHoverIndex = ref(-1)
+const trendTooltipStyle = ref<Record<string, string>>({})
+const TREND_HIT_RADIUS = 16
+
+interface TrendChartLayout {
+  margin: { t: number; r: number; b: number; l: number }
+  W: number
+  H: number
+  maxY: number
+  xStep: number
+  toX: (i: number) => number
+  toY: (v: number) => number
+}
+let trendChartLayout: TrendChartLayout | null = null
+
+function formatTrendValue(v: number | undefined): string {
+  if (v === undefined || !Number.isFinite(v)) return '0.00'
+  return v.toFixed(2)
+}
 
 // ==================== 错误弹窗 ====================
 const showError = (message: string, details?: string[]) => {
@@ -1512,21 +1665,44 @@ async function fetchDetailData() {
 }
 
 // ==================== 查询 ====================
+function clearForecastResults() {
+  forecastQueried.value = false
+  chartLoadFailed.value = false
+  chartSummaryAnalysis.value = ''
+  chartDates.value = []
+  chartTotalByDate.value = []
+  detailRows.value = []
+  detailData.value = []
+  rebuildForecastPivotFromDetail([])
+  detailTablePage.value = 1
+}
+
 async function handleQuery() {
+  const err = getForecastFilterValidationError()
+  if (err) {
+    showError(err)
+    return
+  }
+  forecastQueried.value = true
+  await fetchDetailData()
+}
+
+/** 预测明细页：切换页签或改日期后自动查询（无需点查询） */
+async function autoQueryDetailTab() {
+  if (forecastActiveTab.value !== 'detail') return
+  const err = getForecastFilterValidationError()
+  if (err) return
+  forecastQueried.value = true
   await fetchDetailData()
 }
 
 function handleReset() {
-  if (forecastActiveTab.value === 'detail') {
-    detailTabFilters.value = { startDate: '', endDate: '' }
-  } else if (forecastActiveTab.value === 'manager') {
-    forecastMgrFilters.value = { startDate: '', endDate: '' }
+  if (forecastActiveTab.value === 'manager') {
     forecastMgrSelectedManagers.value = []
     forecastMgrSelectedSmelters.value = []
     mgrManagerSearchText.value = ''
     mgrSmelterSearchText.value = ''
-  } else {
-    forecastWhFilters.value = { startDate: '', endDate: '' }
+  } else if (forecastActiveTab.value === 'warehouse') {
     forecastWhSelectedWarehouses.value = []
     forecastWhSelectedManagers.value = []
     forecastWhSelectedSmelters.value = []
@@ -1534,7 +1710,12 @@ function handleReset() {
     whManagerSearchText.value = ''
     whSmelterSearchText.value = ''
   }
-  handleQuery()
+  applyDefaultForecastDateRange()
+  applyDefaultSmelterSelection()
+  clearForecastResults()
+  if (forecastActiveTab.value === 'detail') {
+    void autoQueryDetailTab()
+  }
 }
 
 function parseCellWeight(cell: ForecastPivotCell): number {
@@ -1602,7 +1783,7 @@ function closeModal() {
   modalChartValues.value = []
 }
 
-function drawRowTrendChart() {
+function drawRowTrendChart(highlightIndex = -1) {
   const canvas = rowTrendCanvas.value
   if (!canvas) return
   const dates = modalChartDates.value
@@ -1614,115 +1795,235 @@ function drawRowTrendChart() {
 
   const wrap = canvas.parentElement
   const width = Math.max((wrap?.clientWidth ?? 560) - 8, 320)
-  const height = 300
+  const height = 320
   canvas.width = width
   canvas.height = height
 
-  const margin = { t: 20, r: 16, b: 44, l: 64 }
+  const dpr = window.devicePixelRatio || 1
+  if (dpr > 1) {
+    canvas.width = width * dpr
+    canvas.height = height * dpr
+    canvas.style.width = width + 'px'
+    canvas.style.height = height + 'px'
+    ctx.scale(dpr, dpr)
+  }
+
+  const margin = { t: 28, r: 20, b: 44, l: 60 }
   const W = width - margin.l - margin.r
   const H = height - margin.t - margin.b
   const n = dates.length
 
   const maxV = Math.max(...values, 0)
-  const maxY = maxV <= 0 ? 1 : maxV * 1.08
+  const maxY = maxV <= 0 ? 1 : maxV * 1.1
+  const xStep = n <= 1 ? W / 2 : W / (n - 1)
+  const toX = (i: number) => margin.l + i * xStep
+  const toY = (v: number) => margin.t + H - (v / maxY) * H
 
+  trendChartLayout = { margin, W, H, maxY, xStep, toX, toY }
+
+  // 清空
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, width, height)
 
-  ctx.strokeStyle = '#d1d5db'
-  ctx.lineWidth = 1
-  ctx.beginPath()
-  ctx.moveTo(margin.l, margin.t)
-  ctx.lineTo(margin.l, margin.t + H)
-  ctx.lineTo(margin.l + W, margin.t + H)
-  ctx.stroke()
-
+  // 网格线
   const ySteps = 5
-  ctx.font = '11px system-ui, sans-serif'
-  ctx.fillStyle = '#64748b'
+  ctx.lineWidth = 1
   for (let i = 0; i <= ySteps; i++) {
     const y = margin.t + H - (i / ySteps) * H
     const val = (i / ySteps) * maxY
-    ctx.strokeStyle = '#f1f5f9'
+    ctx.strokeStyle = i === 0 ? '#e2e8f0' : '#f1f5f9'
     ctx.beginPath()
     ctx.moveTo(margin.l, y)
     ctx.lineTo(margin.l + W, y)
     ctx.stroke()
-    ctx.fillText(val.toFixed(2), 4, y + 4)
+    ctx.font = '11px system-ui, sans-serif'
+    ctx.fillStyle = '#94a3b8'
+    ctx.textAlign = 'right'
+    ctx.textBaseline = 'middle'
+    ctx.fillText(val.toFixed(1), margin.l - 8, y)
   }
 
-  const xStep = n <= 1 ? W / 2 : W / (n - 1)
-
-  ctx.strokeStyle = '#1476db'
-  ctx.lineWidth = 2
+  // X 轴基线
+  ctx.strokeStyle = '#e2e8f0'
+  ctx.lineWidth = 1
   ctx.beginPath()
-  values.forEach((v, i) => {
-    const x = margin.l + i * xStep
-    const y = margin.t + H - (v / maxY) * H
-    if (i === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  })
+  ctx.moveTo(margin.l, margin.t + H)
+  ctx.lineTo(margin.l + W, margin.t + H)
   ctx.stroke()
 
-  ctx.fillStyle = '#1476db'
-  values.forEach((v, i) => {
-    const x = margin.l + i * xStep
-    const y = margin.t + H - (v / maxY) * H
-    ctx.beginPath()
-    ctx.arc(x, y, 4, 0, Math.PI * 2)
-    ctx.fill()
-  })
-
-  // 每个趋势点常显具体数值（与电子地图页送货量预测图一致）
-  ctx.font = '11px system-ui, sans-serif'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'bottom'
-  values.forEach((v, i) => {
-    const x = margin.l + i * xStep
-    const y = margin.t + H - (v / maxY) * H
-    const label = Number.isFinite(v) ? v.toFixed(2) : '0.00'
-    const boxW = Math.max(28, label.length * 7 + 6)
-    const boxH = 16
-    const by = Math.max(margin.t + 2, y - 8 - boxH)
-    const bx = Math.max(margin.l, Math.min(margin.l + W - boxW, x - boxW / 2))
-    ctx.fillStyle = 'rgba(248, 250, 252, 0.96)'
-    ctx.fillRect(bx, by, boxW, boxH)
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.75)'
+  // 悬浮竖线
+  if (highlightIndex >= 0 && highlightIndex < n) {
+    const hx = toX(highlightIndex)
+    ctx.strokeStyle = 'rgba(20, 118, 219, 0.25)'
     ctx.lineWidth = 1
-    ctx.strokeRect(bx + 0.5, by + 0.5, boxW - 1, boxH - 1)
-    ctx.fillStyle = '#334155'
-    ctx.fillText(label, x, by + boxH - 3)
-  })
-  ctx.textAlign = 'start'
-  ctx.textBaseline = 'alphabetic'
+    ctx.setLineDash([4, 3])
+    ctx.beginPath()
+    ctx.moveTo(hx, margin.t)
+    ctx.lineTo(hx, margin.t + H)
+    ctx.stroke()
+    ctx.setLineDash([])
+  }
 
-  const maxLabs = Math.max(2, Math.floor(W / 56))
+  // 面积渐变
+  const gradient = ctx.createLinearGradient(0, margin.t, 0, margin.t + H)
+  gradient.addColorStop(0, 'rgba(20, 118, 219, 0.18)')
+  gradient.addColorStop(0.7, 'rgba(20, 118, 219, 0.04)')
+  gradient.addColorStop(1, 'rgba(20, 118, 219, 0)')
+
+  // 面积填充（平滑曲线）
+  ctx.beginPath()
+  ctx.moveTo(toX(0), margin.t + H)
+  ctx.lineTo(toX(0), toY(values[0]))
+  for (let i = 1; i < n; i++) {
+    const cpX = (toX(i - 1) + toX(i)) / 2
+    ctx.bezierCurveTo(cpX, toY(values[i - 1]), cpX, toY(values[i]), toX(i), toY(values[i]))
+  }
+  ctx.lineTo(toX(n - 1), margin.t + H)
+  ctx.closePath()
+  ctx.fillStyle = gradient
+  ctx.fill()
+
+  // 折线（平滑曲线）
+  ctx.beginPath()
+  ctx.moveTo(toX(0), toY(values[0]))
+  for (let i = 1; i < n; i++) {
+    const cpX = (toX(i - 1) + toX(i)) / 2
+    ctx.bezierCurveTo(cpX, toY(values[i - 1]), cpX, toY(values[i]), toX(i), toY(values[i]))
+  }
+  ctx.strokeStyle = '#1476db'
+  ctx.lineWidth = 2.5
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+  ctx.stroke()
+
+  // 数据点
+  values.forEach((v, i) => {
+    const x = toX(i)
+    const y = toY(v)
+    const active = i === highlightIndex
+    if (active) {
+      // 外环
+      ctx.fillStyle = 'rgba(20, 118, 219, 0.18)'
+      ctx.beginPath()
+      ctx.arc(x, y, 10, 0, Math.PI * 2)
+      ctx.fill()
+      // 白底
+      ctx.fillStyle = '#fff'
+      ctx.beginPath()
+      ctx.arc(x, y, 5.5, 0, Math.PI * 2)
+      ctx.fill()
+      // 蓝心
+      ctx.fillStyle = '#1476db'
+      ctx.beginPath()
+      ctx.arc(x, y, 4, 0, Math.PI * 2)
+      ctx.fill()
+    } else {
+      ctx.fillStyle = '#fff'
+      ctx.beginPath()
+      ctx.arc(x, y, 3.5, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.fillStyle = '#1476db'
+      ctx.beginPath()
+      ctx.arc(x, y, 2.5, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  })
+
+  // X 轴标签
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'top'
+  ctx.font = '11px system-ui, sans-serif'
+  const maxLabs = Math.max(2, Math.floor(W / 50))
   const labStep = Math.max(1, Math.ceil(n / maxLabs))
-  ctx.fillStyle = '#64748b'
   dates.forEach((d, i) => {
     if (i % labStep !== 0 && i !== n - 1) return
-    const x = margin.l + i * xStep
+    const x = toX(i)
     const label = d.length >= 10 ? d.slice(5) : d
-    ctx.fillText(label, x - 16, margin.t + H + 28)
+    ctx.fillStyle = i === highlightIndex ? '#1476db' : '#94a3b8'
+    ctx.fillText(label, x, margin.t + H + 10)
   })
 
-  // 左上角横排显示纵轴含义（与电子地图页一致，避免竖排遮挡）
-  ctx.fillStyle = '#475569'
-  ctx.font = '12px system-ui, sans-serif'
-  ctx.fillText('预测重量（吨）', margin.l, margin.t - 6)
+  // 轴标题
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'alphabetic'
+  ctx.fillStyle = '#94a3b8'
+  ctx.font = '11px system-ui, sans-serif'
+  ctx.fillText('预测重量（吨）', margin.l, margin.t - 10)
+  ctx.textAlign = 'center'
+  ctx.fillText('预测日期', margin.l + W / 2, height - 6)
+  ctx.textAlign = 'start'
+}
 
-  ctx.fillStyle = '#475569'
-  ctx.font = '12px system-ui, sans-serif'
-  ctx.fillText('预测日期', margin.l + W / 2 - 28, height - 8)
+function trendCanvasPointer(ev: MouseEvent): { x: number; y: number } {
+  const canvas = rowTrendCanvas.value!
+  const rect = canvas.getBoundingClientRect()
+  const scaleX = (canvas.width / (window.devicePixelRatio || 1)) / rect.width
+  const scaleY = (canvas.height / (window.devicePixelRatio || 1)) / rect.height
+  return {
+    x: (ev.clientX - rect.left) * scaleX,
+    y: (ev.clientY - rect.top) * scaleY,
+  }
+}
+
+function findNearestTrendPoint(px: number, py: number): number {
+  if (!trendChartLayout) return -1
+  const values = modalChartValues.value
+  let best = -1
+  let bestDist = TREND_HIT_RADIUS
+  values.forEach((v, i) => {
+    const dx = px - trendChartLayout!.toX(i)
+    const dy = py - trendChartLayout!.toY(v)
+    const d = Math.hypot(dx, dy)
+    if (d < bestDist) {
+      bestDist = d
+      best = i
+    }
+  })
+  return best
+}
+
+function updateTrendTooltipPosition(index: number) {
+  const canvas = rowTrendCanvas.value
+  if (!canvas || !trendChartLayout || index < 0) return
+  const rect = canvas.getBoundingClientRect()
+  const dpr = window.devicePixelRatio || 1
+  const scaleX = rect.width / (canvas.width / dpr)
+  const scaleY = rect.height / (canvas.height / dpr)
+  const left = trendChartLayout.toX(index) * scaleX
+  const top = trendChartLayout.toY(modalChartValues.value[index] ?? 0) * scaleY
+  trendTooltipStyle.value = {
+    left: `${left}px`,
+    top: `${top}px`,
+    transform: 'translate(-50%, calc(-100% - 14px))',
+  }
+}
+
+function onTrendChartMouseMove(ev: MouseEvent) {
+  if (!trendChartLayout || modalChartValues.value.length === 0) return
+  const { x, y } = trendCanvasPointer(ev)
+  const hit = findNearestTrendPoint(x, y)
+  if (hit === trendHoverIndex.value) return
+  trendHoverIndex.value = hit
+  if (hit >= 0) updateTrendTooltipPosition(hit)
+  drawRowTrendChart(hit)
+}
+
+function onTrendChartMouseLeave() {
+  if (trendHoverIndex.value < 0) return
+  trendHoverIndex.value = -1
+  trendTooltipStyle.value = {}
+  drawRowTrendChart(-1)
 }
 
 let trendResizeHandler: (() => void) | null = null
 
 watch(modalVisible, (v) => {
   if (v) {
+    trendHoverIndex.value = -1
+    trendTooltipStyle.value = {}
     nextTick(() => {
       drawRowTrendChart()
-      trendResizeHandler = () => drawRowTrendChart()
+      trendResizeHandler = () => drawRowTrendChart(trendHoverIndex.value)
       window.addEventListener('resize', trendResizeHandler)
     })
   } else if (trendResizeHandler) {
@@ -1733,6 +2034,8 @@ watch(modalVisible, (v) => {
 
 watch([modalChartDates, modalChartValues], () => {
   if (modalVisible.value) {
+    trendHoverIndex.value = -1
+    trendTooltipStyle.value = {}
     nextTick(() => drawRowTrendChart())
   }
 })
@@ -1750,6 +2053,11 @@ onBeforeUnmount(() => {
 
 // ==================== 导出预测明细（服务端 Excel） ====================
 async function exportExcel() {
+  const err = getForecastFilterValidationError()
+  if (err) {
+    showError(err)
+    return
+  }
   const params = buildForecastFilterParams()
 
   const response = await axios
@@ -1813,13 +2121,26 @@ watch(forecastActiveTab, (tab) => {
   if (tab === 'detail' && !detailTabFilters.value.startDate && forecastWhFilters.value.startDate) {
     detailTabFilters.value = { ...forecastWhFilters.value }
   }
-  void fetchDetailData()
+  if (tab === 'detail') {
+    void autoQueryDetailTab()
+  } else {
+    clearForecastResults()
+  }
 })
+
+watch(
+  () => [detailTabFilters.value.startDate, detailTabFilters.value.endDate] as const,
+  () => {
+    if (forecastActiveTab.value === 'detail') {
+      void autoQueryDetailTab()
+    }
+  },
+)
 
 onMounted(async () => {
   applyDefaultForecastDateRange()
   await fetchOptions()
-  await handleQuery()
+  applyDefaultSmelterSelection()
 })
 </script>
 
@@ -1827,6 +2148,17 @@ onMounted(async () => {
 .forecast-page { width: 100%; animation: fadeIn 0.25s ease both; }
 .query-section { width: 100%; }
 .card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); animation: fadeInUp 0.3s ease both; }
+
+.filter-card {
+  position: relative;
+  z-index: 40;
+  overflow: visible;
+}
+
+.chart-summary-card {
+  position: relative;
+  z-index: 1;
+}
 
 .menu-search-bar {
   display: flex;
@@ -1890,10 +2222,21 @@ onMounted(async () => {
   font-size: 12px;
   line-height: 1.45;
   color: #475569;
+}
+
+.analysis-cell-preview {
+  display: block;
   overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-cell-action {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1476db;
 }
 
 .detail-row-clickable {
@@ -1947,13 +2290,15 @@ onMounted(async () => {
   display: flex;
   flex-wrap: wrap;
   gap: 16px;
-  align-items: center;
+  align-items: flex-start;
+  overflow: visible;
 }
 
 .filter-item {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  overflow: visible;
 }
 
 .filter-item label {
@@ -1971,6 +2316,25 @@ onMounted(async () => {
   font-size: 11px;
   color: #909399;
   font-weight: normal;
+}
+
+.filter-required {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.filter-validation-hint {
+  margin: 10px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #b45309;
+}
+
+.filter-auto-hint {
+  font-size: 13px;
+  color: #64748b;
+  line-height: 32px;
+  padding: 0 4px;
 }
 
 .date-range {
@@ -1999,10 +2363,21 @@ onMounted(async () => {
   max-width: 280px;
 }
 
+.multi-select-item--wide {
+  min-width: 300px;
+  max-width: 380px;
+  flex: 1 1 300px;
+}
+
 .multi-select-container {
   position: relative;
   width: 100%;
   max-width: 280px;
+  overflow: visible;
+}
+
+.multi-select-container--wide {
+  max-width: 100%;
 }
 
 .selected-tags {
@@ -2020,6 +2395,28 @@ onMounted(async () => {
   overflow: hidden;
   cursor: text;
   box-sizing: border-box;
+}
+
+.selected-tags--single {
+  height: auto;
+  min-height: 32px;
+  max-height: none;
+  flex-wrap: nowrap;
+  overflow: visible;
+}
+
+.selected-tags--single .tag {
+  max-width: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.selected-tags--single .multi-input {
+  flex: 0 0 24px;
+  min-width: 24px;
+  width: 24px;
 }
 
 .tag {
@@ -2084,13 +2481,13 @@ onMounted(async () => {
   top: 100%;
   left: 0;
   right: 0;
-  max-height: 200px;
+  max-height: 240px;
   overflow-y: auto;
   background: white;
   border: 1px solid #E5E9F2;
   border-radius: 4px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  z-index: 100;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 2500;
   margin-top: 2px;
 }
 
@@ -2100,6 +2497,8 @@ onMounted(async () => {
   font-size: 13px;
   color: #606266;
   text-align: left;
+  line-height: 1.45;
+  word-break: break-word;
 }
 
 .dropdown-item:hover {
@@ -2211,12 +2610,12 @@ onMounted(async () => {
   left: 0;
   width: 100%;
   height: 100%;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
-  animation: fadeIn 0.2s ease both;
+  z-index: 9999;
 }
 
 .modal-content {
@@ -2241,11 +2640,22 @@ onMounted(async () => {
 .modal-content-chart {
   width: min(720px, 96vw);
   max-width: 96%;
-  max-height: 90vh;
-  overflow: auto;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 10px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.22);
+}
+
+.modal-content-chart .modal-body {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
 }
 
 .modal-chart-wrap {
+  position: relative;
   width: 100%;
   min-height: 300px;
   margin-bottom: 16px;
@@ -2255,28 +2665,69 @@ onMounted(async () => {
   display: block;
   width: 100%;
   height: auto;
+  cursor: crosshair;
+}
+
+.chart-tooltip {
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  padding: 7px 11px;
+  background: rgba(15, 23, 42, 0.88);
+  color: #fff;
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+}
+
+.chart-tooltip-date {
+  color: #94a3b8;
+  font-size: 11px;
+  margin-bottom: 1px;
+}
+
+.chart-tooltip-price {
+  font-weight: 600;
+  font-size: 13px;
+  color: #e2e8f0;
 }
 
 .modal-chart-meta {
   background: #f8fafc;
-  border-radius: 8px;
+  border-radius: 6px;
   padding: 14px 16px;
-  margin-bottom: 12px;
+  margin-bottom: 8px;
   display: flex;
-  flex-direction: column;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  border: 1px solid #e8ecf1;
 }
 
-.modal-chart-meta p {
-  margin: 0;
+.meta-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+}
+
+.meta-label {
+  font-size: 12px;
+  color: #94a3b8;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.meta-value {
   font-size: 13px;
-  color: #334155;
-  line-height: 1.5;
+  color: #1e293b;
+  font-weight: 500;
+  word-break: break-all;
 }
 
-.modal-chart-meta strong {
-  color: #0f172a;
-  margin-right: 6px;
+.meta-row-warehouse {
+  flex-basis: 100%;
 }
 
 .modal-chart-actions {
