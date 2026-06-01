@@ -277,52 +277,6 @@ function v3PayloadFromPoll(data: Awaited<ReturnType<typeof getV3Result>>): V3Vie
   }
 }
 
-/** 与主鉴伪并行调用 rule-checks 已废弃：AI+规则 请用 v3/detect?with_rule_checks=true */
-async function runRuleSingle(file: File) {
-  const bbox: BboxXYXY | null = v3SpecifyBbox.value ? (userBbox.value ?? fullImageBbox()) : null
-  if (v3SpecifyBbox.value && !bbox) {
-    errorMsg.value = '请框选区域或等待图片在预览区加载完成'
-    return
-  }
-
-  busy.value = true
-  errorMsg.value = null
-  viewingHistoryId.value = null
-  v3Payload.value = null
-  v3TaskId.value = null
-  if (vizObjectUrl.value) {
-    URL.revokeObjectURL(vizObjectUrl.value)
-    vizObjectUrl.value = null
-  }
-  detectAbort.value?.abort()
-  const ac = new AbortController()
-  detectAbort.value = ac
-  resetRuleCheck()
-  ruleCheckLoading.value = true
-  pollStatus.value = '正在进行规则检测…'
-  try {
-    const data = await submitRuleChecks(file, bbox, detectSubmitOpts(ac.signal))
-    if (ac.signal.aborted) return
-    ruleCheckPayload.value = data
-    ruleCheckError.value = null
-    pollStatus.value = '规则检测完成'
-    void refreshHistoryList()
-  } catch (e) {
-    if (e instanceof DOMException && e.name === 'AbortError') {
-      pollStatus.value = '已取消'
-      return
-    }
-    ruleCheckPayload.value = null
-    ruleCheckError.value = e instanceof Error ? e.message : String(e)
-    errorMsg.value = ruleCheckError.value
-    pollStatus.value = ''
-  } finally {
-    ruleCheckLoading.value = false
-    detectAbort.value = null
-    busy.value = false
-  }
-}
-
 async function loadModelInfo() {
   if (isDetectionMockMode()) {
     modelInfo.value = '演示模式'
@@ -378,6 +332,121 @@ async function handleFeedback(taskId: string, resultIndex: number, judgment: 'co
     errorMsg.value = '反馈提交失败: ' + (e as Error).message
   } finally {
     feedbackSubmitting.value[key] = false
+  }
+}
+
+async function startRuleChecks(
+  file: File,
+  bbox: BboxXYXY | null,
+  signal: AbortSignal,
+  taskId?: string | null,
+): Promise<RuleChecksData> {
+  ruleCheckLoading.value = true
+  ruleCheckError.value = null
+  ruleCheckPayload.value = null
+  try {
+    const data = await submitRuleChecks(file, bbox, {
+      ...detectSubmitOpts(signal),
+      task_id: taskId,
+    })
+    ruleCheckPayload.value = data
+    return data
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') throw e
+    const message = e instanceof Error ? e.message : String(e)
+    ruleCheckError.value = message || '规则检测失败'
+    throw e
+  } finally {
+    ruleCheckLoading.value = false
+  }
+}
+
+async function runRuleSingle(file: File) {
+  const bbox: BboxXYXY | null = v3SpecifyBbox.value ? (userBbox.value ?? fullImageBbox()) : null
+  if (v3SpecifyBbox.value && !bbox) {
+    errorMsg.value = '请框选区域或等待图片在预览区加载完成'
+    return
+  }
+
+  busy.value = true
+  errorMsg.value = null
+  viewingHistoryId.value = null
+  v3Payload.value = null
+  v3TaskId.value = null
+  if (vizObjectUrl.value) {
+    URL.revokeObjectURL(vizObjectUrl.value)
+    vizObjectUrl.value = null
+  }
+  detectAbort.value?.abort()
+  const ac = new AbortController()
+  detectAbort.value = ac
+  pollStatus.value = '规则检测中…'
+  try {
+    await startRuleChecks(file, bbox, ac.signal)
+    pollStatus.value = '规则检测完成'
+    void refreshHistoryList()
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      pollStatus.value = '已取消'
+      return
+    }
+    errorMsg.value = e instanceof Error ? e.message : String(e)
+    pollStatus.value = ''
+  } finally {
+    detectAbort.value = null
+    busy.value = false
+  }
+}
+
+async function runRuleBatch(batchFiles: File[]) {
+  if (!batchFiles.length) return
+  if (v3SpecifyBbox.value) {
+    errorMsg.value = '批量检测暂不支持“仅分析框选区域”，请关闭后重试。'
+    return
+  }
+
+  busy.value = true
+  errorMsg.value = null
+  viewingHistoryId.value = null
+  v3Payload.value = null
+  v3TaskId.value = null
+  if (vizObjectUrl.value) {
+    URL.revokeObjectURL(vizObjectUrl.value)
+    vizObjectUrl.value = null
+  }
+  detectAbort.value?.abort()
+  const ac = new AbortController()
+  detectAbort.value = ac
+  let success = 0
+  const failed: string[] = []
+  try {
+    for (let i = 0; i < batchFiles.length; i++) {
+      const file = batchFiles[i]!
+      pollStatus.value = `规则检测 ${i + 1}/${batchFiles.length}：提交中…`
+      try {
+        await startRuleChecks(file, null, ac.signal)
+        success += 1
+        void refreshHistoryList()
+      } catch (e) {
+        if (e instanceof DOMException && e.name === 'AbortError') throw e
+        failed.push(`${file.name}: ${e instanceof Error ? e.message : String(e)}`)
+      }
+    }
+    pollStatus.value = `规则检测完成：成功 ${success}/${batchFiles.length}`
+    if (failed.length) {
+      errorMsg.value = `以下文件失败（${failed.length}）：\n${failed.slice(0, 5).join('\n')}${failed.length > 5 ? '\n…' : ''}`
+    }
+    void refreshHistoryList()
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') {
+      pollStatus.value = '已取消'
+      return
+    }
+    errorMsg.value = e instanceof Error ? e.message : String(e)
+    pollStatus.value = ''
+  } finally {
+    detectAbort.value = null
+    busy.value = false
   }
 }
 
@@ -1514,6 +1583,33 @@ onUnmounted(() => {
                     <dd>{{ row.value }}</dd>
                   </template>
                 </dl>
+              </div>
+              <div class="feedback-row">
+                <span class="feedback-label">标注结果是否正确</span>
+                <button
+                  type="button"
+                  class="btn btn-feedback btn-feedback-correct"
+                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
+                  @click="handleFeedback(v3TaskId ?? '', 0, 'correct')"
+                >
+                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '正确' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-feedback btn-feedback-suspicious"
+                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
+                  @click="handleFeedback(v3TaskId ?? '', 0, 'suspicious')"
+                >
+                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '疑似' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-feedback btn-feedback-wrong"
+                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
+                  @click="handleFeedback(v3TaskId ?? '', 0, 'wrong')"
+                >
+                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '错误' }}
+                </button>
               </div>
             </template>
 

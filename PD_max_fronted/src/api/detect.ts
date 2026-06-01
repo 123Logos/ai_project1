@@ -638,6 +638,11 @@ export type DetectSubmitOpts = {
   with_rule_checks?: boolean
 }
 
+export type RuleCheckSubmitOpts = DetectSubmitOpts & {
+  /** 与 async_v3 主鉴伪任务关联，便于历史记录聚合展示 */
+  task_id?: string | null
+}
+
 function appendDocumentTime(fd: FormData, documentTime?: string | null): void {
   const t = typeof documentTime === 'string' ? documentTime.trim() : ''
   if (t) fd.append('document_time', t)
@@ -1429,7 +1434,7 @@ async function postRuleCheckMultipart(
   path: string,
   file: File,
   fields: Record<string, string | undefined>,
-  opts?: DetectSubmitOpts,
+  opts?: RuleCheckSubmitOpts,
 ): Promise<RuleChecksData> {
   const fd = new FormData()
   fd.append('file', file)
@@ -1437,6 +1442,8 @@ async function postRuleCheckMultipart(
     if (v != null && v !== '') fd.append(k, v)
   }
   appendDocumentTime(fd, opts?.document_time)
+  const taskId = typeof opts?.task_id === 'string' ? opts.task_id.trim() : ''
+  if (taskId) fd.append('task_id', taskId)
   const res = await fetch(aiDetectionUrl(path), {
     method: 'POST',
     body: fd,
@@ -1454,7 +1461,7 @@ async function postRuleCheckMultipart(
 export async function submitRuleChecks(
   file: File,
   bbox?: BboxXYXY | null,
-  opts?: DetectSubmitOpts,
+  opts?: RuleCheckSubmitOpts,
 ): Promise<RuleChecksData> {
   const fields: Record<string, string | undefined> = {}
   if (bbox != null) fields.bbox = JSON.stringify(bbox)
