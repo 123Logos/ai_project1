@@ -64,8 +64,14 @@
     <div v-else class="dmp-panel">
       <p v-if="listError" class="dmp-err">{{ listError }}</p>
       <div class="dmp-toolbar">
-        <input v-model.trim="keyword" type="search" class="form-control dmp-search" placeholder="搜索库房名称" />
-        <input v-model.trim="categoryFilter" type="search" class="form-control dmp-search" placeholder="筛选品类" />
+        <select v-model="warehouseNameFilter" class="form-select dmp-search">
+          <option value="">全部库房</option>
+          <option v-for="w in warehouses" :key="w.id" :value="w.name">{{ w.name }}</option>
+        </select>
+        <select v-model="categoryIdFilter" class="form-select dmp-search">
+          <option value="">全部品种</option>
+          <option v-for="c in categories" :key="c.id" :value="c.name">{{ c.name }}</option>
+        </select>
         <button type="button" class="btn btn-outline-secondary" :disabled="listLoading" @click="loadList">查询</button>
         <button type="button" class="btn btn-outline-secondary" :disabled="listLoading" @click="loadList">刷新</button>
       </div>
@@ -106,7 +112,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { fetchTlCategories } from '@/api/tlApi'
+import { fetchTlCategories, fetchTlWarehousesAll } from '@/api/tlApi'
 import {
   fetchWarehouseReceivePriceList,
   importWarehouseReceivePriceExcel,
@@ -133,8 +139,9 @@ const previewColumns = ref<string[]>([])
 const previewRows = ref<Record<string, string>[]>([])
 const previewTotal = ref(0)
 
-const keyword = ref('')
-const categoryFilter = ref('')
+const warehouses = ref<Array<{ id: number; name: string }>>([])
+const warehouseNameFilter = ref('')
+const categoryIdFilter = ref('')
 const listRows = ref<WarehouseReceivePriceRow[]>([])
 const page = ref(1)
 const pageSize = 50
@@ -231,8 +238,8 @@ async function loadList() {
     const res = await fetchWarehouseReceivePriceList({
       page: page.value,
       page_size: pageSize,
-      keyword: keyword.value,
-      category: categoryFilter.value,
+      keyword: warehouseNameFilter.value,
+      category: categoryIdFilter.value,
     })
     listRows.value = res.items
     total.value = res.total
@@ -257,6 +264,43 @@ watch(tab, (t) => {
   }
 })
 
+watch([warehouseNameFilter, categoryIdFilter], () => {
+  page.value = 1
+})
+
+function pickStr(r: Record<string, unknown>, keys: string[]): string {
+  for (const k of keys) {
+    const v = r[k]
+    if (typeof v === 'string' && v.trim()) return v.trim()
+  }
+  return ''
+}
+
+function pickNum(r: Record<string, unknown>, keys: string[]): number {
+  for (const k of keys) {
+    const v = r[k]
+    if (v != null) {
+      const n = Number(v)
+      if (Number.isFinite(n) && n > 0) return n
+    }
+  }
+  return 0
+}
+
+async function loadWarehouses() {
+  try {
+    const rows = await fetchTlWarehousesAll()
+    warehouses.value = rows
+      .map((r) => ({
+        id: pickNum(r, ['仓库id', '库房id', 'warehouse_id', 'id']),
+        name: pickStr(r, ['仓库名', 'warehouse_name', 'name']) || `库房#${pickNum(r, ['仓库id', '库房id', 'warehouse_id', 'id'])}`,
+      }))
+      .filter((w) => w.id > 0)
+  } catch {
+    warehouses.value = []
+  }
+}
+
 async function loadCategories() {
   categoriesLoading.value = true
   try {
@@ -270,6 +314,7 @@ async function loadCategories() {
 
 onMounted(() => {
   void loadCategories()
+  void loadWarehouses()
 })
 </script>
 

@@ -1615,31 +1615,31 @@
             <div class="page-content abnormal-data-page">
               <div class="page-header">
                 <h3>异常数据</h3>
-                <p>补全「省/市/区」；经纬度缺失不在此处理。不展示「默认仓库」「默认冶炼厂」。</p>
+                <p>补全「省/市/区」及「经纬度」缺失的数据。不展示「默认仓库」「默认冶炼厂」。</p>
               </div>
               <div class="card">
                 <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:12px;">
-                  <h4 style="margin:0;">省市区待补全</h4>
+                  <h4 style="margin:0;">异常数据待补全</h4>
                   <button id="abnormal-refresh-btn" class="btn btn-outline-primary btn-sm">刷新</button>
                 </div>
                 <div class="card-body">
                   <div class="summary-cards">
-                    <div class="summary-card"><div class="label">仓库待补全</div><div class="value" id="abnormal-wh-count">-</div></div>
-                    <div class="summary-card"><div class="label">冶炼厂待补全</div><div class="value" id="abnormal-sm-count">-</div></div>
+                    <div class="summary-card"><div class="label">仓库异常</div><div class="value" id="abnormal-wh-count">-</div></div>
+                    <div class="summary-card"><div class="label">冶炼厂异常</div><div class="value" id="abnormal-sm-count">-</div></div>
                     <div class="summary-card"><div class="label">合计</div><div class="value" id="abnormal-total-count">-</div></div>
                   </div>
                   <div class="table-responsive">
                     <table class="data-table">
-                      <thead><tr><th colspan="6">仓库（省/市/区未齐）</th></tr></thead>
-                      <thead><tr><th>ID</th><th>名称</th><th>地址</th><th>省/市/区</th><th>类型</th><th>操作</th></tr></thead>
-                      <tbody id="abnormal-warehouse-tbody"><tr><td colspan="6">加载中...</td></tr></tbody>
+                      <thead><tr><th colspan="7">仓库（省市区或经纬度缺失）</th></tr></thead>
+                      <thead><tr><th>ID</th><th>名称</th><th>地址</th><th>省/市/区</th><th>类型</th><th>缺失字段</th><th>操作</th></tr></thead>
+                      <tbody id="abnormal-warehouse-tbody"><tr><td colspan="7">加载中...</td></tr></tbody>
                     </table>
                   </div>
                   <div class="table-responsive" style="margin-top:12px;">
                     <table class="data-table">
-                      <thead><tr><th colspan="5">冶炼厂（省/市/区未齐）</th></tr></thead>
-                      <thead><tr><th>ID</th><th>名称</th><th>地址</th><th>省/市/区</th><th>操作</th></tr></thead>
-                      <tbody id="abnormal-smelter-tbody"><tr><td colspan="5">加载中...</td></tr></tbody>
+                      <thead><tr><th colspan="6">冶炼厂（省市区或经纬度缺失）</th></tr></thead>
+                      <thead><tr><th>ID</th><th>名称</th><th>地址</th><th>省/市/区</th><th>缺失字段</th><th>操作</th></tr></thead>
+                      <tbody id="abnormal-smelter-tbody"><tr><td colspan="6">加载中...</td></tr></tbody>
                     </table>
                   </div>
                 </div>
@@ -1710,7 +1710,15 @@
                       <label class="form-check-label" for="abnormal-in-sm-active">启用（is_active）</label>
                     </div>
                   </div>
-                  <p class="text-muted" style="font-size:12px;">仅展示待补全项（省/市/区、名称、地址、库房类型等）；已有数据不在此展示。经纬度不在此编辑，保存时从记录中自动带上。</p>
+                  <div class="form-group" id="abnormal-row-lat" style="display:none">
+                    <label for="abnormal-in-lat">纬度</label>
+                    <input type="number" step="any" id="abnormal-in-lat" class="form-control" placeholder="如 34.2658">
+                  </div>
+                  <div class="form-group" id="abnormal-row-lng" style="display:none">
+                    <label for="abnormal-in-lng">经度</label>
+                    <input type="number" step="any" id="abnormal-in-lng" class="form-control" placeholder="如 108.9541">
+                  </div>
+                  <p class="text-muted" style="font-size:12px;">仅展示待补全项（省/市/区、名称、地址、库房类型、经纬度等）；已有数据不在此展示。</p>
                   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;">
                     <button type="button" class="btn" id="abnormal-edit-cancel">取消</button>
                     <button type="button" class="btn btn-primary" id="abnormal-edit-save">保存</button>
@@ -1767,6 +1775,29 @@
           return !(p.prov && p.city && p.dist)
         }
 
+        function hasMissingCoords(row) {
+          const lat = pick(row, ['纬度', 'lat', 'latitude'])
+          const lng = pick(row, ['经度', 'lng', 'lon', 'longitude'])
+          return !lat || !lng
+        }
+
+        function isAbnormalRow(row) {
+          return isPcdIncomplete(getPcd(row)) || hasMissingCoords(row)
+        }
+
+        function getMissingFieldsText(row) {
+          const missing = []
+          const pcd = getPcd(row)
+          if (!pcd.prov) missing.push('省')
+          if (!pcd.city) missing.push('市')
+          if (!pcd.dist) missing.push('区')
+          const lat = pick(row, ['纬度', 'lat', 'latitude'])
+          const lng = pick(row, ['经度', 'lng', 'lon', 'longitude'])
+          if (!lat) missing.push('纬度')
+          if (!lng) missing.push('经度')
+          return missing.length ? missing.join('、') : '-'
+        }
+
         function isDefaultWarehouseName(name) {
           const n = String(name || '').trim()
           return n === '默认仓库' || n.includes('默认仓库')
@@ -1781,12 +1812,12 @@
           const whRows = (warehouses || []).filter((row) => {
             const name = pick(row, ['仓库名', '仓库', 'warehouse_name', 'name'])
             if (isDefaultWarehouseName(name)) return false
-            return isPcdIncomplete(getPcd(row))
+            return isAbnormalRow(row)
           })
           const smRows = (smelters || []).filter((row) => {
             const name = pick(row, ['冶炼厂', '冶炼厂名', 'factory_name', 'name'])
             if (isDefaultSmelterName(name)) return false
-            return isPcdIncomplete(getPcd(row))
+            return isAbnormalRow(row)
           })
           return { whRows, smRows }
         }
@@ -2089,6 +2120,8 @@
             'abnormal-row-sm-addr',
             'abnormal-row-sm-xrb',
             'abnormal-row-sm-active',
+            'abnormal-row-lat',
+            'abnormal-row-lng',
           ].forEach((rid) => setAbnormalRowDisplay(rid, false))
         }
 
@@ -2568,8 +2601,8 @@
           const smCount = document.getElementById('abnormal-sm-count')
           const totalCount = document.getElementById('abnormal-total-count')
           if (!whBody || !smBody) return
-          whBody.innerHTML = '<tr><td colspan="6">加载中...</td></tr>'
-          smBody.innerHTML = '<tr><td colspan="5">加载中...</td></tr>'
+          whBody.innerHTML = '<tr><td colspan="7">加载中...</td></tr>'
+          smBody.innerHTML = '<tr><td colspan="6">加载中...</td></tr>'
           bindAbnormalModalOnce()
           try {
             const res = await fetch('/tl/get_missing_geo_info?include_inactive=false', {
@@ -2601,6 +2634,7 @@
                     const addr = pick(row, ['地址', 'address', '详细地址']) || '-'
                     const type = pick(row, ['类型', '库房类型名', '仓库类型名', 'type_name']) || '-'
                     const line = pcdLine(getPcd(row))
+                    const missing = getMissingFieldsText(row)
                     const btn = idKey
                       ? `<button type="button" class="btn btn-sm btn-primary abnormal-edit-btn" data-kind="wh" data-id="${esc(
                           idKey,
@@ -2608,10 +2642,10 @@
                       : '—'
                     return `<tr><td>${esc(id || '—')}</td><td>${esc(name)}</td><td>${esc(addr)}</td><td>${esc(
                       line,
-                    )}</td><td>${esc(type)}</td><td>${btn}</td></tr>`
+                    )}</td><td>${esc(type)}</td><td style="color:#dc2626;font-weight:600;">${esc(missing)}</td><td>${btn}</td></tr>`
                   })
                   .join('')
-              : '<tr><td colspan="6">暂无省市区待补全的仓库</td></tr>'
+              : '<tr><td colspan="7">暂无异常仓库数据</td></tr>'
 
             smBody.innerHTML = smRows.length
               ? smRows
@@ -2622,6 +2656,7 @@
                     const name = pick(row, ['冶炼厂', '冶炼厂名', 'factory_name', 'name']) || '-'
                     const addr = pick(row, ['地址', 'address', '详细地址']) || '-'
                     const line = pcdLine(getPcd(row))
+                    const missing = getMissingFieldsText(row)
                     const btn = idKey
                       ? `<button type="button" class="btn btn-sm btn-primary abnormal-edit-btn" data-kind="sm" data-id="${esc(
                           idKey,
@@ -2629,14 +2664,14 @@
                       : '—'
                     return `<tr><td>${esc(id || '—')}</td><td>${esc(name)}</td><td>${esc(addr)}</td><td>${esc(
                       line,
-                    )}</td><td>${btn}</td></tr>`
+                    )}</td><td style="color:#dc2626;font-weight:600;">${esc(missing)}</td><td>${btn}</td></tr>`
                   })
                   .join('')
-              : '<tr><td colspan="5">暂无省市区待补全的冶炼厂</td></tr>'
+              : '<tr><td colspan="6">暂无异常冶炼厂数据</td></tr>'
           } catch (err) {
             const msg = err instanceof Error ? err.message : String(err)
-            whBody.innerHTML = `<tr><td colspan="6">加载失败：${esc(msg)}</td></tr>`
-            smBody.innerHTML = `<tr><td colspan="5">加载失败：${esc(msg)}</td></tr>`
+            whBody.innerHTML = `<tr><td colspan="7">加载失败：${esc(msg)}</td></tr>`
+            smBody.innerHTML = `<tr><td colspan="6">加载失败：${esc(msg)}</td></tr>`
           }
         }
 
@@ -2652,7 +2687,7 @@
             <div class="module-icon"><i class="fas fa-triangle-exclamation"></i></div>
             <div class="module-info">
               <h4>异常数据</h4>
-              <p>补全仓库/冶炼厂省、市、区</p>
+              <p>补全仓库/冶炼厂省市区及经纬度</p>
             </div>
           `
           backendCards.appendChild(card)

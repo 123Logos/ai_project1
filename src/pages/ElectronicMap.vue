@@ -952,6 +952,7 @@ import {
   fetchTlWarehousesAll,
   fetchTlRealtimeSpreadList,
   postTlGetComparison,
+  tlGetJson,
   tlUnwrapComparisonDetails,
   type TlCategoryRow,
 } from '../api/tlApi'
@@ -1501,6 +1502,9 @@ const confirmedPriceMode = ref<'base' | 'tax3'>('base')
 const comparisonRanks = ref<ComparisonRankItem[]>([])
 const lastComparisonSortKey = ref('')
 const allWarehousePoints = ref<MapPoint[]>([])
+
+/** 收货价格日期缓存：key = "库房id||品类名" → 日期字符串 */
+const receiptPriceDateCache = ref<Map<string, string>>(new Map())
 
 type WarehouseTypeStatRow = { label: string; count: number; color: string }
 
@@ -2152,12 +2156,39 @@ function pickWarehouseSmelterFreights(
   return out
 }
 
+/** 从 /tl/warehouse_receipt_prices 拉取最新收货价格日期并缓存 */
+async function refreshReceiptPriceDateCache() {
+  try {
+    const rpRaw = (await tlGetJson('/tl/warehouse_receipt_prices?only_latest=true&page=1&page_size=500')) as Record<string, unknown>
+    const rpData = (rpRaw?.data ?? rpRaw) as Record<string, unknown>
+    const rpList = Array.isArray(rpData?.list) ? rpData.list : Array.isArray(rpData) ? rpData : []
+    const m = new Map<string, string>()
+    for (const r of rpList as Record<string, unknown>[]) {
+      const whId = r['库房id'] ?? r['仓库id'] ?? r.warehouse_id ?? r.warehouseId
+      const whName = String(r['库房名称'] ?? r['仓库名'] ?? r.warehouse_name ?? '').trim()
+      const catName = String(r['品类名'] ?? r['品类'] ?? r['回收品类'] ?? r.category_name ?? '').trim()
+      const date = String(r['更新时间'] ?? r['定价日期'] ?? r.updated_at ?? r.price_date ?? '').slice(0, 10)
+      if (date) {
+        if (whId != null && catName) m.set(`${whId}||${catName}`, date)
+        if (whName && catName) m.set(`${whName}||${catName}`, date)
+      }
+    }
+    receiptPriceDateCache.value = m
+    console.log('[emap] receiptPriceDateCache loaded, size:', m.size, 'sample keys:', [...m.keys()].slice(0, 5))
+  } catch (e) {
+    console.warn('[emap] refreshReceiptPriceDateCache failed:', e)
+  }
+}
+
 /** 解析库房收货价格按品种（/tl/get_warehouses 字段「收货价格按品种」） */
 function pickWarehouseReceiptPricesByCategory(
   raw: Record<string, unknown>,
 ): { category: string; price: number | null; date: string }[] {
   const arr = raw['收货价格按品种']
   if (!Array.isArray(arr) || !arr.length) return []
+  const cache = receiptPriceDateCache.value
+  const whId = raw['仓库id'] ?? raw['库房id'] ?? raw['id'] ?? raw.warehouse_id
+  const whName = String(raw['仓库名'] ?? raw['库房名称'] ?? raw.warehouse_name ?? '').trim()
   const out: { category: string; price: number | null; date: string }[] = []
   for (const item of arr) {
     if (!item || typeof item !== 'object') continue
@@ -2171,7 +2202,13 @@ function pickWarehouseReceiptPricesByCategory(
       '回收品种',
     ])
     const price = pickNumber(o, ['价格', '收货价格', 'price', 'receive_price'])
-    const date = pickStr(o, ['价格日期', '定价日期', '日期', 'price_date', 'date', '更新时间', 'updated_at']) || ''
+    let date = pickStr(o, ['价格日期', '定价日期', '日期', 'price_date', 'priceDate', 'date', '更新时间', 'updated_at', 'updatedAt']) || ''
+    // 如果原数据无日期，从全局缓存中按 库房id+品类名 或 库房名称+品类名 查找
+    if (!date && category && cache.size > 0) {
+      if (whId != null) date = cache.get(`${whId}||${category}`) || ''
+      if (!date && whName) date = cache.get(`${whName}||${category}`) || ''
+      if (!date) console.log('[emap] cache miss:', { whId, whName, category, cacheSize: cache.size })
+    }
     if (!category && price === null) continue
     out.push({ category: category || '—', price, date: date.length > 10 ? date.slice(0, 10) : date })
   }
@@ -2190,10 +2227,10 @@ function warehouseReceiptPriceBlockHtml(
         p.price === null
           ? '—'
           : `${p.price.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} 元/吨`
-      const dateSuffix = p.date ? ` <span class="emap-wh-hover-date">${escapeHtml(p.date)}</span>` : ''
+      const dateSpan = p.date ? `<span class="emap-wh-hover-date">${escapeHtml(p.date)}</span>` : '<span></span>'
       return `<div class="emap-wh-hover-freight-item"><span class="emap-wh-hover-freight-smelter">${escapeHtml(
         p.category,
-      )}</span><span class="emap-wh-hover-freight-val">${escapeHtml(val)}${dateSuffix}</span></div>`
+      )}</span>${dateSpan}<span class="emap-wh-hover-freight-val">${escapeHtml(val)}</span></div>`
     })
     .join('')
   return `<div class="emap-wh-hover-freight"><div class="emap-wh-hover-freight-head">收货价格</div><div class="emap-wh-hover-freight-scroll">${items}</div></div>`
@@ -2217,7 +2254,7 @@ function pickWarehouseStockByCategory(
       '回收品种',
     ])
     const stock = pickNumber(o, ['当前库存', 'current_stock', 'stock'])
-    const date = pickStr(o, ['库存日期', 'inventory_date', 'stock_date', 'date'])
+    const date = pickStr(o, ['库存日期', 'inventory_date', 'stock_date', 'stockDate', 'date', '更新时间', 'updated_at'])
     if (!category && stock === null) continue
     out.push({ category: category || '—', stock, date })
   }
@@ -2236,13 +2273,13 @@ function warehouseStockBlockHtml(
         s.stock === null
           ? '—'
           : `${s.stock.toLocaleString('zh-CN', { maximumFractionDigits: 4 })} 吨`
-      const dateSuffix = s.date ? ` · ${escapeHtml(s.date)}` : ''
+      const dateSpan = s.date ? `<span class="emap-wh-hover-date">${escapeHtml(s.date)}</span>` : '<span></span>'
       return `<div class="emap-wh-hover-freight-item"><span class="emap-wh-hover-freight-smelter">${escapeHtml(
         s.category,
-      )}</span><span class="emap-wh-hover-freight-val">${escapeHtml(val)}${dateSuffix}</span></div>`
+      )}</span>${dateSpan}<span class="emap-wh-hover-freight-val">${escapeHtml(val)}</span></div>`
     })
     .join('')
-  return `<div class="emap-wh-hover-freight"><div class="emap-wh-hover-freight-head">库存按品种</div><div class="emap-wh-hover-freight-scroll">${items}</div></div>`
+  return `<div class="emap-wh-hover-freight emap-wh-stock-block"><div class="emap-wh-hover-freight-head">库存按品种</div><div class="emap-wh-hover-freight-scroll">${items}</div></div>`
 }
 
 function formatWarehouseCurrentStock(raw: Record<string, unknown>): string {
@@ -5613,6 +5650,9 @@ async function loadAndPlot(ui: MarkersLoadUi = 'full') {
   void loadCategories()
   try {
     const [whRows, smRows] = await Promise.all([fetchTlWarehousesAll(), fetchTlSmeltersAll()])
+
+    // 先拉取收货价格日期缓存，确保后续渲染卡片时数据已就绪
+    await refreshReceiptPriceDateCache()
     let typeRows: Record<string, unknown>[] = []
     try {
       typeRows = await fetchTlWarehouseTypes(false)
@@ -5729,7 +5769,12 @@ onBeforeUnmount(() => {
   }
   resizeObs?.disconnect()
   resizeObs = null
-  mapRef.value?.remove()
+  try {
+    mapRef.value?.stop()
+    mapRef.value?.remove()
+  } catch {
+    /* ignore – container may already be gone */
+  }
   mapRef.value = null
   warehouseMarkerById.clear()
   smelterMarkerById.clear()
@@ -7797,6 +7842,7 @@ onBeforeUnmount(() => {
   padding: 7px 10px 4px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
@@ -8227,7 +8273,7 @@ onBeforeUnmount(() => {
 /* 库房信息卡片：宽度定标，高度不超过 16:9 对应高度（内容少则盒子变矮）；同行标签+值、双列指标提高利用率 */
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-tip,
 .leaflet-popup-content .emap-wh-hover-tip {
-  --emap-wh-w: min(420px, calc(100vw - 36px));
+  --emap-wh-w: min(520px, calc(100vw - 36px));
   box-sizing: border-box;
   width: var(--emap-wh-w);
   max-width: 100%;
@@ -8238,7 +8284,7 @@ onBeforeUnmount(() => {
 .leaflet-popup-content .emap-wh-hover-inner {
   box-sizing: border-box;
   padding: 6px 8px;
-  max-height: calc(var(--emap-wh-w) * 16 / 16);
+  max-height: calc(var(--emap-wh-w) * 18 / 16);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -8304,6 +8350,12 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-stock-block,
+.leaflet-popup-content .emap-wh-stock-block {
+  min-height: 80px;
+  flex-grow: 1;
+}
+
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-head,
 .leaflet-popup-content .emap-wh-hover-freight-head {
   font-size: 11px;
@@ -8319,7 +8371,7 @@ onBeforeUnmount(() => {
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-scroll,
 .leaflet-popup-content .emap-wh-hover-freight-scroll {
-  max-height: 300px;
+  max-height: 450px;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;
@@ -8328,10 +8380,15 @@ onBeforeUnmount(() => {
   gap: 2px;
 }
 
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-stock-block .emap-wh-hover-freight-scroll,
+.leaflet-popup-content .emap-wh-stock-block .emap-wh-hover-freight-scroll {
+  min-height: 60px;
+}
+
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-item,
 .leaflet-popup-content .emap-wh-hover-freight-item {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   column-gap: 8px;
   align-items: start;
   font-size: 11px;
@@ -8358,6 +8415,14 @@ onBeforeUnmount(() => {
   font-size: 10px;
   color: #94a3b8;
   margin-left: 4px;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-date-line,
+.leaflet-popup-content .emap-wh-hover-date-line {
+  grid-column: 1 / -1;
+  font-size: 10px;
+  color: #94a3b8;
+  line-height: 1.3;
 }
 
 .leaflet-tooltip.emap-marker-hover-tip .leaflet-tooltip-content {
@@ -8429,14 +8494,28 @@ onBeforeUnmount(() => {
   word-break: break-word;
 }
 
+.leaflet-popup-content:has(.emap-wh-hover-tip) {
+  max-width: min(520px, calc(100vw - 48px)) !important;
+  width: min(520px, calc(100vw - 48px)) !important;
+  margin: 0;
+  padding: 0;
+}
+
+.leaflet-popup-content-wrapper:has(.emap-wh-hover-tip) {
+  max-width: min(520px, calc(100vw - 32px)) !important;
+  width: min(520px, calc(100vw - 32px)) !important;
+}
+
 .emap-shell--dashboard .leaflet-popup-content:has(.emap-wh-hover-tip) {
-  max-width: min(420px, calc(100vw - 48px));
+  max-width: min(520px, calc(100vw - 48px));
+  width: min(520px, calc(100vw - 48px));
   margin: 0;
   padding: 0;
 }
 
 .emap-shell--dashboard .leaflet-popup-content-wrapper:has(.emap-wh-hover-tip) {
-  max-width: min(420px, calc(100vw - 32px));
+  max-width: min(520px, calc(100vw - 32px));
+  width: min(520px, calc(100vw - 32px));
 }
 
 .emap-shell--dashboard .leaflet-popup-tip {
