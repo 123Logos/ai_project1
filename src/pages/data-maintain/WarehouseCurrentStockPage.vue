@@ -113,13 +113,6 @@
                 >
                   修改
                 </button>
-                <button
-                  type="button"
-                  class="btn btn-sm btn-outline-danger ms-1"
-                  @click="openDeleteDialog(row)"
-                >
-                  删除
-                </button>
               </td>
             </tr>
           </tbody>
@@ -173,39 +166,6 @@
         </div>
       </div>
     </div>
-
-    <!-- 删除确认弹窗 -->
-    <div v-if="deleteDialogVisible" class="dmp-edit-overlay" @click.self="closeDeleteDialog">
-      <div class="dmp-edit-dialog">
-        <h3 class="dmp-edit-title">确认删除</h3>
-        <div class="dmp-edit-form">
-          <p>确定要删除以下库存记录吗？</p>
-          <div class="dmp-edit-field">
-            <label>库房名称</label>
-            <input type="text" class="form-control" :value="deleteForm.warehouseName" disabled />
-          </div>
-          <div class="dmp-edit-field">
-            <label>回收品种</label>
-            <input type="text" class="form-control" :value="deleteForm.categoryName" disabled />
-          </div>
-          <div class="dmp-edit-field">
-            <label>当前库存</label>
-            <input type="text" class="form-control" :value="formatNum(deleteForm.stock)" disabled />
-          </div>
-          <div class="dmp-edit-field">
-            <label>库存日期</label>
-            <input type="text" class="form-control" :value="deleteForm.stockDate || '—'" disabled />
-          </div>
-        </div>
-        <p v-if="deleteError" class="dmp-err">{{ deleteError }}</p>
-        <div class="dmp-edit-actions">
-          <button type="button" class="btn btn-danger" :disabled="deleteLoading" @click="confirmDelete">
-            {{ deleteLoading ? '删除中…' : '确认删除' }}
-          </button>
-          <button type="button" class="btn btn-outline-secondary" @click="closeDeleteDialog">取消</button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
@@ -214,7 +174,6 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { fetchTlCategories, fetchTlWarehousesAll } from '@/api/tlApi'
 import {
   downloadWarehouseInventoryTemplate,
-  deleteWarehouseInventory,
   fetchWarehouseCurrentStockList,
   importWarehouseCurrentStockExcel,
   saveWarehouseInventoryManual,
@@ -238,19 +197,6 @@ const editLoading = ref(false)
 const editError = ref('')
 const editForm = ref({
   id: 0,
-  warehouseId: 0,
-  warehouseName: '',
-  categoryName: '',
-  categoryId: 0,
-  stock: 0,
-  stockDate: '',
-})
-
-// 删除弹窗相关
-const deleteDialogVisible = ref(false)
-const deleteLoading = ref(false)
-const deleteError = ref('')
-const deleteForm = ref({
   warehouseId: 0,
   warehouseName: '',
   categoryName: '',
@@ -399,24 +345,6 @@ function closeEditDialog() {
   editError.value = ''
 }
 
-function openDeleteDialog(row: WarehouseCurrentStockRow) {
-  deleteForm.value = {
-    warehouseId: row.warehouseId,
-    warehouseName: row.warehouseName,
-    categoryName: row.categoryName,
-    categoryId: row.categoryId ?? 0,
-    stock: row.stock ?? 0,
-    stockDate: row.stockDate || '',
-  }
-  deleteError.value = ''
-  deleteDialogVisible.value = true
-}
-
-function closeDeleteDialog() {
-  deleteDialogVisible.value = false
-  deleteError.value = ''
-}
-
 async function confirmEdit() {
   if (!editForm.value.categoryId) {
     editError.value = '品类信息缺失，无法修改'
@@ -441,33 +369,6 @@ async function confirmEdit() {
   }
 }
 
-async function confirmDelete() {
-  if (!deleteForm.value.categoryId) {
-    deleteError.value = '品类信息缺失，无法删除'
-    return
-  }
-  if (!deleteForm.value.stockDate) {
-    deleteError.value = '库存日期缺失，无法删除'
-    return
-  }
-  deleteLoading.value = true
-  deleteError.value = ''
-  try {
-    await deleteWarehouseInventory({
-      warehouseId: deleteForm.value.warehouseId,
-      categoryId: deleteForm.value.categoryId,
-      stockDate: deleteForm.value.stockDate,
-    })
-    message.value = '删除成功'
-    closeDeleteDialog()
-    await loadList()
-  } catch (e) {
-    deleteError.value = formatApiError(e, '删除库存')
-  } finally {
-    deleteLoading.value = false
-  }
-}
-
 async function loadList() {
   listLoading.value = true
   listError.value = ''
@@ -480,12 +381,7 @@ async function loadList() {
       warehouse_id: warehouseId != null && Number.isFinite(warehouseId) ? warehouseId : undefined,
       category_id: categoryId != null && Number.isFinite(categoryId) ? categoryId : undefined,
     })
-    // 用原始数据修正 warehouseId，确保使用 库房id 而非 id
-    listRows.value = res.items.map((item, i) => {
-      const raw = res.rawItems[i]
-      const correctWarehouseId = raw ? Number(raw['库房id'] ?? raw.warehouse_id ?? item.warehouseId) : item.warehouseId
-      return { ...item, warehouseId: correctWarehouseId }
-    })
+    listRows.value = res.items
     total.value = res.total
   } catch (e) {
     listRows.value = []

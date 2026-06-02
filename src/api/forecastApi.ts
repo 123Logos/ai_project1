@@ -120,26 +120,6 @@ export interface PrdForecastDetailRow {
 
   analysis: string | null
 
-  shipProbability: string
-
-  expectedShipDate: string | null
-
-  confidenceLevel: string
-
-  mainFactors: string
-
-  comprehensiveAnalysis: string
-
-  historyAnalysis: string
-
-  priceAnalysis: string
-
-  trendAnalysis: string
-
-  riskAnalysis: string
-
-  recommendationAnalysis: string
-
   wmaBase: number | null
 
   weekCoef: number | null
@@ -306,10 +286,6 @@ export function normalizeForecastDetailRow(raw: unknown): PrdForecastDetailRow |
 
   if (!targetDate) return null
 
-  const analysis = pickAnalysisText(r)
-
-  const comprehensiveAnalysis = pickStr(r, ['comprehensive_analysis', 'comprehensiveAnalysis']) || analysis || ''
-
   return {
 
     targetDate,
@@ -322,29 +298,9 @@ export function normalizeForecastDetailRow(raw: unknown): PrdForecastDetailRow |
 
     productVariety: pickStr(r, ['product_variety', 'productVariety']) || '—',
 
-    predictedWeight: pickNum(r, ['predicted_weight', 'predictedWeight', 'expected_shipment', 'expectedShipment']) ?? 0,
+    predictedWeight: pickNum(r, ['predicted_weight', 'predictedWeight']) ?? 0,
 
-    analysis,
-
-    shipProbability: pickStr(r, ['ship_probability', 'shipProbability']),
-
-    expectedShipDate: pickStrOrNull(r, ['expected_ship_date', 'expectedShipDate']),
-
-    confidenceLevel: pickStr(r, ['confidence_level', 'confidenceLevel']),
-
-    mainFactors: pickStr(r, ['main_factors', 'mainFactors']) || analysis || '',
-
-    comprehensiveAnalysis,
-
-    historyAnalysis: pickStr(r, ['history_analysis', 'historyAnalysis']),
-
-    priceAnalysis: pickStr(r, ['price_analysis', 'priceAnalysis']),
-
-    trendAnalysis: pickStr(r, ['trend_analysis', 'trendAnalysis']),
-
-    riskAnalysis: pickStr(r, ['risk_analysis', 'riskAnalysis']),
-
-    recommendationAnalysis: pickStr(r, ['recommendation_analysis', 'recommendationAnalysis']),
+    analysis: pickAnalysisText(r),
 
     wmaBase: pickNumOrNull(r, ['wma_base', 'wmaBase']),
 
