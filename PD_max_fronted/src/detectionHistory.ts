@@ -1,6 +1,7 @@
 import {
   parseLinkedRuleChecksField,
   type DetectionHistoryApiRecord,
+  type FeedbackJudgment,
   type RuleChecksData,
   type V3ResultItem,
 } from './api/detect'
@@ -22,6 +23,8 @@ export type DetectionHistoryEntry = {
   mode?: string
   /** 规则检测（辅助核查）结果，可与 AI 检测同 task 关联 */
   ruleCheck?: RuleChecksData | null
+  /** 标注状态：correct / wrong / suspicious / null（未标注） */
+  feedbackStatus?: FeedbackJudgment | null
 }
 
 export function historyEntryHasAi(entry: DetectionHistoryEntry): boolean {
@@ -138,6 +141,7 @@ export function mapApiRecordToEntry(r: DetectionHistoryApiRecord): DetectionHist
     status: r.status?.toUpperCase() === 'FAILED' ? 'FAILED' : 'COMPLETED',
     mode: r.mode,
     ruleCheck: ruleFromLinked ?? ruleFromRecord ?? null,
+    feedbackStatus: r.feedback_status ?? null,
   }
 }
 

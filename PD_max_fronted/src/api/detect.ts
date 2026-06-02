@@ -1006,6 +1006,8 @@ export interface DetectionHistoryApiRecord {
   outcome?: DetectionHistoryOutcome | null
   /** async_v3 等主记录上由后端聚合的规则结果 */
   linked_rule_checks?: RuleChecksData | null
+  /** 标注状态：correct / wrong / suspicious / null（未标注） */
+  feedback_status?: FeedbackJudgment | null
 }
 
 export interface DetectionHistoryListResult {
@@ -1097,6 +1099,10 @@ function coerceApiRecord(raw: Record<string, unknown>): DetectionHistoryApiRecor
     parseLinkedRuleChecksField(outcome?.linked_rule_checks) ??
     (outcome?.rule_checks ? parseLinkedRuleChecksField(outcome.rule_checks) : null)
 
+  const feedbackStatus = typeof raw.feedback_status === 'string'
+    ? (raw.feedback_status as FeedbackJudgment | null)
+    : null
+
   return {
     id: String(id),
     created_at: created,
@@ -1108,6 +1114,7 @@ function coerceApiRecord(raw: Record<string, unknown>): DetectionHistoryApiRecor
     status: st,
     outcome,
     linked_rule_checks: linkedRuleChecks,
+    feedback_status: feedbackStatus,
   }
 }
 

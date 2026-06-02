@@ -9,7 +9,9 @@
       "WebFetch(domain:118.25.96.187)",
       "Bash(curl -s -X DELETE \"http://118.25.96.187:8001/tl/warehouse_spread_configs/1\")",
       "Bash(node -e ' *)",
-      "Bash(grep -o '<div[^>]*freight-filter-warehouse[^\"]*\"[^>]*>.\\\\{0,500\\\\}')"
+      "Bash(grep -o '<div[^>]*freight-filter-warehouse[^\"]*\"[^>]*>.\\\\{0,500\\\\}')",
+      "Bash(npx vue-tsc *)",
+      "Bash(npx vite *)"
     ]
   }
 }
