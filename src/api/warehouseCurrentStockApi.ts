@@ -3,6 +3,7 @@ import { getToken } from './authApi'
 
 export interface WarehouseCurrentStockRow {
   id: number
+  warehouseId: number
   warehouseName: string
   categoryId: number | null
   categoryName: string
@@ -60,6 +61,7 @@ function pickRow(r: Record<string, unknown>): WarehouseCurrentStockRow {
   }
   return {
     id: Number(r.id ?? r.record_id ?? 0),
+    warehouseId: Number(r['库房id'] ?? r.warehouse_id ?? r.id ?? 0),
     warehouseName: String(r['库房名称'] ?? r['仓库名'] ?? r.warehouse_name ?? r.name ?? ''),
     categoryId,
     categoryName: String(

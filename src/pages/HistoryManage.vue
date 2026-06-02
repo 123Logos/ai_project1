@@ -305,6 +305,8 @@
                 <th>大区经理</th>
                 <th>冶炼厂</th>
                 <th>仓库</th>
+                <th>品类</th>
+                <th>天气</th>
                 <th>重量(吨)</th>
                 <th width="70">查看</th>
               </tr>
@@ -316,11 +318,13 @@
                 <td>{{ row.regional_manager }}</td>
                 <td>{{ row.smelter || '-' }}</td>
                 <td>{{ row.warehouse }}</td>
+                <td>{{ row.details.map(d => d.variety).join(', ') }}</td>
+                <td>{{ row.weather || '-' }}</td>
                 <td>{{ row.total_weight.toFixed(2) }}</td>
                 <td><button class="btn-view" @click="openDetailModal(row)">查看</button></td>
               </tr>
               <tr v-if="paginatedData.length === 0">
-                <td :colspan="7" class="empty-data">暂无数据</td>
+                <td :colspan="9" class="empty-data">暂无数据</td>
               </tr>
             </tbody>
           </table>
@@ -427,6 +431,7 @@ interface HistoryRecord {
   product_variety: string
   smelter?: string
   weight: string
+  import_weather?: string
   created_at: string
 }
 
@@ -439,6 +444,7 @@ interface SummaryRow {
   regional_manager: string
   smelter: string
   warehouse: string
+  weather: string
   total_weight: number
   details: { variety: string; weight: number }[]
 }
@@ -809,6 +815,7 @@ const aggregateData = (data: HistoryRecord[]): SummaryRow[] => {
         regional_manager: item.regional_manager,
         smelter: item.smelter || '',
         warehouse: item.warehouse,
+        weather: item.import_weather || '',
         total_weight: 0,
         details: []
       })
@@ -824,7 +831,7 @@ const aggregateData = (data: HistoryRecord[]): SummaryRow[] => {
   })
   
   return Array.from(map.values()).sort((a, b) => {
-    if (a.delivery_date !== b.delivery_date) return a.delivery_date.localeCompare(b.delivery_date)
+    if (a.delivery_date !== b.delivery_date) return b.delivery_date.localeCompare(a.delivery_date)
     if (a.regional_manager !== b.regional_manager) return a.regional_manager.localeCompare(b.regional_manager)
     if (a.smelter !== b.smelter) return a.smelter.localeCompare(b.smelter)
     return a.warehouse.localeCompare(b.warehouse)
@@ -996,12 +1003,14 @@ const exportFilteredData = () => {
     return
   }
   
-  const headers = ['送货日期', '大区经理', '冶炼厂', '仓库', '重量(吨)']
+  const headers = ['送货日期', '大区经理', '冶炼厂', '仓库', '品类', '天气', '重量(吨)']
   const rowsData = summaryData.value.map(item => [
     item.delivery_date,
     item.regional_manager,
     item.smelter || '',
     item.warehouse,
+    item.details.map(d => d.variety).join(', '),
+    item.weather || '',
     item.total_weight.toFixed(2)
   ])
   

@@ -197,6 +197,7 @@ const editLoading = ref(false)
 const editError = ref('')
 const editForm = ref({
   id: 0,
+  warehouseId: 0,
   warehouseName: '',
   categoryName: '',
   categoryId: 0,
@@ -328,6 +329,7 @@ async function confirmImport() {
 function openEditDialog(row: WarehouseCurrentStockRow) {
   editForm.value = {
     id: row.id,
+    warehouseId: row.warehouseId,
     warehouseName: row.warehouseName,
     categoryName: row.categoryName,
     categoryId: row.categoryId ?? 0,
@@ -352,7 +354,7 @@ async function confirmEdit() {
   editError.value = ''
   try {
     await saveWarehouseInventoryManual({
-      warehouseId: editForm.value.id,
+      warehouseId: editForm.value.warehouseId,
       categoryId: editForm.value.categoryId,
       stock: editForm.value.stock,
       stockDate: editForm.value.stockDate || undefined,

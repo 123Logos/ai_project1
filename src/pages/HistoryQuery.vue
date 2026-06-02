@@ -4,19 +4,19 @@
     <div class="card">
       <div class="menu-search-bar">
         <div class="inner-menu">
-          <div 
-            class="menu-item"
-            :class="{ active: activeTab === 'manager' }"
-            @click="activeTab = 'manager'"
-          >
-            按大区经理查询
-          </div>
-          <div 
+          <div
             class="menu-item"
             :class="{ active: activeTab === 'warehouse' }"
             @click="activeTab = 'warehouse'"
           >
             按仓库查询
+          </div>
+          <div
+            class="menu-item"
+            :class="{ active: activeTab === 'manager' }"
+            @click="activeTab = 'manager'"
+          >
+            按大区经理查询
           </div>
         </div>
       </div>
@@ -465,7 +465,7 @@ interface WarehouseTableRow {
 }
 
 // ==================== 通用状态 ====================
-const activeTab = ref('manager')
+const activeTab = ref('warehouse')
 const loading = ref(false)
 
 // 错误弹窗
@@ -817,7 +817,7 @@ async function queryManagerData() {
     const items = await fetchAllDeliveryHistoryItems(baseParams)
 
     // 获取所有日期
-    const dates = [...new Set(items.map(item => item.delivery_date))].sort()
+    const dates = [...new Set(items.map(item => item.delivery_date))].sort().reverse()
     managerDateColumns.value = dates
     
     // 按大区经理+冶炼厂分组汇总重量，并收集该组下所有原始记录主键 id
@@ -1163,7 +1163,7 @@ async function queryWarehouseData() {
     const items = await fetchAllDeliveryHistoryItems(baseParams)
 
     // 获取所有日期
-    const dates = [...new Set(items.map(item => item.delivery_date))].sort()
+    const dates = [...new Set(items.map(item => item.delivery_date))].sort().reverse()
     warehouseDateColumns.value = dates
 
     const latestRmByWarehouse = buildLatestRegionalManagerByWarehouse(

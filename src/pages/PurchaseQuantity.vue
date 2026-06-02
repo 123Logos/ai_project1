@@ -458,7 +458,9 @@
               <tr>
                 <th>大区经理</th>
                 <th>冶炼厂</th>
-                <th v-for="date in forecastDateColumns" :key="'m-' + date">{{ date }}</th>
+                <th v-for="date in forecastDateColumns" :key="'m-' + date">
+                  {{ date }}<span class="weekday-badge">{{ weekDayLabel(date) }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -504,7 +506,9 @@
                 <th>仓库</th>
                 <th>大区经理</th>
                 <th>冶炼厂</th>
-                <th v-for="date in forecastDateColumns" :key="'w-' + date">{{ date }}</th>
+                <th v-for="date in forecastDateColumns" :key="'w-' + date">
+                  {{ date }}<span class="weekday-badge">{{ weekDayLabel(date) }}</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -563,7 +567,7 @@
                 class="detail-row-clickable"
                 @click="openDetailAnalysis(row)"
               >
-                <td>{{ row.targetDate }}</td>
+                <td>{{ row.targetDate }}<span class="weekday-badge">{{ weekDayLabel(row.targetDate) }}</span></td>
                 <td>{{ row.warehouse }}</td>
                 <td>{{ row.regionalManager }}</td>
                 <td>{{ row.smelter || '—' }}</td>
@@ -1826,13 +1830,19 @@ function buildForecastFilterParams(): Record<string, any> {
   return params
 }
 
+function weekDayLabel(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00')
+  if (isNaN(d.getTime())) return ''
+  return ['日', '一', '二', '三', '四', '五', '六'][d.getDay()]
+}
+
 function smelterKey(s: string | null | undefined) {
   const t = s?.trim()
   return t ? t : '未知'
 }
 
 function rebuildForecastPivotFromDetail(items: ForecastDetailItem[]) {
-  const dates = [...new Set(items.map((i) => i.target_date))].sort()
+  const dates = [...new Set(items.map((i) => i.target_date))].sort().reverse()
   forecastDateColumns.value = dates
 
   const cellFor = (dateMap: Map<string, number>, date: string): ForecastPivotCell => {
@@ -2908,6 +2918,22 @@ onMounted(async () => {
   background-color: #E8F0F8;
   font-weight: 600;
   color: #2c3e50;
+}
+
+.weekday-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: #e0e7ff;
+  color: #4338ca;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  vertical-align: middle;
 }
 
 .data-table tbody tr { transition: background 0.15s ease, transform 0.15s ease; }

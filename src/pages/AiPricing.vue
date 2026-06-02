@@ -73,11 +73,11 @@
     <!-- 库房AI定价对标分析 -->
     <div v-else-if="activePage === 'benchmarkAnalysis'" class="sub-page">
       <div class="sub-page-header">
+        <h3 class="sub-page-title">库房AI定价对标分析</h3>
         <button class="back-btn" @click="activePage = ''">
           <i class="bi bi-arrow-left"></i>
           返回
         </button>
-        <h3 class="sub-page-title">库房AI定价对标分析</h3>
       </div>
       <div class="sub-page-body">
         <div class="table-toolbar">
@@ -163,17 +163,17 @@
     <!-- 对标城市定价 -->
     <div v-else-if="activePage === 'cityBenchmark'" class="sub-page">
       <div class="sub-page-header">
-        <button class="back-btn" @click="activePage = ''">
-          <i class="bi bi-arrow-left"></i>
-          返回
-        </button>
-        <h3 class="sub-page-title">对标城市定价</h3>
         <div class="header-actions">
           <button class="btn add-btn" @click="openAddForm">
             <i class="bi bi-plus-lg me-1"></i>
             新增对标城市定价
           </button>
         </div>
+        <h3 class="sub-page-title">对标城市定价</h3>
+        <button class="back-btn" @click="activePage = ''">
+          <i class="bi bi-arrow-left"></i>
+          返回
+        </button>
       </div>
       <div class="sub-page-body">
         <div class="table-toolbar">
@@ -300,11 +300,6 @@
     <!-- 冶炼厂标定价格 -->
     <div v-else-if="activePage === 'smelterPrice'" class="sub-page">
       <div class="sub-page-header">
-        <button class="back-btn" @click="activePage = ''">
-          <i class="bi bi-arrow-left"></i>
-          返回
-        </button>
-        <h3 class="sub-page-title">冶炼厂标定价格</h3>
         <div class="header-actions" style="display:flex; gap:8px; flex-wrap: wrap;">
           <button class="btn add-btn add-btn--outline" @click="downloadSmelterImportTemplate">
             <i class="bi bi-download me-1"></i>
@@ -327,6 +322,11 @@
             历史记录
           </button>
         </div>
+        <h3 class="sub-page-title">冶炼厂标定价格</h3>
+        <button class="back-btn" @click="activePage = ''">
+          <i class="bi bi-arrow-left"></i>
+          返回
+        </button>
       </div>
       <input
         ref="smelterExcelFileInput"
@@ -656,11 +656,6 @@
     <!-- 库房差价和毛利管理 -->
     <div v-else-if="activePage === 'marginManage'" class="sub-page">
       <div class="sub-page-header">
-        <button class="back-btn" @click="activePage = ''">
-          <i class="bi bi-arrow-left"></i>
-          返回
-        </button>
-        <h3 class="sub-page-title">库房差价和毛利管理</h3>
         <div class="header-actions" style="display:flex; gap:8px;">
           <button class="btn add-btn add-btn--outline" @click="triggerMarginImport">
             <i class="bi bi-upload me-1"></i>
@@ -671,6 +666,11 @@
             新增
           </button>
         </div>
+        <h3 class="sub-page-title">库房差价和毛利管理</h3>
+        <button class="back-btn" @click="activePage = ''">
+          <i class="bi bi-arrow-left"></i>
+          返回
+        </button>
       </div>
       <input ref="marginFileInput" type="file" accept=".xlsx,.xls,.csv" style="display:none" @change="handleMarginImport" />
       <div class="sub-page-body">
@@ -885,11 +885,11 @@
     <!-- 库房自有定价分析 -->
     <div v-else-if="activePage === 'selfPricing'" class="sub-page">
       <div class="sub-page-header">
+        <h3 class="sub-page-title">库房自有定价分析</h3>
         <button class="back-btn" @click="activePage = ''">
           <i class="bi bi-arrow-left"></i>
           返回
         </button>
-        <h3 class="sub-page-title">库房自有定价分析</h3>
       </div>
       <div class="sub-page-body">
         <div class="table-toolbar">
@@ -1058,11 +1058,11 @@
     <!-- 其他子页面 -->
     <div v-else class="sub-page">
       <div class="sub-page-header">
+        <h3 class="sub-page-title">{{ pageTitle }}</h3>
         <button class="back-btn" @click="activePage = ''">
           <i class="bi bi-arrow-left"></i>
           返回
         </button>
-        <h3 class="sub-page-title">{{ pageTitle }}</h3>
       </div>
       <div class="sub-page-body">
         <div class="content-placeholder">
@@ -2386,6 +2386,7 @@ watch(activePage, (val) => {
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s;
+  margin-left: auto;
 }
 
 .back-btn:hover {
@@ -2444,7 +2445,7 @@ watch(activePage, (val) => {
 
 /* ===== 对标城市定价表格 ===== */
 .header-actions {
-  margin-left: auto;
+  margin-right: auto;
 }
 
 .add-btn {

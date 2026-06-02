@@ -133,6 +133,7 @@ const health = ref<HealthStatus | null>(null)
 const healthError = ref<string | null>(null)
 const modelInfo = ref<string>('加载中...')
 const feedbackSubmitting = ref<Record<string, boolean>>({})
+const feedbackJudged = ref<Record<string, string>>({})
 const HISTORY_PAGE_SIZE = 9
 
 const historyTotalPages = computed(() =>
@@ -391,6 +392,7 @@ async function handleFeedback(taskId: string, resultIndex: number, judgment: Fee
   feedbackSubmitting.value[key] = true
   try {
     await submitFeedback(taskId, judgment, null, `result_index:${resultIndex}`)
+    feedbackJudged.value[key] = judgment
   } catch (e) {
     errorMsg.value = '反馈提交失败: ' + (e as Error).message
   } finally {
@@ -1915,26 +1917,29 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="btn btn-feedback btn-feedback-correct"
-                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
+                  :class="{ 'btn-feedback-selected': feedbackJudged[v3TaskId + '-0'] === 'correct' }"
+                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0'] || !!feedbackJudged[v3TaskId + '-0']"
                   @click="handleFeedback(v3TaskId ?? '', 0, 'correct')"
                 >
-                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '正确' }}
+                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : feedbackJudged[v3TaskId + '-0'] === 'correct' ? '✓ 正确' : '正确' }}
                 </button>
                 <button
                   type="button"
                   class="btn btn-feedback btn-feedback-suspicious"
-                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
+                  :class="{ 'btn-feedback-selected': feedbackJudged[v3TaskId + '-0'] === 'suspicious' }"
+                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0'] || !!feedbackJudged[v3TaskId + '-0']"
                   @click="handleFeedback(v3TaskId ?? '', 0, 'suspicious')"
                 >
-                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '疑似' }}
+                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : feedbackJudged[v3TaskId + '-0'] === 'suspicious' ? '✓ 疑似' : '疑似' }}
                 </button>
                 <button
                   type="button"
                   class="btn btn-feedback btn-feedback-wrong"
-                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
+                  :class="{ 'btn-feedback-selected': feedbackJudged[v3TaskId + '-0'] === 'wrong' }"
+                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0'] || !!feedbackJudged[v3TaskId + '-0']"
                   @click="handleFeedback(v3TaskId ?? '', 0, 'wrong')"
                 >
-                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '错误' }}
+                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : feedbackJudged[v3TaskId + '-0'] === 'wrong' ? '✓ 错误' : '错误' }}
                 </button>
               </div>
             </template>
@@ -4570,5 +4575,10 @@ onUnmounted(() => {
 
 .btn-feedback-wrong:hover:not(:disabled) {
   background: #fee2e2;
+}
+
+.btn-feedback-selected {
+  font-weight: 700;
+  box-shadow: inset 0 0 0 2px currentColor;
 }
 </style>

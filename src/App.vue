@@ -211,7 +211,7 @@ const primaryTabs: Array<{ key: SectionKey; label: string }> = [
   { key: 'prediction', label: 'AI 预测' },
   { key: 'detect', label: '图片真伪检查' },
   { key: 'price', label: 'AI 比价系统' },
-  { key: 'aiPricing', label: 'AI 定价' },
+  // { key: 'aiPricing', label: 'AI 定价' },
   { key: 'warehouseDistance', label: '库房距离监测配置' },
 ]
 

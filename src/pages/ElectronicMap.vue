@@ -763,12 +763,14 @@
                 :key="row.targetDate"
                 type="button"
                 class="emap-fc-analysis-row"
-                :title="row.analysis || ''"
+                :title="row.mainFactors || row.analysis || ''"
                 @click="openForecastAnalysisDrawer(row)"
               >
                 <span class="emap-fc-analysis-date">{{ formatForecastDetailDate(row.targetDate) }}</span>
+                <span v-if="row.shipProbability" class="emap-fc-analysis-badge" :class="`emap-fc-analysis-badge--${row.shipProbability}`">{{ row.shipProbability }}</span>
                 <span class="emap-fc-analysis-weight">{{ row.predictedWeight.toFixed(2) }} 吨</span>
-                <span class="emap-fc-analysis-snippet">{{ truncateForecastAnalysis(row.analysis) }}</span>
+                <span v-if="row.confidenceLevel" class="emap-fc-analysis-confidence">置信{{ row.confidenceLevel }}</span>
+                <span class="emap-fc-analysis-snippet">{{ truncateForecastAnalysis(row.mainFactors || row.analysis) }}</span>
               </button>
             </div>
           </div>
@@ -926,6 +928,7 @@
       :title="forecastAnalysisDrawerTitle"
       :analysis="forecastAnalysisDrawerText"
       :meta-lines="forecastAnalysisDrawerMeta"
+      :sections="forecastAnalysisDrawerSections"
       @close="closeForecastAnalysisDrawer"
     />
   </div>
@@ -1023,6 +1026,16 @@ type ForecastDetailRow = {
   regionalManager: string
   productVariety: string
   smelter: string | null
+  shipProbability: string
+  expectedShipDate: string | null
+  confidenceLevel: string
+  mainFactors: string
+  comprehensiveAnalysis: string
+  historyAnalysis: string
+  priceAnalysis: string
+  trendAnalysis: string
+  riskAnalysis: string
+  recommendationAnalysis: string
 }
 
 const GAODE_TILE =
@@ -1250,6 +1263,7 @@ const forecastAnalysisDrawerVisible = ref(false)
 const forecastAnalysisDrawerTitle = ref('预测依据详情')
 const forecastAnalysisDrawerText = ref<string | null>(null)
 const forecastAnalysisDrawerMeta = ref<string[]>([])
+const forecastAnalysisDrawerSections = ref<Array<{ title: string; content: string }>>([])
 const comparisonModalVisible = ref(false)
 const comparisonModalTitle = ref('比价预测结果')
 const comparisonSectionCollapsed = ref(false)
@@ -5057,14 +5071,23 @@ function parseForecastDetailError(e: unknown): string {
 }
 
 /** 与 PurchaseQuantity.fetchDetailData 相同的分页请求方式 */
-async function fetchForecastDetailPaged(warehouses: string[]): Promise<Record<string, unknown>[]> {
+async function fetchForecastDetailPaged(
+  warehouses: string[],
+  extra?: { product_variety?: string; smelter?: string; horizon_days?: number },
+): Promise<Record<string, unknown>[]> {
   const page_size = 500
   const all: Record<string, unknown>[] = []
   let page = 1
   while (page <= 50) {
-    const response = await axios.get(ApiPaths.forecastDetail, {
-      params: { warehouses, page, page_size },
-    })
+    const body: Record<string, unknown> = {
+      warehouse: warehouses[0] || '',
+      page,
+      page_size,
+    }
+    if (extra?.product_variety) body.product_variety = extra.product_variety
+    if (extra?.smelter) body.smelter = extra.smelter
+    if (extra?.horizon_days) body.horizon_days = extra.horizon_days
+    const response = await axios.post(ApiPaths.predictComprehensive, body)
     const data = response.data as { items?: Record<string, unknown>[]; total?: number }
     const items = data.items ?? []
     all.push(...items)
@@ -5099,14 +5122,24 @@ function truncateForecastAnalysis(analysis: string | null | undefined, maxLen = 
 
 function openForecastAnalysisDrawer(row: ForecastDetailRow) {
   forecastAnalysisDrawerTitle.value = `预测依据 · ${row.targetDate}`
-  forecastAnalysisDrawerText.value = row.analysis
+  forecastAnalysisDrawerText.value = row.comprehensiveAnalysis || row.analysis
   forecastAnalysisDrawerMeta.value = [
     `预测日期：${row.targetDate}`,
     `预测重量：${row.predictedWeight.toFixed(2)} 吨`,
+    row.shipProbability ? `发货概率：${row.shipProbability}` : '',
+    row.confidenceLevel ? `置信度：${row.confidenceLevel}` : '',
+    row.expectedShipDate ? `预计发货：${row.expectedShipDate}` : '',
     row.regionalManager ? `大区经理：${row.regionalManager}` : '',
     row.productVariety ? `品类：${row.productVariety}` : '',
     row.smelter ? `冶炼厂：${row.smelter}` : '',
   ].filter(Boolean)
+  const sections: Array<{ title: string; content: string }> = []
+  if (row.historyAnalysis) sections.push({ title: '历史数据分析', content: row.historyAnalysis })
+  if (row.priceAnalysis) sections.push({ title: '价格因素分析', content: row.priceAnalysis })
+  if (row.trendAnalysis) sections.push({ title: '趋势分析', content: row.trendAnalysis })
+  if (row.riskAnalysis) sections.push({ title: '风险评估', content: row.riskAnalysis })
+  if (row.recommendationAnalysis) sections.push({ title: '建议', content: row.recommendationAnalysis })
+  forecastAnalysisDrawerSections.value = sections
   forecastAnalysisDrawerVisible.value = true
 }
 
@@ -5115,15 +5148,27 @@ function closeForecastAnalysisDrawer() {
 }
 
 function parseForecastDetailRow(row: Record<string, unknown>): ForecastDetailRow | null {
-  const targetDate = pickStr(row, ['target_date', '预测日期', 'date'])
+  const targetDate = pickStr(row, ['target_date', 'targetDate', '预测日期', 'date'])
   if (!targetDate) return null
+  const analysis = pickAnalysisText(row)
+  const comprehensiveAnalysis = pickStr(row, ['comprehensive_analysis', 'comprehensiveAnalysis']) || analysis || ''
   return {
     targetDate,
-    predictedWeight: pickNumber(row, ['predicted_weight', '预测重量', 'weight']) ?? 0,
-    analysis: pickAnalysisText(row),
-    regionalManager: pickStr(row, ['regional_manager', '大区经理', '经理']),
-    productVariety: pickStr(row, ['product_variety', '品类', '品种', '产品品种']),
+    predictedWeight: pickNumber(row, ['predicted_weight', 'predictedWeight', 'expected_shipment', 'expectedShipment', '预测重量', 'weight']) ?? 0,
+    analysis,
+    regionalManager: pickStr(row, ['regional_manager', 'regionalManager', '大区经理', '经理']),
+    productVariety: pickStr(row, ['product_variety', 'productVariety', '品类', '品种', '产品品种']),
     smelter: pickStrOrNull(row, ['smelter', '冶炼厂', 'smelter_name', '冶炼厂名']),
+    shipProbability: pickStr(row, ['ship_probability', 'shipProbability']),
+    expectedShipDate: pickStrOrNull(row, ['expected_ship_date', 'expectedShipDate']),
+    confidenceLevel: pickStr(row, ['confidence_level', 'confidenceLevel']),
+    mainFactors: pickStr(row, ['main_factors', 'mainFactors']) || analysis || '',
+    comprehensiveAnalysis,
+    historyAnalysis: pickStr(row, ['history_analysis', 'historyAnalysis']),
+    priceAnalysis: pickStr(row, ['price_analysis', 'priceAnalysis']),
+    trendAnalysis: pickStr(row, ['trend_analysis', 'trendAnalysis']),
+    riskAnalysis: pickStr(row, ['risk_analysis', 'riskAnalysis']),
+    recommendationAnalysis: pickStr(row, ['recommendation_analysis', 'recommendationAnalysis']),
   }
 }
 
@@ -7421,6 +7466,23 @@ onBeforeUnmount(() => {
 .emap-fc-analysis-snippet {
   color: #e2e8f0;
   word-break: break-word;
+}
+
+.emap-fc-analysis-badge {
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.emap-fc-analysis-badge--高 { background: #166534; color: #bbf7d0; }
+.emap-fc-analysis-badge--中 { background: #1e40af; color: #bfdbfe; }
+.emap-fc-analysis-badge--低 { background: #9a3412; color: #fed7aa; }
+
+.emap-fc-analysis-confidence {
+  font-size: 11px;
+  color: #94a3b8;
+  flex-shrink: 0;
 }
 
 .emap-fc-chart-actions {

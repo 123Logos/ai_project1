@@ -31,6 +31,18 @@
             <h4 class="analysis-basis-title">预测依据</h4>
             <p class="analysis-basis-text">{{ bodyText }}</p>
           </section>
+
+          <div v-if="sections.length" class="analysis-sections">
+            <div v-for="(sec, i) in sections" :key="i" class="analysis-section">
+              <button type="button" class="analysis-section-toggle" @click="toggleSection(i)">
+                <span>{{ sec.title }}</span>
+                <i class="bi" :class="openSections.has(i) ? 'bi-chevron-up' : 'bi-chevron-down'"></i>
+              </button>
+              <div v-if="openSections.has(i)" class="analysis-section-body">
+                <p class="analysis-basis-text">{{ sec.content }}</p>
+              </div>
+            </div>
+          </div>
         </div>
 
         <footer class="analysis-card-foot">
@@ -42,7 +54,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, reactive, watch } from 'vue'
 
 const props = withDefaults(
   defineProps<{
@@ -50,15 +62,19 @@ const props = withDefaults(
     title?: string
     analysis?: string | null
     metaLines?: string[]
+    sections?: Array<{ title: string; content: string }>
   }>(),
   {
     title: '预测依据详情',
     analysis: null,
     metaLines: () => [],
+    sections: () => [],
   },
 )
 
 const emit = defineEmits<{ close: [] }>()
+
+watch(() => props.visible, (v) => { if (v) openSections.clear() })
 
 const bodyText = computed(() => {
   const t = (props.analysis ?? '').trim()
@@ -78,6 +94,16 @@ const metaItems = computed(() =>
     })
     .filter((x): x is { label: string; value: string } => x != null),
 )
+
+const openSections = reactive(new Set<number>())
+
+function toggleSection(i: number) {
+  if (openSections.has(i)) {
+    openSections.delete(i)
+  } else {
+    openSections.add(i)
+  }
+}
 </script>
 
 <style scoped>
@@ -257,5 +283,42 @@ const metaItems = computed(() =>
   .analysis-meta-grid {
     grid-template-columns: 1fr;
   }
+}
+
+.analysis-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.analysis-section {
+  border: 1px solid #e5e9f2;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.analysis-section-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  border: none;
+  background: #f8fafc;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  transition: background 0.15s ease;
+}
+
+.analysis-section-toggle:hover {
+  background: #f1f5f9;
+}
+
+.analysis-section-body {
+  padding: 12px 14px;
+  border-top: 1px solid #e5e9f2;
+  background: #fff;
 }
 </style>
