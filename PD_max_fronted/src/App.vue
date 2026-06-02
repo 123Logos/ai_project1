@@ -409,30 +409,6 @@ async function handleFeedback(taskId: string, resultIndex: number, judgment: Fee
   }
 }
 
-/** 删除当前任务的反馈标注，清除 feedback_status 后可重新标注 */
-async function handleDeleteFeedback(taskId: string) {
-  if (isDetectionMockMode()) return
-  const key = `${taskId}-0`
-  feedbackSubmitting.value[key] = true
-  try {
-    // 通过 folder_name 删除，后端约定 feedback folder_name 与 task_id 相关
-    // 这里需要先查询 feedback 列表找到对应的 folder_name
-    const entries = await fetchFeedbackEntries('all')
-    const entry = entries.items.find((e) => e.task_id === taskId)
-    if (!entry) {
-      errorMsg.value = '未找到该任务的反馈标注'
-      return
-    }
-    await deleteFeedbackEntry(entry.folder_name)
-    currentTaskFeedbackStatus.value = null
-    await refreshHistoryList()
-  } catch (e) {
-    errorMsg.value = '删除标注失败: ' + (e as Error).message
-  } finally {
-    feedbackSubmitting.value[key] = false
-  }
-}
-
 function judgmentText(judgment: string | undefined): string {
   if (judgment === 'correct') return '正确'
   if (judgment === 'wrong') return '错误'
@@ -1203,6 +1179,34 @@ function historyFeedbackStatusPillClass(entry: DetectionHistoryEntry): string {
   return entry.feedbackStatus ?? ''
 }
 
+/** 按 task_id 建立反馈条目索引，便于在历史记录中快速查找对应的纠错信息 */
+const feedbackByTaskId = computed(() => {
+  const map = new Map<string, FeedbackEntry>()
+  for (const e of feedbackEntries.value) {
+    const tid = e.task_id?.trim()
+    if (tid) map.set(tid, e)
+  }
+  return map
+})
+
+/** 从反馈条目中获取纠错时间，格式化为 MM/DD HH:mm */
+function correctionTimestamp(entry: FeedbackEntry | null | undefined): string | null {
+  if (!entry) return null
+  const raw = entry.updated_at || entry.timestamp
+  if (!raw) return null
+  try {
+    const d = new Date(raw.replace(' ', 'T'))
+    if (Number.isNaN(d.getTime())) return null
+    const mm = String(d.getMonth() + 1).padStart(2, '0')
+    const dd = String(d.getDate()).padStart(2, '0')
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mi = String(d.getMinutes()).padStart(2, '0')
+    return `${mm}/${dd} ${hh}:${mi}`
+  } catch {
+    return null
+  }
+}
+
 function isHistoryRowActive(entry: DetectionHistoryEntry) {
   if (viewingHistoryId.value === entry.id) return true
   if (
@@ -1958,65 +1962,32 @@ onUnmounted(() => {
                   </template>
                 </dl>
               </div>
-              <div class="feedback-row">
-                <span class="feedback-label">标注结果是否正确</span>
-                <template v-if="!currentTaskFeedbackStatus">
-                  <button
-                    type="button"
-                    class="btn btn-feedback btn-feedback-correct"
-                    :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
-                    @click="handleFeedback(v3TaskId ?? '', 0, 'correct')"
-                  >
-                    {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '正确' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-feedback btn-feedback-suspicious"
-                    :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
-                    @click="handleFeedback(v3TaskId ?? '', 0, 'suspicious')"
-                  >
-                    {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '疑似' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-feedback btn-feedback-wrong"
-                    :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
-                    @click="handleFeedback(v3TaskId ?? '', 0, 'wrong')"
-                  >
-                    {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '错误' }}
-                  </button>
-                </template>
-                <template v-else>
-                  <span class="pill sm feedback-status-pill" :class="currentTaskFeedbackStatus">
-                    ✓ {{ judgmentText(currentTaskFeedbackStatus) }}
-                  </span>
-                  <button
-                    type="button"
-                    class="btn btn-feedback btn-feedback-edit"
-                    :class="{ 'btn-feedback-active': currentTaskFeedbackStatus === 'correct' }"
-                    :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
-                    @click="handleFeedback(v3TaskId ?? '', 0, 'correct')"
-                  >
-                    {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '改正确' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-feedback btn-feedback-edit"
-                    :class="{ 'btn-feedback-active': currentTaskFeedbackStatus === 'wrong' }"
-                    :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
-                    @click="handleFeedback(v3TaskId ?? '', 0, 'wrong')"
-                  >
-                    {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '改错误' }}
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-feedback btn-feedback-delete"
-                    :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
-                    @click="handleDeleteFeedback(v3TaskId ?? '')"
-                  >
-                    {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '删除标注' }}
-                  </button>
-                </template>
+              <div v-if="!currentTaskFeedbackStatus" class="feedback-row">
+                <span class="feedback-label">人工纠错结果</span>
+                <button
+                  type="button"
+                  class="btn btn-feedback btn-feedback-correct"
+                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
+                  @click="handleFeedback(v3TaskId ?? '', 0, 'correct')"
+                >
+                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '正确' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-feedback btn-feedback-suspicious"
+                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
+                  @click="handleFeedback(v3TaskId ?? '', 0, 'suspicious')"
+                >
+                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '疑似' }}
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-feedback btn-feedback-wrong"
+                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
+                  @click="handleFeedback(v3TaskId ?? '', 0, 'wrong')"
+                >
+                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '错误' }}
+                </button>
               </div>
             </template>
 
@@ -2257,6 +2228,22 @@ onUnmounted(() => {
                   historyResultLabel(h)
                 }}</span>
               </button>
+              <div
+                v-if="h.feedbackStatus && h.taskId && feedbackByTaskId.get(h.taskId)"
+                class="history-correction"
+              >
+                <div class="history-correction-divider">
+                  <span class="history-correction-divider-line" />
+                  <span class="history-correction-divider-text">人工纠错</span>
+                  <span class="history-correction-divider-line" />
+                </div>
+                <span class="pill sm history-correction-pill" :class="h.feedbackStatus">
+                  {{ judgmentText(h.feedbackStatus) }}
+                </span>
+                <span class="history-correction-time">{{
+                  correctionTimestamp(feedbackByTaskId.get(h.taskId!)) || '—'
+                }}</span>
+              </div>
             </li>
           </ul>
           <div v-if="historyTotal > 0" class="history-footer">
@@ -3671,6 +3658,67 @@ onUnmounted(() => {
 .history-kind--feedback.suspicious {
   background: #ffedd5;
   color: #9a3412;
+}
+
+/* ---- 历史记录纠错区块 ---- */
+
+.history-correction {
+  margin: 0;
+  padding: 0.45rem 0.65rem 0.5rem;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.history-correction-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+}
+
+.history-correction-divider-line {
+  flex: 1;
+  height: 1px;
+  background: #d1d5db;
+}
+
+.history-correction-divider-text {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #64748b;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
+
+.history-correction-pill {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  margin-right: 0.35rem;
+  line-height: 1.3;
+}
+
+.history-correction-pill.correct {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.history-correction-pill.wrong {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.history-correction-pill.suspicious {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+.history-correction-time {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
 }
 
 .history-file {
