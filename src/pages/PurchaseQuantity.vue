@@ -830,12 +830,6 @@ const whWarehouseDropdownVisible = ref(false)
 const whWarehouseInputRef = ref<HTMLInputElement>()
 const filteredWhWarehouseOptions = ref<string[]>([])
 
-const forecastWhSelectedManagers = ref<string[]>([])
-const whManagerSearchText = ref('')
-const whManagerDropdownVisible = ref(false)
-const whManagerInputRef = ref<HTMLInputElement>()
-const filteredWhManagerOptions = ref<string[]>([])
-
 const forecastWhSelectedSmelters = ref<string[]>([])
 const whSmelterSearchText = ref('')
 const whSmelterDropdownVisible = ref(false)
@@ -885,12 +879,6 @@ const whWarehousesTagsMore = computed(() =>
   Math.max(0, forecastWhSelectedWarehouses.value.length - MULTI_PREVIEW_TAG_COUNT)
 )
 const whWarehousesTagsRest = computed(() => forecastWhSelectedWarehouses.value.slice(MULTI_PREVIEW_TAG_COUNT))
-
-const whManagersTagsPreview = computed(() => forecastWhSelectedManagers.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
-const whManagersTagsMore = computed(() =>
-  Math.max(0, forecastWhSelectedManagers.value.length - MULTI_PREVIEW_TAG_COUNT)
-)
-const whManagersTagsRest = computed(() => forecastWhSelectedManagers.value.slice(MULTI_PREVIEW_TAG_COUNT))
 
 const whSmeltersTagsPreview = computed(() => forecastWhSelectedSmelters.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
 const whSmeltersTagsMore = computed(() =>
@@ -1141,13 +1129,13 @@ function summaryCanvasPointer(ev: MouseEvent): { x: number; y: number } {
   }
 }
 
-function findNearestSummaryPoint(px: number, py: number): number {
+function findNearestSummaryPoint(px: number, _py: number): number {
   if (!summaryChartLayout) return -1
   const values = chartTotalByDate.value
   if (values.length === 0) return -1
   let best = 0
   let bestDist = Math.abs(px - summaryChartLayout!.toX(0))
-  values.forEach((v, i) => {
+  values.forEach((_v, i) => {
     const dx = Math.abs(px - summaryChartLayout!.toX(i))
     if (dx < bestDist) {
       bestDist = dx
@@ -1208,7 +1196,6 @@ function filterOptionsBySearch(options: string[], searchLower: string) {
 
 function refreshAllFilterOptionLists() {
   filterWhWarehouseOptions()
-  filterWhManagerOptions()
   filterWhSmelterOptions()
   filterMgrManagerOptions()
   filterMgrSmelterOptions()
@@ -1397,57 +1384,6 @@ const focusWhWarehouseInput = () => {
   whWarehouseDropdownVisible.value = true
   filterWhWarehouseOptions()
   nextTick(() => whWarehouseInputRef.value?.focus())
-}
-
-// ---------- 按仓库：大区经理 ----------
-const filterWhManagerOptions = () => {
-  const search = whManagerSearchText.value.toLowerCase()
-  filteredWhManagerOptions.value = filterOptionsBySearch(allManagerOptions.value, search)
-}
-
-function onWhManagerFocus() {
-  whManagerDropdownVisible.value = true
-  filterWhManagerOptions()
-}
-
-function onWhManagerSearchInput() {
-  whManagerDropdownVisible.value = true
-  filterWhManagerOptions()
-}
-
-const addWhManager = (item: string) => {
-  if (!forecastWhSelectedManagers.value.includes(item)) forecastWhSelectedManagers.value.push(item)
-  whManagerSearchText.value = ''
-  filterWhManagerOptions()
-}
-
-const removeWhManager = (item: string) => {
-  forecastWhSelectedManagers.value = forecastWhSelectedManagers.value.filter((i) => i !== item)
-  filterWhManagerOptions()
-}
-
-function onWhManagerDropdownPick(item: string) {
-  if (forecastWhSelectedManagers.value.includes(item)) removeWhManager(item)
-  else addWhManager(item)
-}
-
-const handleWhManagerKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Enter' && whManagerSearchText.value.trim()) {
-    addWhManager(whManagerSearchText.value.trim())
-    e.preventDefault()
-  }
-}
-
-const closeWhManagerDropdown = () => {
-  setTimeout(() => {
-    whManagerDropdownVisible.value = false
-  }, 200)
-}
-
-const focusWhManagerInput = () => {
-  whManagerDropdownVisible.value = true
-  filterWhManagerOptions()
-  nextTick(() => whManagerInputRef.value?.focus())
 }
 
 // ---------- 按仓库：冶炼厂 ----------
@@ -1980,13 +1916,13 @@ function trendCanvasPointer(ev: MouseEvent): { x: number; y: number } {
   }
 }
 
-function findNearestTrendPoint(px: number, py: number): number {
+function findNearestTrendPoint(px: number, _py: number): number {
   if (!trendChartLayout) return -1
   const values = modalChartValues.value
   if (values.length === 0) return -1
   let best = 0
   let bestDist = Math.abs(px - trendChartLayout!.toX(0))
-  values.forEach((v, i) => {
+  values.forEach((_v, i) => {
     const dx = Math.abs(px - trendChartLayout!.toX(i))
     if (dx < bestDist) {
       bestDist = dx

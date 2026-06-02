@@ -76,7 +76,7 @@ function readBlockStatus(
   return 'ok'
 }
 
-function makeFinding(
+export function makeFinding(
   block:
     | (RuleChecksPixelOverlap & Record<string, unknown>)
     | (RuleChecksTimestamp & Record<string, unknown>)

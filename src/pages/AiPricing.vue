@@ -684,7 +684,7 @@
               <option value="">全部城市</option>
               <option v-for="c in marginFilterCityOptions" :key="c" :value="c">{{ c }}</option>
             </select>
-            <button class="btn filter-btn" @click="loadMargins">
+            <button class="btn filter-btn" @click="() => loadMargins()">
               <i class="bi bi-search"></i>
               查询
             </button>

@@ -491,13 +491,13 @@ function canvasPointer(ev: MouseEvent): { x: number; y: number } {
   }
 }
 
-function findNearestChartPoint(px: number, py: number): number {
+function findNearestChartPoint(px: number, _py: number): number {
   if (!chartLayout) return -1
   const series = chartSeries.value
   if (series.length === 0) return -1
   let best = 0
   let bestDist = Math.abs(px - chartLayout!.toX(0))
-  series.forEach((row, i) => {
+  series.forEach((_row, i) => {
     const dx = Math.abs(px - chartLayout!.toX(i))
     if (dx < bestDist) {
       bestDist = dx

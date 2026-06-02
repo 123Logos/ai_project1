@@ -5318,13 +5318,13 @@ function trendCanvasPointer(ev: MouseEvent): { x: number; y: number } {
   }
 }
 
-function findNearestTrendPoint(px: number, py: number): number {
+function findNearestTrendPoint(px: number, _py: number): number {
   if (!trendChartLayout) return -1
   const values = forecastModalValues.value
   if (values.length === 0) return -1
   let best = 0
   let bestDist = Math.abs(px - trendChartLayout!.toX(0))
-  values.forEach((v, i) => {
+  values.forEach((_v, i) => {
     const dx = Math.abs(px - trendChartLayout!.toX(i))
     if (dx < bestDist) {
       bestDist = dx
