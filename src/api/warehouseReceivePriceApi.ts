@@ -50,8 +50,8 @@ function pickRow(r: Record<string, unknown>): WarehouseReceivePriceRow {
     warehouseName: String(r['库房名称'] ?? r['仓库名'] ?? r.warehouse_name ?? r.name ?? ''),
     categoryName: String(r['回收品类'] ?? r['品类'] ?? r['品类名'] ?? r.category_name ?? ''),
     price,
-    priceDate: String(r['定价日期'] ?? r['价格日期'] ?? r.price_date ?? r.date ?? ''),
-    updatedAt: String(r['上传时间'] ?? r.updated_at ?? r.created_at ?? ''),
+    priceDate: String(r['定价日期'] ?? r['价格日期'] ?? r['日期'] ?? r.price_date ?? r.date ?? r['更新时间'] ?? r.updated_at ?? '').slice(0, 10),
+    updatedAt: String(r['上传时间'] ?? r['更新时间'] ?? r.updated_at ?? r.created_at ?? ''),
   }
 }
 

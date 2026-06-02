@@ -364,6 +364,8 @@ const dialogAddTargetSearch = ref('')
 /** 编辑阶梯价差弹窗输入内容 */
 const dialogTierText = ref('')
 const editingRow = ref<LinkRow | null>(null)
+/** 当前编辑行的唯一标识 fromId-toId，API 成功后精准替换该行 */
+const editingRowKey = ref('')
 /** 从表格「修改/删除」打开弹窗时，携带该源库房下的绑定行列表 */
 const dialogEditGroup = ref<LinkRowGroup | null>(null)
 
@@ -481,6 +483,7 @@ function openEditModalFromGroup(grp: LinkRowGroup) {
   if (!grp.rows.length) return
   const row = pickRowByGroupSelection(grp)
   if (!row) return
+  editingRowKey.value = edgeKey(row)
   dialogEditGroup.value = grp
   dialogMode.value = 'edit'
   editingRow.value = row
@@ -493,6 +496,7 @@ function openDeleteModalFromGroup(grp: LinkRowGroup) {
   if (!grp.rows.length) return
   const row = pickRowByGroupSelection(grp)
   if (!row) return
+  editingRowKey.value = edgeKey(row)
   dialogEditGroup.value = grp
   dialogMode.value = 'delete'
   editingRow.value = row
@@ -503,6 +507,7 @@ function openEditTierModalFromGroup(grp: LinkRowGroup) {
   if (!grp.rows.length) return
   const row = pickRowByGroupSelection(grp)
   if (!row) return
+  editingRowKey.value = edgeKey(row)
   dialogEditGroup.value = grp
   dialogMode.value = 'edit-tier'
   editingRow.value = row
@@ -749,6 +754,7 @@ async function loadWarehouses() {
 }
 
 async function fetchListPage(page: number) {
+  console.trace('[fetchListPage] called, page=' + page)
   const r = await fetchTlWarehouseLinksList({
     page,
     size: listSize.value,
@@ -888,29 +894,43 @@ function closeDialog() {
 }
 
 async function submitDialog() {
+  console.log('[submitDialog] mode=', dialogMode.value, 'editingRowKey=', editingRowKey.value)
   if (dialogMode.value === 'delete') {
     if (!dialogValidDelete.value || !editingRow.value) return
     const row = editingRow.value
+    const key = editingRowKey.value
     await runAction(async () => {
       await deleteTlUnbindWarehouseLink(row.fromId, row.toId)
-      await fetchListPage(listPage.value)
     }, '已删除绑定')
-    if (!error.value) closeDialog()
+    if (!error.value) {
+      const idx = listRows.value.findIndex((r) => edgeKey(r) === key)
+      if (idx !== -1) listRows.value.splice(idx, 1)
+      closeDialog()
+    }
     return
   }
   if (dialogMode.value === 'edit-tier') {
     if (!dialogValidEditTier.value || !editingRow.value) return
     const row = editingRow.value
     const raw = dialogTierText.value.trim()
+    const key = editingRowKey.value
     await runAction(async () => {
       await putTlUpdateWarehouseLinkTier({
         源库房id: row.fromId,
         对标库房id: row.toId,
         阶梯价差: raw === '' ? null : raw,
       })
-      await fetchListPage(listPage.value)
     }, '已保存')
-    if (!error.value) closeDialog()
+    if (!error.value) {
+      const target = listRows.value.find((r) => edgeKey(r) === key)
+      console.log('[submitDialog] edit-tier local update, target found=', !!target, 'key=', key)
+      if (target) {
+        const parsed = raw === '' ? null : Number(raw)
+        target.tierPriceDiff = raw === '' ? null : (Number.isFinite(parsed) ? parsed : null)
+        target.tierPriceEditSeed = raw
+      }
+      closeDialog()
+    }
     return
   }
   if (!dialogValid.value) return
@@ -926,9 +946,23 @@ async function submitDialog() {
     }
     await runAction(async () => {
       await postTlBatchBindWarehouseLinks(src, newIds)
-      await fetchListPage(1)
     }, `新增绑定成功（${newIds.length} 条）`)
-    if (!error.value) closeDialog()
+    if (!error.value) {
+      const fromName = warehouseDisplayName(warehouseNameById(src))
+      for (const tid of newIds) {
+        listRows.value.push({
+          fromId: src,
+          toId: tid,
+          fromName,
+          toName: warehouseDisplayName(warehouseNameById(tid)),
+          tierPriceDiff: null,
+          tierPriceEditSeed: '',
+          realTimeDiff: null,
+        })
+      }
+      listTotal.value += newIds.length
+      closeDialog()
+    }
     return
   }
   const row = editingRow.value
@@ -938,12 +972,22 @@ async function submitDialog() {
     closeDialog()
     return
   }
+  const key = editingRowKey.value
   await runAction(async () => {
     await deleteTlUnbindWarehouseLink(row.fromId, row.toId)
     await postTlBindWarehouseLink(row.fromId, newTo)
-    await fetchListPage(listPage.value)
   }, '修改绑定成功')
-  if (!error.value) closeDialog()
+  if (!error.value) {
+    const target = listRows.value.find((r) => edgeKey(r) === key)
+    if (target) {
+      target.toId = newTo
+      target.toName = warehouseDisplayName(warehouseNameById(newTo))
+      target.tierPriceDiff = null
+      target.tierPriceEditSeed = ''
+      target.realTimeDiff = null
+    }
+    closeDialog()
+  }
 }
 
 onMounted(async () => {

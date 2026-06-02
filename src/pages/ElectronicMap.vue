@@ -2155,10 +2155,10 @@ function pickWarehouseSmelterFreights(
 /** 解析库房收货价格按品种（/tl/get_warehouses 字段「收货价格按品种」） */
 function pickWarehouseReceiptPricesByCategory(
   raw: Record<string, unknown>,
-): { category: string; price: number | null }[] {
+): { category: string; price: number | null; date: string }[] {
   const arr = raw['收货价格按品种']
   if (!Array.isArray(arr) || !arr.length) return []
-  const out: { category: string; price: number | null }[] = []
+  const out: { category: string; price: number | null; date: string }[] = []
   for (const item of arr) {
     if (!item || typeof item !== 'object') continue
     const o = item as Record<string, unknown>
@@ -2171,14 +2171,15 @@ function pickWarehouseReceiptPricesByCategory(
       '回收品种',
     ])
     const price = pickNumber(o, ['价格', '收货价格', 'price', 'receive_price'])
+    const date = pickStr(o, ['价格日期', '定价日期', '日期', 'price_date', 'date', '更新时间', 'updated_at']) || ''
     if (!category && price === null) continue
-    out.push({ category: category || '—', price })
+    out.push({ category: category || '—', price, date: date.length > 10 ? date.slice(0, 10) : date })
   }
   return out
 }
 
 function warehouseReceiptPriceBlockHtml(
-  prices: { category: string; price: number | null }[],
+  prices: { category: string; price: number | null; date: string }[],
 ): string {
   if (!prices.length) {
     return `<div class="emap-wh-hover-row"><span class="emap-wh-hover-k">收货价格</span><span class="emap-wh-hover-v">—</span></div>`
@@ -2189,9 +2190,10 @@ function warehouseReceiptPriceBlockHtml(
         p.price === null
           ? '—'
           : `${p.price.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} 元/吨`
+      const dateSuffix = p.date ? ` <span class="emap-wh-hover-date">${escapeHtml(p.date)}</span>` : ''
       return `<div class="emap-wh-hover-freight-item"><span class="emap-wh-hover-freight-smelter">${escapeHtml(
         p.category,
-      )}</span><span class="emap-wh-hover-freight-val">${escapeHtml(val)}</span></div>`
+      )}</span><span class="emap-wh-hover-freight-val">${escapeHtml(val)}${dateSuffix}</span></div>`
     })
     .join('')
   return `<div class="emap-wh-hover-freight"><div class="emap-wh-hover-freight-head">收货价格</div><div class="emap-wh-hover-freight-scroll">${items}</div></div>`
@@ -8236,7 +8238,7 @@ onBeforeUnmount(() => {
 .leaflet-popup-content .emap-wh-hover-inner {
   box-sizing: border-box;
   padding: 6px 8px;
-  max-height: calc(var(--emap-wh-w) * 9 / 16);
+  max-height: calc(var(--emap-wh-w) * 16 / 16);
   overflow-y: auto;
   display: flex;
   flex-direction: column;
@@ -8317,7 +8319,7 @@ onBeforeUnmount(() => {
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-scroll,
 .leaflet-popup-content .emap-wh-hover-freight-scroll {
-  max-height: 72px;
+  max-height: 300px;
   overflow-y: auto;
   overflow-x: hidden;
   padding-right: 2px;
@@ -8349,6 +8351,13 @@ onBeforeUnmount(() => {
   color: #cbd5e1;
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+.leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-date,
+.leaflet-popup-content .emap-wh-hover-date {
+  font-size: 10px;
+  color: #94a3b8;
+  margin-left: 4px;
 }
 
 .leaflet-tooltip.emap-marker-hover-tip .leaflet-tooltip-content {
