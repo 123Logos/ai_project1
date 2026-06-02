@@ -252,49 +252,6 @@
             </div>
           </div>
 
-          <div class="filter-item multi-select-item">
-            <label>大区经理 <span class="filter-required">*</span></label>
-            <div class="multi-select-container">
-              <div
-                class="selected-tags"
-                :class="multiSelectTagsClass(warehouseSelectedManagers)"
-                @click="focusWarehouseManagerInput"
-              >
-                <span v-for="item in wfManagersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeWarehouseManager(item)">×</button>
-                </span>
-                <span
-                  v-if="wfManagersTagsMore > 0"
-                  class="tag tag-more tag-shrink"
-                  :title="'还有：' + wfManagersTagsRest.join('、')"
-                >+{{ wfManagersTagsMore }}</span>
-                <input
-                  ref="warehouseManagerInputRef"
-                  v-model="warehouseManagerSearchText"
-                  type="text"
-                  class="multi-input"
-                  :placeholder="multiSelectPlaceholder(warehouseSelectedManagers)"
-                  @input="onWarehouseManagerSearchInput"
-                  @focus="onWarehouseManagerFocus"
-                  @blur="closeWarehouseManagerDropdown"
-                  @keydown.enter="handleWarehouseManagerKeydown"
-                />
-              </div>
-              <div v-show="warehouseManagerDropdownVisible && filteredWarehouseManagerOptions.length > 0" class="dropdown-list">
-                <div
-                  v-for="item in filteredWarehouseManagerOptions"
-                  :key="item"
-                  class="dropdown-item"
-                  :class="{ 'dropdown-item--selected': warehouseSelectedManagers.includes(item) }"
-                  @mousedown.prevent="onWarehouseManagerDropdownPick(item)"
-                >
-                  {{ item }}
-                </div>
-              </div>
-            </div>
-          </div>
-
           <div class="filter-item multi-select-item multi-select-item--wide">
             <label>冶炼厂 <span class="filter-required">*</span></label>
             <div class="multi-select-container multi-select-container--wide">
@@ -1034,8 +991,6 @@ const allWarehouseOptions = ref<string[]>([])
 const filteredWarehouseOptions = ref<string[]>([])
 
 const warehouseManagerSearchText = ref('')
-const warehouseManagerDropdownVisible = ref(false)
-const warehouseManagerInputRef = ref<HTMLInputElement>()
 const filteredWarehouseManagerOptions = ref<string[]>([])
 
 const warehouseSmelterSearchText = ref('')
@@ -1057,10 +1012,6 @@ const mfSmeltersTagsRest = computed(() => managerSelectedSmelters.value.slice(MU
 const wfWarehousesTagsPreview = computed(() => warehouseSelectedWarehouses.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
 const wfWarehousesTagsMore = computed(() => Math.max(0, warehouseSelectedWarehouses.value.length - MULTI_PREVIEW_TAG_COUNT))
 const wfWarehousesTagsRest = computed(() => warehouseSelectedWarehouses.value.slice(MULTI_PREVIEW_TAG_COUNT))
-
-const wfManagersTagsPreview = computed(() => warehouseSelectedManagers.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
-const wfManagersTagsMore = computed(() => Math.max(0, warehouseSelectedManagers.value.length - MULTI_PREVIEW_TAG_COUNT))
-const wfManagersTagsRest = computed(() => warehouseSelectedManagers.value.slice(MULTI_PREVIEW_TAG_COUNT))
 
 const wfSmeltersTagsPreview = computed(() => warehouseSelectedSmelters.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
 const wfSmeltersTagsMore = computed(() => Math.max(0, warehouseSelectedSmelters.value.length - MULTI_PREVIEW_TAG_COUNT))
@@ -1127,53 +1078,6 @@ const focusWarehouseInput = () => {
 const filterWarehouseManagerOptions = () => {
   const search = warehouseManagerSearchText.value.toLowerCase()
   filteredWarehouseManagerOptions.value = filterOptionsBySearch(allManagerOptions.value, search)
-}
-
-const addWarehouseManager = (item: string) => {
-  if (!warehouseSelectedManagers.value.includes(item)) {
-    warehouseSelectedManagers.value.push(item)
-  }
-  warehouseManagerSearchText.value = ''
-  filterWarehouseManagerOptions()
-}
-
-const removeWarehouseManager = (item: string) => {
-  warehouseSelectedManagers.value = warehouseSelectedManagers.value.filter(i => i !== item)
-  filterWarehouseManagerOptions()
-}
-
-function onWarehouseManagerDropdownPick(item: string) {
-  if (warehouseSelectedManagers.value.includes(item)) removeWarehouseManager(item)
-  else addWarehouseManager(item)
-}
-
-const handleWarehouseManagerKeydown = (e: KeyboardEvent) => {
-  if (e.key === 'Enter' && warehouseManagerSearchText.value.trim()) {
-    addWarehouseManager(warehouseManagerSearchText.value.trim())
-    e.preventDefault()
-  }
-}
-
-const closeWarehouseManagerDropdown = () => {
-  setTimeout(() => {
-    warehouseManagerDropdownVisible.value = false
-  }, 200)
-}
-
-function onWarehouseManagerFocus() {
-  warehouseManagerDropdownVisible.value = true
-  filterWarehouseManagerOptions()
-}
-
-function onWarehouseManagerSearchInput() {
-  warehouseManagerDropdownVisible.value = true
-  filterWarehouseManagerOptions()
-}
-
-const focusWarehouseManagerInput = () => {
-  warehouseManagerDropdownVisible.value = true
-  filterWarehouseManagerOptions()
-  nextTick(() => warehouseManagerInputRef.value?.focus())
 }
 
 // 冶炼厂多选逻辑

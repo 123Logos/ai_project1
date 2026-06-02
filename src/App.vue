@@ -216,9 +216,9 @@ const primaryTabs: Array<{ key: SectionKey; label: string }> = [
 ]
 
 const predictionSubTabs: Array<{ key: PredictionSubKey; label: string }> = [
+  { key: 'forecast', label: '送货量预测' },
   { key: 'historyManage', label: '历史数据管理' },
   { key: 'historyQuery', label: '历史数据查询' },
-  { key: 'forecast', label: '送货量预测' },
   { key: 'leadPrice', label: '铅价格查询' },
   { key: 'smelterPrice', label: '冶炼厂价格查询' },
 ]

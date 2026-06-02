@@ -106,7 +106,7 @@
     <!-- ==================== 数据列表标签页 ==================== -->
     <div v-if="activeTab === 'list'" class="list-tab">
       <!-- 筛选区 -->
-      <div class="card">
+      <div class="card filter-card">
         <div class="filter-row">
           <div class="filter-item date-item">
             <label>送货日期</label>
@@ -392,6 +392,7 @@ import * as XLSX from 'xlsx'
 import { ApiPaths } from '@/api/paths'
 import { DELIVERY_HISTORY_FETCH_PAGE_SIZE } from '@/api/fetchLimits'
 import { fetchDeliveryHistoryDimensionOptions } from '@/api/dimensionOptions'
+import { fetchTlCategories } from '@/api/tlApi'
 
 // ==================== 类型定义 ====================
 interface HistoryRecord {
@@ -459,8 +460,8 @@ const errorModalDetails = ref<string[]>([])
 
 // 筛选条件
 const filters = ref({
-  startDate: '',
-  endDate: ''
+  startDate: (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10) })(),
+  endDate: new Date().toISOString().slice(0, 10)
 })
 
 // 大区经理多选
@@ -737,21 +738,16 @@ const aggregateData = (data: HistoryRecord[]): SummaryRow[] => {
 // ==================== 获取下拉选项 ====================
 const fetchOptions = async () => {
   try {
-    const dims = await fetchDeliveryHistoryDimensionOptions()
+    const [dims, categories] = await Promise.all([
+      fetchDeliveryHistoryDimensionOptions(),
+      fetchTlCategories().catch(() => []),
+    ])
     allManagerOptions.value = dims.regional_managers
     allSmelterOptions.value = dims.smelters
     allWarehouseOptions.value = dims.warehouses
-
-    if (dims.product_varieties.length > 0) {
-      allVarietyOptions.value = dims.product_varieties
-    } else {
-      const response = await axios.get(ApiPaths.deliveryHistory, {
-        params: { page: 1, page_size: DELIVERY_HISTORY_FETCH_PAGE_SIZE },
-      })
-      const data = response.data as ApiResponse
-      const items = data.items || []
-      allVarietyOptions.value = [...new Set(items.map((item: HistoryRecord) => item.product_variety))].filter(Boolean)
-    }
+    // 品类去重并排序
+    const uniqueVarieties = [...new Set(categories.map((c) => c.name).filter((n) => n !== ''))]
+    allVarietyOptions.value = uniqueVarieties.sort((a, b) => a.localeCompare(b, 'zh-CN'))
 
     filteredManagerOptions.value = [...allManagerOptions.value]
     filteredSmelterOptions.value = [...allSmelterOptions.value]
@@ -1159,11 +1155,12 @@ onMounted(() => {
 <style scoped>
 .history-manage-page { width: 100%; animation: fadeIn 0.25s ease both; }
 .card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); animation: fadeInUp 0.3s ease both; }
+.filter-card { position: relative; z-index: 10; }
 .inner-menu { display: flex; gap: 8px; background: #F5F7FA; border-radius: 8px; padding: 4px; }
 .menu-item { padding: 8px 24px; cursor: pointer; font-size: 14px; font-weight: 500; border-radius: 6px; color: #606266; }
 .menu-item:hover { background-color: rgba(74, 122, 156, 0.1); }
 .menu-item.active { background-color: #1476db; color: white; }
-.filter-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; position: relative; }
 .filter-item { display: flex; flex-direction: column; gap: 4px; }
 .filter-item label { font-size: 12px; font-weight: 500; color: #606266; white-space: nowrap; }
 .date-range { display: flex; gap: 6px; align-items: center; }
