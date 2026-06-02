@@ -118,7 +118,15 @@ function onBlur() {
 }
 
 function onInput(e: Event) {
-  searchText.value = (e.target as HTMLInputElement).value
+  const val = (e.target as HTMLInputElement).value
+  searchText.value = val
+  // 浏览器原生 × 按钮清空输入框时：清除选中值，打开下拉列表
+  if (val === '') {
+    if (props.modelValue !== 0) emit('update:modelValue', 0)
+    focused.value = true
+    open.value = true
+    return
+  }
   open.value = true
 }
 
