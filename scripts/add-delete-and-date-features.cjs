@@ -59,21 +59,11 @@ if (app.includes(oldInitInvClickListener)) {
   console.log('✅ initInventoryPage already has delete listener')
 }
 
-// 4. 修改 loadReceiptPriceList 函数 - 添加价格日期列
-const oldLoadRcp = `async function loadReceiptPriceList(){var e=document.getElementById(\`rcp-table-body\`),t=document.getElementById(\`rcp-count\`),n=document.getElementById(\`rcp-page-size\`);if(n&&n.value&&(rcpPg.pageSize=parseInt(n.value,10)||rcpPg.pageSize),!e)return;E(e,4,\`正在加载收货价格...\`);try{var r=document.getElementById(\`rcp-keyword\`),i=new URLSearchParams;i.set(\`page\`,String(rcpPg.page)),i.set(\`page_size\`,String(rcpPg.pageSize)),r&&r.value&&r.value.trim()&&i.set(\`keyword\`,r.value.trim());var a=z(await Api.request(\`GET\`,\`/tl/warehouse_receipt_prices?\`+i.toString())),o=a.list||[];rcpPg.total=a.total||0,e.innerHTML=\`\`,o.length||D(e,4,\`暂无收货价格数据\`),o.forEach(function(t){var n=v(t,[\`id\`,\`price_id\`]),r=_(t,[\`库房名称\`,\`warehouse_name\`],\`-\`),i=_(t,[\`品类名\`,\`品类名称\`,\`category_name\`],\`-\`),a=Number(_(t,[\`价格\`,\`price\`],null)),o=document.createElement(\`tr\`);o.innerHTML=\`<td>\`+M(r)+\`</td><td>\`+M(i)+\`</td><td>\`+(isNaN(a)?\`-\`:a.toLocaleString())+\`</td><td><button class="btn btn-sm btn-outline edit-btn" data-id="\`+String(n)+\`">编辑</button> <button class="btn btn-sm btn-danger delete-btn" data-id="\`+String(n)+\`">删除</button></td>\`,e.appendChild(o)}),t&&(t.textContent=String(rcpPg.total)),rcpUpdatePager()}catch(n){alert(\`加载收货价格失败: \`+(n.message||String(n))),t&&(t.textContent=\`0\`),e.innerHTML=\`\`,D(e,4,n.message||\`加载失败\`),rcpUpdatePager()}}`
-
-const newLoadRcp = `async function loadReceiptPriceList(){var e=document.getElementById(\`rcp-table-body\`),t=document.getElementById(\`rcp-count\`),n=document.getElementById(\`rcp-page-size\`);if(n&&n.value&&(rcpPg.pageSize=parseInt(n.value,10)||rcpPg.pageSize),!e)return;E(e,5,\`正在加载收货价格...\`);try{var r=document.getElementById(\`rcp-keyword\`),i=new URLSearchParams;i.set(\`page\`,String(rcpPg.page)),i.set(\`page_size\`,String(rcpPg.pageSize)),r&&r.value&&r.value.trim()&&i.set(\`keyword\`,r.value.trim());var a=z(await Api.request(\`GET\`,\`/tl/warehouse_receipt_prices?\`+i.toString())),o=a.list||[];rcpPg.total=a.total||0,e.innerHTML=\`\`,o.length||D(e,5,\`暂无收货价格数据\`),o.forEach(function(t){var n=v(t,[\`id\`,\`price_id\`]),r=_(t,[\`库房名称\`,\`warehouse_name\`],\`-\`),i=_(t,[\`品类名\`,\`品类名称\`,\`category_name\`],\`-\`),a=Number(_(t,[\`价格\`,\`price\`],null)),d=_(t,[\`价格日期\`,\`price_date\`,\`日期\`],\`-\`),o=document.createElement(\`tr\`);o.innerHTML=\`<td>\`+M(r)+\`</td><td>\`+M(i)+\`</td><td>\`+(isNaN(a)?\`-\`:a.toLocaleString())+\`</td><td>\`+M(d)+\`</td><td><button class="btn btn-sm btn-outline edit-btn" data-id="\`+String(n)+\`">编辑</button> <button class="btn btn-sm btn-danger delete-btn" data-id="\`+String(n)+\`">删除</button></td>\`,e.appendChild(o)}),t&&(t.textContent=String(rcpPg.total)),rcpUpdatePager()}catch(n){alert(\`加载收货价格失败: \`+(n.message||String(n))),t&&(t.textContent=\`0\`),e.innerHTML=\`\`,D(e,5,n.message||\`加载失败\`),rcpUpdatePager()}}`
-
-if (app.includes(oldLoadRcp)) {
-  app = app.replace(oldLoadRcp, newLoadRcp)
-  console.log('✅ Updated loadReceiptPriceList - added price date column')
+// 4. loadReceiptPriceList - 价格日期列已在 patch 脚本中内置
+if (app.includes('price_date')) {
+  console.log('✅ loadReceiptPriceList already has price date column')
 } else {
-  console.log('⚠️ loadReceiptPriceList old version not found, checking if already updated...')
-  if (app.includes('price_date')) {
-    console.log('✅ loadReceiptPriceList already has price date')
-  } else {
-    console.log('❌ Could not find loadReceiptPriceList to update')
-  }
+  console.log('⚠️ loadReceiptPriceList missing price date - run patch-inventory-receipt-price-pages.cjs first')
 }
 
 // 保存修改

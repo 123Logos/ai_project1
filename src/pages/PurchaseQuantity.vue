@@ -574,7 +574,8 @@
                 <td>{{ row.productVariety }}</td>
                 <td>{{ row.predictedWeight.toFixed(2) }}</td>
                 <td class="analysis-cell">
-                  <span class="analysis-cell-preview">{{ truncateAnalysis(row.analysis) }}</span>
+                  <span v-if="row.shipProbability" class="probability-badge" :class="`probability-badge--${row.shipProbability}`">{{ row.shipProbability }}</span>
+                  <span class="analysis-cell-preview">{{ truncateAnalysis(row.mainFactors || row.analysis) }}</span>
                   <span class="analysis-cell-action">查看</span>
                 </td>
               </tr>
@@ -597,6 +598,7 @@
       :title="analysisDrawerTitle"
       :analysis="analysisDrawerText"
       :meta-lines="analysisDrawerMeta"
+      :sections="analysisDrawerSections"
       @close="closeAnalysisDrawer"
     />
 
@@ -834,6 +836,7 @@ const analysisDrawerVisible = ref(false)
 const analysisDrawerTitle = ref('预测依据详情')
 const analysisDrawerText = ref<string | null>(null)
 const analysisDrawerMeta = ref<string[]>([])
+const analysisDrawerSections = ref<Array<{ title: string; content: string }>>([])
 const forecastDateColumns = ref<string[]>([])
 const forecastManagerTableRows = ref<ForecastManagerTableRow[]>([])
 const forecastWarehouseTableRows = ref<ForecastWarehouseTableRow[]>([])
@@ -1160,14 +1163,24 @@ function truncateAnalysis(analysis: string | null | undefined, maxLen = 80) {
 
 function openDetailAnalysis(row: PrdForecastDetailRow) {
   analysisDrawerTitle.value = `预测依据 · ${row.targetDate}`
-  analysisDrawerText.value = row.analysis
+  analysisDrawerText.value = row.comprehensiveAnalysis || row.analysis
   analysisDrawerMeta.value = [
     `仓库：${row.warehouse}`,
     `大区经理：${row.regionalManager}`,
     `品类：${row.productVariety}`,
     ...(row.smelter ? [`冶炼厂：${row.smelter}`] : []),
     `预测重量：${row.predictedWeight.toFixed(2)} 吨`,
-  ]
+    row.shipProbability ? `发货概率：${row.shipProbability}` : '',
+    row.confidenceLevel ? `置信度：${row.confidenceLevel}` : '',
+    row.expectedShipDate ? `预计发货：${row.expectedShipDate}` : '',
+  ].filter(Boolean)
+  const sections: Array<{ title: string; content: string }> = []
+  if (row.historyAnalysis) sections.push({ title: '历史数据分析', content: row.historyAnalysis })
+  if (row.priceAnalysis) sections.push({ title: '价格因素分析', content: row.priceAnalysis })
+  if (row.trendAnalysis) sections.push({ title: '趋势分析', content: row.trendAnalysis })
+  if (row.riskAnalysis) sections.push({ title: '风险评估', content: row.riskAnalysis })
+  if (row.recommendationAnalysis) sections.push({ title: '建议', content: row.recommendationAnalysis })
+  analysisDrawerSections.value = sections
   analysisDrawerVisible.value = true
 }
 
@@ -2575,6 +2588,19 @@ onMounted(async () => {
   line-height: 1.45;
   color: #475569;
 }
+
+.probability-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.probability-badge--高 { background: #dcfce7; color: #166534; }
+.probability-badge--中 { background: #dbeafe; color: #1e40af; }
+.probability-badge--低 { background: #ffedd5; color: #9a3412; }
 
 .analysis-cell-preview {
   display: block;

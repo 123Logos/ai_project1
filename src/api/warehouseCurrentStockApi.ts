@@ -79,7 +79,7 @@ export async function fetchWarehouseCurrentStockList(params?: {
   keyword?: string
   warehouse_id?: number
   category_id?: number
-}): Promise<{ items: WarehouseCurrentStockRow[]; total: number }> {
+}): Promise<{ items: WarehouseCurrentStockRow[]; total: number; rawItems: Record<string, unknown>[] }> {
   const q = new URLSearchParams()
   q.set('page', String(params?.page ?? 1))
   q.set('page_size', String(params?.page_size ?? 50))
@@ -101,7 +101,8 @@ export async function fetchWarehouseCurrentStockList(params?: {
   const payload = (data || {}) as Record<string, unknown>
   const inner = (payload.data ?? payload) as Record<string, unknown>
   const total = typeof inner.total === 'number' ? inner.total : rows.length
-  return { items: rows.map(pickRow).filter((r) => r.warehouseName), total }
+  const parsed = rows.map(pickRow).filter((r) => r.warehouseName)
+  return { items: parsed, total, rawItems: rows }
 }
 
 export async function saveWarehouseInventoryManual(body: {
@@ -123,6 +124,25 @@ export async function saveWarehouseInventoryManual(body: {
     body: JSON.stringify(payload),
   })
   if (!res.ok) throw new Error(readMsg(data) || `保存库存失败（HTTP ${res.status}）`)
+}
+
+export async function deleteWarehouseInventory(body: {
+  warehouseId: number
+  categoryId: number
+  stockDate: string
+}): Promise<void> {
+  const payload: Record<string, unknown> = {
+    库房id: body.warehouseId,
+    品类id: body.categoryId,
+    库存日期: body.stockDate,
+  }
+
+  const { res, data } = await fetchJson(BASE, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(readMsg(data) || `删除库存失败（HTTP ${res.status}）`)
 }
 
 export async function downloadWarehouseInventoryTemplate(): Promise<Blob> {
