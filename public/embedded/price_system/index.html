@@ -2776,7 +2776,8 @@
       }
       .excel-preview-scroll {
         max-height: none;
-        overflow: visible;
+        overflow-x: auto;
+        overflow-y: visible;
       }
       .excel-preview-table {
         width: 100%;
@@ -2919,10 +2920,15 @@
               ? itemsFromDetails
               : firstArray(firstDetail.items, data.items, root.items, data['数据'], root['数据'])
           const items = Array.isArray(itemsRaw) ? itemsRaw.map((it) => normalizePriceItem(it)) : []
-          const quoteDate =
+          // 每条报价自带日期时，取第一个 item 的日期作为顶级报价日期（兼容旧版无 per-item 日期的情况）
+          const fallbackDate =
             (data.suggested_quote_date && String(data.suggested_quote_date).trim()) ||
             (fullData.quote_date && String(fullData.quote_date).trim()) ||
             todayYmd()
+          const firstItemDate = items.length > 0 && items[0]['报价日期']
+            ? String(items[0]['报价日期']).trim()
+            : ''
+          const quoteDate = firstItemDate || fallbackDate
 
           return {
             '报价日期': quoteDate,
@@ -2955,6 +2961,7 @@
             <table class="excel-preview-table">
               <thead>
                 <tr>
+                  <th>报价日期</th>
                   <th>冶炼厂</th>
                   <th>品类</th>
                   <th>价格</th>
@@ -2970,6 +2977,7 @@
                   .map((r, i) => {
                     const o = r && typeof r === 'object' ? r : {}
                     return `<tr>
+                      <td>${esc(o['报价日期'])}</td>
                       <td>${esc(o['冶炼厂名'])}</td>
                       <td>${esc(o['品类名'])}</td>
                       <td>${esc(o['价格'])}</td>

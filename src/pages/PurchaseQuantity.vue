@@ -6,17 +6,17 @@
         <div class="inner-menu">
           <div
             class="menu-item"
-            :class="{ active: forecastActiveTab === 'manager' }"
-            @click="forecastActiveTab = 'manager'"
-          >
-            按大区经理
-          </div>
-          <div
-            class="menu-item"
             :class="{ active: forecastActiveTab === 'warehouse' }"
             @click="forecastActiveTab = 'warehouse'"
           >
             按仓库
+          </div>
+          <div
+            class="menu-item"
+            :class="{ active: forecastActiveTab === 'manager' }"
+            @click="forecastActiveTab = 'manager'"
+          >
+            按大区经理
           </div>
           <div
             class="menu-item"
@@ -284,6 +284,136 @@
               />
             </div>
           </div>
+
+          <div class="filter-item multi-select-item">
+            <label>仓库</label>
+            <div class="multi-select-container">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(detailSelectedWarehouses)"
+                @click="focusDetailWarehouseInput"
+              >
+                <span v-for="item in detailWarehousesTagsPreview" :key="item" class="tag tag-shrink" :title="item">
+                  {{ item }}
+                  <button type="button" class="tag-remove" @click.stop="removeDetailWarehouse(item)">×</button>
+                </span>
+                <span
+                  v-if="detailWarehousesTagsMore > 0"
+                  class="tag tag-more tag-shrink"
+                  :title="'还有：' + detailWarehousesTagsRest.join('、')"
+                >+{{ detailWarehousesTagsMore }}</span>
+                <input
+                  ref="detailWarehouseInputRef"
+                  v-model="detailWarehouseSearchText"
+                  type="text"
+                  class="multi-input"
+                  :placeholder="multiSelectPlaceholder(detailSelectedWarehouses)"
+                  @input="onDetailWarehouseSearchInput"
+                  @focus="onDetailWarehouseFocus"
+                  @blur="closeDetailWarehouseDropdown"
+                  @keydown.enter="handleDetailWarehouseKeydown"
+                />
+              </div>
+              <div v-show="detailWarehouseDropdownVisible && filteredDetailWarehouseOptions.length > 0" class="dropdown-list">
+                <div
+                  v-for="item in filteredDetailWarehouseOptions"
+                  :key="item"
+                  class="dropdown-item"
+                  :class="{ 'dropdown-item--selected': detailSelectedWarehouses.includes(item) }"
+                  @mousedown.prevent="onDetailWarehouseDropdownPick(item)"
+                >
+                  {{ item }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-item multi-select-item multi-select-item--wide">
+            <label>冶炼厂</label>
+            <div class="multi-select-container multi-select-container--wide">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(detailSelectedSmelters)"
+                @click="focusDetailSmelterInput"
+              >
+                <span v-for="item in detailSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
+                  {{ item }}
+                  <button type="button" class="tag-remove" @click.stop="removeDetailSmelter(item)">×</button>
+                </span>
+                <span
+                  v-if="detailSmeltersTagsMore > 0"
+                  class="tag tag-more tag-shrink"
+                  :title="'还有：' + detailSmeltersTagsRest.join('、')"
+                >+{{ detailSmeltersTagsMore }}</span>
+                <input
+                  ref="detailSmelterInputRef"
+                  v-model="detailSmelterSearchText"
+                  type="text"
+                  class="multi-input"
+                  :placeholder="multiSelectPlaceholder(detailSelectedSmelters)"
+                  @input="onDetailSmelterSearchInput"
+                  @focus="onDetailSmelterFocus"
+                  @blur="closeDetailSmelterDropdown"
+                  @keydown.enter="handleDetailSmelterKeydown"
+                />
+              </div>
+              <div v-show="detailSmelterDropdownVisible && filteredDetailSmelterOptions.length > 0" class="dropdown-list">
+                <div
+                  v-for="item in filteredDetailSmelterOptions"
+                  :key="item"
+                  class="dropdown-item"
+                  :class="{ 'dropdown-item--selected': detailSelectedSmelters.includes(item) }"
+                  @mousedown.prevent="onDetailSmelterDropdownPick(item)"
+                >
+                  {{ item }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="filter-item multi-select-item multi-select-item--wide">
+            <label>品类</label>
+            <div class="multi-select-container multi-select-container--wide">
+              <div
+                class="selected-tags"
+                :class="multiSelectTagsClass(detailSelectedVarieties)"
+                @click="focusDetailVarietyInput"
+              >
+                <span v-for="item in detailVarietiesTagsPreview" :key="item" class="tag tag-shrink" :title="item">
+                  {{ item }}
+                  <button type="button" class="tag-remove" @click.stop="removeDetailVariety(item)">×</button>
+                </span>
+                <span
+                  v-if="detailVarietiesTagsMore > 0"
+                  class="tag tag-more tag-shrink"
+                  :title="'还有：' + detailVarietiesTagsRest.join('、')"
+                >+{{ detailVarietiesTagsMore }}</span>
+                <input
+                  ref="detailVarietyInputRef"
+                  v-model="detailVarietySearchText"
+                  type="text"
+                  class="multi-input"
+                  :placeholder="multiSelectPlaceholder(detailSelectedVarieties)"
+                  @input="onDetailVarietySearchInput"
+                  @focus="onDetailVarietyFocus"
+                  @blur="closeDetailVarietyDropdown"
+                  @keydown.enter="handleDetailVarietyKeydown"
+                />
+              </div>
+              <div v-show="detailVarietyDropdownVisible && filteredDetailVarietyOptions.length > 0" class="dropdown-list">
+                <div
+                  v-for="item in filteredDetailVarietyOptions"
+                  :key="item"
+                  class="dropdown-item"
+                  :class="{ 'dropdown-item--selected': detailSelectedVarieties.includes(item) }"
+                  @mousedown.prevent="onDetailVarietyDropdownPick(item)"
+                >
+                  {{ item }}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="filter-actions">
             <span v-if="loading" class="filter-auto-hint">加载中…</span>
             <button class="btn btn-secondary" @click="handleReset">重置</button>
@@ -544,6 +674,7 @@ import axios from 'axios'
 import { ApiPaths } from '../api/paths'
 import { FORECAST_DETAILS_FETCH_PAGE_SIZE } from '../api/fetchLimits'
 import { fetchForecastDimensionOptions } from '../api/dimensionOptions'
+import { fetchTlCategories } from '../api/tlApi'
 import {
   fetchForecastChart,
   normalizeForecastDetailList,
@@ -836,9 +967,29 @@ const whSmelterDropdownVisible = ref(false)
 const whSmelterInputRef = ref<HTMLInputElement>()
 const filteredWhSmelterOptions = ref<string[]>([])
 
+/** 预测明细：送货日期、仓库、冶炼厂 */
+const detailSelectedWarehouses = ref<string[]>([])
+const detailWarehouseSearchText = ref('')
+const detailWarehouseDropdownVisible = ref(false)
+const detailWarehouseInputRef = ref<HTMLInputElement>()
+const filteredDetailWarehouseOptions = ref<string[]>([])
+
+const detailSelectedSmelters = ref<string[]>([])
+const detailSmelterSearchText = ref('')
+const detailSmelterDropdownVisible = ref(false)
+const detailSmelterInputRef = ref<HTMLInputElement>()
+const filteredDetailSmelterOptions = ref<string[]>([])
+
+const detailSelectedVarieties = ref<string[]>([])
+const detailVarietySearchText = ref('')
+const detailVarietyDropdownVisible = ref(false)
+const detailVarietyInputRef = ref<HTMLInputElement>()
+const filteredDetailVarietyOptions = ref<string[]>([])
+
 const allWarehouseOptions = ref<string[]>([])
 const allManagerOptions = ref<string[]>([])
 const allSmelterOptions = ref<string[]>([])
+const allProductVarietyOptions = ref<string[]>([])
 
 const MULTI_PREVIEW_TAG_COUNT = 1
 const DEFAULT_SMELTER = '河南金利金铅集团有限公司'
@@ -860,6 +1011,7 @@ function applyDefaultSmelterSelection() {
   }
   forecastMgrSelectedSmelters.value = [DEFAULT_SMELTER]
   forecastWhSelectedSmelters.value = [DEFAULT_SMELTER]
+  detailSelectedSmelters.value = [DEFAULT_SMELTER]
 }
 
 const mgrManagersTagsPreview = computed(() => forecastMgrSelectedManagers.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
@@ -885,6 +1037,24 @@ const whSmeltersTagsMore = computed(() =>
   Math.max(0, forecastWhSelectedSmelters.value.length - MULTI_PREVIEW_TAG_COUNT)
 )
 const whSmeltersTagsRest = computed(() => forecastWhSelectedSmelters.value.slice(MULTI_PREVIEW_TAG_COUNT))
+
+const detailWarehousesTagsPreview = computed(() => detailSelectedWarehouses.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
+const detailWarehousesTagsMore = computed(() =>
+  Math.max(0, detailSelectedWarehouses.value.length - MULTI_PREVIEW_TAG_COUNT)
+)
+const detailWarehousesTagsRest = computed(() => detailSelectedWarehouses.value.slice(MULTI_PREVIEW_TAG_COUNT))
+
+const detailSmeltersTagsPreview = computed(() => detailSelectedSmelters.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
+const detailSmeltersTagsMore = computed(() =>
+  Math.max(0, detailSelectedSmelters.value.length - MULTI_PREVIEW_TAG_COUNT)
+)
+const detailSmeltersTagsRest = computed(() => detailSelectedSmelters.value.slice(MULTI_PREVIEW_TAG_COUNT))
+
+const detailVarietiesTagsPreview = computed(() => detailSelectedVarieties.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
+const detailVarietiesTagsMore = computed(() =>
+  Math.max(0, detailSelectedVarieties.value.length - MULTI_PREVIEW_TAG_COUNT)
+)
+const detailVarietiesTagsRest = computed(() => detailSelectedVarieties.value.slice(MULTI_PREVIEW_TAG_COUNT))
 
 // 弹窗
 const modalVisible = ref(false)
@@ -1199,15 +1369,24 @@ function refreshAllFilterOptionLists() {
   filterWhSmelterOptions()
   filterMgrManagerOptions()
   filterMgrSmelterOptions()
+  filterDetailWarehouseOptions()
+  filterDetailSmelterOptions()
+  filterDetailVarietyOptions()
 }
 
-// ==================== 获取下拉选项（PRD 规则预测：/forecast/dimension-options） ====================
+// ==================== 获取下拉选项（PRD 规则预测：/forecast/dimension-options + /tl/get_categories） ====================
 async function fetchOptions() {
   try {
-    const dims = await fetchForecastDimensionOptions()
+    const [dims, categories] = await Promise.all([
+      fetchForecastDimensionOptions(),
+      fetchTlCategories().catch(() => []),
+    ])
     allWarehouseOptions.value = dims.warehouses
     allManagerOptions.value = dims.regional_managers
     allSmelterOptions.value = dims.smelters
+    // 品类去重并排序
+    const uniqueVarieties = [...new Set(categories.map((c) => c.name).filter((n) => n !== ''))]
+    allProductVarietyOptions.value = uniqueVarieties.sort((a, b) => a.localeCompare(b, 'zh-CN'))
 
     refreshAllFilterOptionLists()
   } catch (error) {
@@ -1215,6 +1394,7 @@ async function fetchOptions() {
     allWarehouseOptions.value = []
     allManagerOptions.value = []
     allSmelterOptions.value = []
+    allProductVarietyOptions.value = []
     refreshAllFilterOptionLists()
   }
 }
@@ -1231,6 +1411,20 @@ function mergeSmelterOptionsFromForecastItems(items: ForecastDetailItem[]) {
   allSmelterOptions.value = [...merged].sort((a, b) => a.localeCompare(b, 'zh-CN'))
   filterMgrSmelterOptions()
   filterWhSmelterOptions()
+  filterDetailSmelterOptions()
+}
+
+/** 从预测明细 items 中合并品类到下拉 */
+function mergeVarietyOptionsFromForecastItems(items: ForecastDetailItem[]) {
+  const merged = new Set<string>(allProductVarietyOptions.value)
+  for (const d of items) {
+    const v = d.product_variety
+    if (v == null) continue
+    const t = String(v).trim()
+    if (t !== '' && t !== '—') merged.add(t)
+  }
+  allProductVarietyOptions.value = [...merged].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+  filterDetailVarietyOptions()
 }
 
 // ---------- 按大区经理：大区经理 ----------
@@ -1437,6 +1631,159 @@ const focusWhSmelterInput = () => {
   nextTick(() => whSmelterInputRef.value?.focus())
 }
 
+// ---------- 预测明细：仓库 ----------
+const filterDetailWarehouseOptions = () => {
+  const search = detailWarehouseSearchText.value.toLowerCase()
+  filteredDetailWarehouseOptions.value = filterOptionsBySearch(allWarehouseOptions.value, search)
+}
+
+function onDetailWarehouseFocus() {
+  detailWarehouseDropdownVisible.value = true
+  filterDetailWarehouseOptions()
+}
+
+function onDetailWarehouseSearchInput() {
+  detailWarehouseDropdownVisible.value = true
+  filterDetailWarehouseOptions()
+}
+
+const addDetailWarehouse = (item: string) => {
+  if (!detailSelectedWarehouses.value.includes(item)) detailSelectedWarehouses.value.push(item)
+  detailWarehouseSearchText.value = ''
+  filterDetailWarehouseOptions()
+}
+
+const removeDetailWarehouse = (item: string) => {
+  detailSelectedWarehouses.value = detailSelectedWarehouses.value.filter((i) => i !== item)
+  filterDetailWarehouseOptions()
+}
+
+function onDetailWarehouseDropdownPick(item: string) {
+  if (detailSelectedWarehouses.value.includes(item)) removeDetailWarehouse(item)
+  else addDetailWarehouse(item)
+}
+
+const handleDetailWarehouseKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter' && detailWarehouseSearchText.value.trim()) {
+    addDetailWarehouse(detailWarehouseSearchText.value.trim())
+    e.preventDefault()
+  }
+}
+
+const closeDetailWarehouseDropdown = () => {
+  setTimeout(() => {
+    detailWarehouseDropdownVisible.value = false
+  }, 200)
+}
+
+const focusDetailWarehouseInput = () => {
+  detailWarehouseDropdownVisible.value = true
+  filterDetailWarehouseOptions()
+  nextTick(() => detailWarehouseInputRef.value?.focus())
+}
+
+// ---------- 预测明细：冶炼厂 ----------
+const filterDetailSmelterOptions = () => {
+  const search = detailSmelterSearchText.value.toLowerCase()
+  filteredDetailSmelterOptions.value = filterOptionsBySearch(allSmelterOptions.value, search)
+}
+
+function onDetailSmelterFocus() {
+  detailSmelterDropdownVisible.value = true
+  filterDetailSmelterOptions()
+}
+
+function onDetailSmelterSearchInput() {
+  detailSmelterDropdownVisible.value = true
+  filterDetailSmelterOptions()
+}
+
+const addDetailSmelter = (item: string) => {
+  if (!detailSelectedSmelters.value.includes(item)) detailSelectedSmelters.value.push(item)
+  detailSmelterSearchText.value = ''
+  filterDetailSmelterOptions()
+}
+
+const removeDetailSmelter = (item: string) => {
+  detailSelectedSmelters.value = detailSelectedSmelters.value.filter((i) => i !== item)
+  filterDetailSmelterOptions()
+}
+
+function onDetailSmelterDropdownPick(item: string) {
+  if (detailSelectedSmelters.value.includes(item)) removeDetailSmelter(item)
+  else addDetailSmelter(item)
+}
+
+const handleDetailSmelterKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter' && detailSmelterSearchText.value.trim()) {
+    addDetailSmelter(detailSmelterSearchText.value.trim())
+    e.preventDefault()
+  }
+}
+
+const closeDetailSmelterDropdown = () => {
+  setTimeout(() => {
+    detailSmelterDropdownVisible.value = false
+  }, 200)
+}
+
+const focusDetailSmelterInput = () => {
+  detailSmelterDropdownVisible.value = true
+  filterDetailSmelterOptions()
+  nextTick(() => detailSmelterInputRef.value?.focus())
+}
+
+// ---------- 预测明细：品类 ----------
+const filterDetailVarietyOptions = () => {
+  const search = detailVarietySearchText.value.toLowerCase()
+  filteredDetailVarietyOptions.value = filterOptionsBySearch(allProductVarietyOptions.value, search)
+}
+
+function onDetailVarietyFocus() {
+  detailVarietyDropdownVisible.value = true
+  filterDetailVarietyOptions()
+}
+
+function onDetailVarietySearchInput() {
+  detailVarietyDropdownVisible.value = true
+  filterDetailVarietyOptions()
+}
+
+const addDetailVariety = (item: string) => {
+  if (!detailSelectedVarieties.value.includes(item)) detailSelectedVarieties.value.push(item)
+  detailVarietySearchText.value = ''
+  filterDetailVarietyOptions()
+}
+
+const removeDetailVariety = (item: string) => {
+  detailSelectedVarieties.value = detailSelectedVarieties.value.filter((i) => i !== item)
+  filterDetailVarietyOptions()
+}
+
+function onDetailVarietyDropdownPick(item: string) {
+  if (detailSelectedVarieties.value.includes(item)) removeDetailVariety(item)
+  else addDetailVariety(item)
+}
+
+const handleDetailVarietyKeydown = (e: KeyboardEvent) => {
+  if (e.key === 'Enter' && detailVarietySearchText.value.trim()) {
+    addDetailVariety(detailVarietySearchText.value.trim())
+    e.preventDefault()
+  }
+}
+
+const closeDetailVarietyDropdown = () => {
+  setTimeout(() => {
+    detailVarietyDropdownVisible.value = false
+  }, 200)
+}
+
+const focusDetailVarietyInput = () => {
+  detailVarietyDropdownVisible.value = true
+  filterDetailVarietyOptions()
+  nextTick(() => detailVarietyInputRef.value?.focus())
+}
+
 // ==================== 构建筛选参数 ====================
 function buildForecastFilterParams(): Record<string, any> {
   const params: Record<string, any> = {}
@@ -1444,12 +1791,14 @@ function buildForecastFilterParams(): Record<string, any> {
     const f = detailTabFilters.value
     if (f.startDate) params.date_from = f.startDate
     if (f.endDate) params.date_to = f.endDate
-    // 维度筛选与「按仓库」页签一致（与 chart/export 同源）
-    if (forecastWhSelectedWarehouses.value.length > 0) {
-      params.warehouses = forecastWhSelectedWarehouses.value
+    if (detailSelectedWarehouses.value.length > 0) {
+      params.warehouses = detailSelectedWarehouses.value
     }
-    if (forecastWhSelectedSmelters.value.length > 0) {
-      params.smelters = forecastWhSelectedSmelters.value
+    if (detailSelectedSmelters.value.length > 0) {
+      params.smelters = detailSelectedSmelters.value
+    }
+    if (detailSelectedVarieties.value.length > 0) {
+      params.product_varieties = detailSelectedVarieties.value
     }
     return params
   }
@@ -1617,6 +1966,7 @@ async function fetchDetailData() {
     detailData.value = legacy
     rebuildForecastPivotFromDetail(legacy)
     mergeSmelterOptionsFromForecastItems(legacy)
+    mergeVarietyOptionsFromForecastItems(legacy)
     detailTablePage.value = 1
   } catch (error: unknown) {
     console.error('获取预测明细失败', error)
@@ -1680,6 +2030,13 @@ function handleReset() {
     forecastWhSelectedSmelters.value = []
     whWarehouseSearchText.value = ''
     whSmelterSearchText.value = ''
+  } else if (forecastActiveTab.value === 'detail') {
+    detailSelectedWarehouses.value = []
+    detailSelectedSmelters.value = []
+    detailSelectedVarieties.value = []
+    detailWarehouseSearchText.value = ''
+    detailSmelterSearchText.value = ''
+    detailVarietySearchText.value = ''
   }
   applyDefaultForecastDateRange()
   applyDefaultSmelterSelection()
@@ -2080,6 +2437,15 @@ watch(forecastActiveTab, (tab) => {
 
 watch(
   () => [detailTabFilters.value.startDate, detailTabFilters.value.endDate] as const,
+  () => {
+    if (forecastActiveTab.value === 'detail') {
+      void autoQueryDetailTab()
+    }
+  },
+)
+
+watch(
+  () => [...detailSelectedWarehouses.value, ...detailSelectedSmelters.value, ...detailSelectedVarieties.value] as const,
   () => {
     if (forecastActiveTab.value === 'detail') {
       void autoQueryDetailTab()

@@ -48,9 +48,9 @@
         <div class="filter-item">
           <label>定价日期 <span class="date-hint">(最多15天)</span></label>
           <div class="date-range">
-            <input v-model="filters.dateFrom" type="date" class="filter-input date-input" />
+            <input v-model="filters.dateFrom" type="date" class="filter-input" />
             <span>至</span>
-            <input v-model="filters.dateTo" type="date" class="filter-input date-input" />
+            <input v-model="filters.dateTo" type="date" class="filter-input" />
           </div>
         </div>
         <div class="filter-actions">
@@ -579,14 +579,13 @@ onBeforeUnmount(() => {
 .price-change { font-size: 13px; margin-top: 4px; }
 .price-change.up, .chg-up { color: #e53935; }
 .price-change.down, .chg-down { color: #2e7d32; }
-.filter-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 16px; }
-.filter-item { display: flex; flex-direction: column; gap: 4px; }
-.filter-item label { font-size: 12px; font-weight: 500; color: #606266; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; margin-bottom: 16px; overflow: visible; }
+.filter-item { display: flex; flex-direction: column; gap: 6px; min-width: 140px; overflow: visible; }
+.filter-item label { font-size: 13px; font-weight: 500; color: #606266; }
 .date-hint { font-size: 11px; color: #909399; font-weight: normal; }
-.date-range { display: flex; gap: 6px; align-items: center; }
-.filter-input { padding: 6px 10px; border: 1px solid #e5e9f2; border-radius: 4px; font-size: 13px; }
-.date-input { width: 130px; }
-.filter-actions { display: flex; gap: 8px; margin-left: auto; }
+.date-range { display: flex; gap: 8px; align-items: center; }
+.filter-input { padding: 6px 10px; border: 1px solid #e5e9f2; border-radius: 4px; font-size: 13px; width: 130px; }
+.filter-actions { display: flex; gap: 10px; flex-shrink: 0; margin-left: auto; }
 .btn { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-primary { background: #1476db; color: white; }

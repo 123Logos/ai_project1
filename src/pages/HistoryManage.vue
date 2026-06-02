@@ -106,14 +106,14 @@
     <!-- ==================== 数据列表标签页 ==================== -->
     <div v-if="activeTab === 'list'" class="list-tab">
       <!-- 筛选区 -->
-      <div class="card">
+      <div class="card filter-card">
         <div class="filter-row">
           <div class="filter-item date-item">
             <label>送货日期</label>
             <div class="date-range">
-              <input type="date" v-model="filters.startDate" class="filter-input date-input" />
+              <input type="date" v-model="filters.startDate" class="filter-input" />
               <span>至</span>
-              <input type="date" v-model="filters.endDate" class="filter-input date-input" />
+              <input type="date" v-model="filters.endDate" class="filter-input" />
             </div>
           </div>
 
@@ -121,19 +121,24 @@
           <div class="filter-item multi-select-item">
             <label>大区经理</label>
             <div class="multi-select-container">
-              <div class="selected-tags" @click="focusManagerInput">
-                <span v-for="item in selectedManagers" :key="item" class="tag">
+              <div class="selected-tags" :class="multiSelectTagsClass(selectedManagers)" @click="focusManagerInput">
+                <span v-for="item in mgrManagersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
                   {{ item }}
                   <button type="button" class="tag-remove" @click.stop="removeManager(item)">×</button>
                 </span>
-                <input 
+                <span
+                  v-if="mgrManagersTagsMore > 0"
+                  class="tag tag-more tag-shrink"
+                  :title="'还有：' + mgrManagersTagsRest.join('、')"
+                >+{{ mgrManagersTagsMore }}</span>
+                <input
                   ref="managerInputRef"
                   v-model="managerSearchText"
                   type="text"
                   class="multi-input"
-                  placeholder="搜索并选择"
-                  @input="filterManagerOptions"
-                  @focus="managerDropdownVisible = true"
+                  :placeholder="multiSelectPlaceholder(selectedManagers)"
+                  @input="onManagerSearchInput"
+                  @focus="onManagerFocus"
                   @blur="closeManagerDropdown"
                   @keydown.enter="handleManagerKeydown"
                 />
@@ -143,7 +148,8 @@
                   v-for="item in filteredManagerOptions"
                   :key="item"
                   class="dropdown-item"
-                  @mousedown.prevent="addManager(item)"
+                  :class="{ 'dropdown-item--selected': selectedManagers.includes(item) }"
+                  @mousedown.prevent="onManagerDropdownPick(item)"
                 >
                   {{ item }}
                 </div>
@@ -152,22 +158,27 @@
           </div>
 
           <!-- 冶炼厂多选 -->
-          <div class="filter-item multi-select-item">
+          <div class="filter-item multi-select-item multi-select-item--wide">
             <label>冶炼厂</label>
-            <div class="multi-select-container">
-              <div class="selected-tags" @click="focusSmelterInput">
-                <span v-for="item in selectedSmelters" :key="item" class="tag">
+            <div class="multi-select-container multi-select-container--wide">
+              <div class="selected-tags" :class="multiSelectTagsClass(selectedSmelters)" @click="focusSmelterInput">
+                <span v-for="item in mgrSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
                   {{ item }}
                   <button type="button" class="tag-remove" @click.stop="removeSmelter(item)">×</button>
                 </span>
-                <input 
+                <span
+                  v-if="mgrSmeltersTagsMore > 0"
+                  class="tag tag-more tag-shrink"
+                  :title="'还有：' + mgrSmeltersTagsRest.join('、')"
+                >+{{ mgrSmeltersTagsMore }}</span>
+                <input
                   ref="smelterInputRef"
                   v-model="smelterSearchText"
                   type="text"
                   class="multi-input"
-                  placeholder="搜索并选择"
-                  @input="filterSmelterOptions"
-                  @focus="smelterDropdownVisible = true"
+                  :placeholder="multiSelectPlaceholder(selectedSmelters)"
+                  @input="onSmelterSearchInput"
+                  @focus="onSmelterFocus"
                   @blur="closeSmelterDropdown"
                   @keydown.enter="handleSmelterKeydown"
                 />
@@ -177,7 +188,8 @@
                   v-for="item in filteredSmelterOptions"
                   :key="item"
                   class="dropdown-item"
-                  @mousedown.prevent="addSmelter(item)"
+                  :class="{ 'dropdown-item--selected': selectedSmelters.includes(item) }"
+                  @mousedown.prevent="onSmelterDropdownPick(item)"
                 >
                   {{ item }}
                 </div>
@@ -186,22 +198,27 @@
           </div>
 
           <!-- 仓库多选 -->
-          <div class="filter-item multi-select-item">
+          <div class="filter-item multi-select-item multi-select-item--wide">
             <label>仓库</label>
-            <div class="multi-select-container">
-              <div class="selected-tags" @click="focusWarehouseInput">
-                <span v-for="item in selectedWarehouses" :key="item" class="tag">
+            <div class="multi-select-container multi-select-container--wide">
+              <div class="selected-tags" :class="multiSelectTagsClass(selectedWarehouses)" @click="focusWarehouseInput">
+                <span v-for="item in whWarehousesTagsPreview" :key="item" class="tag tag-shrink" :title="item">
                   {{ item }}
                   <button type="button" class="tag-remove" @click.stop="removeWarehouse(item)">×</button>
                 </span>
-                <input 
+                <span
+                  v-if="whWarehousesTagsMore > 0"
+                  class="tag tag-more tag-shrink"
+                  :title="'还有：' + whWarehousesTagsRest.join('、')"
+                >+{{ whWarehousesTagsMore }}</span>
+                <input
                   ref="warehouseInputRef"
                   v-model="warehouseSearchText"
                   type="text"
                   class="multi-input"
-                  placeholder="搜索并选择"
-                  @input="filterWarehouseOptions"
-                  @focus="warehouseDropdownVisible = true"
+                  :placeholder="multiSelectPlaceholder(selectedWarehouses)"
+                  @input="onWarehouseSearchInput"
+                  @focus="onWarehouseFocus"
                   @blur="closeWarehouseDropdown"
                   @keydown.enter="handleWarehouseKeydown"
                 />
@@ -211,7 +228,8 @@
                   v-for="item in filteredWarehouseOptions"
                   :key="item"
                   class="dropdown-item"
-                  @mousedown.prevent="addWarehouse(item)"
+                  :class="{ 'dropdown-item--selected': selectedWarehouses.includes(item) }"
+                  @mousedown.prevent="onWarehouseDropdownPick(item)"
                 >
                   {{ item }}
                 </div>
@@ -223,19 +241,24 @@
           <div class="filter-item multi-select-item">
             <label>品种</label>
             <div class="multi-select-container">
-              <div class="selected-tags" @click="focusVarietyInput">
-                <span v-for="item in selectedVarieties" :key="item" class="tag">
+              <div class="selected-tags" :class="multiSelectTagsClass(selectedVarieties)" @click="focusVarietyInput">
+                <span v-for="item in varietyTagsPreview" :key="item" class="tag tag-shrink" :title="item">
                   {{ item }}
                   <button type="button" class="tag-remove" @click.stop="removeVariety(item)">×</button>
                 </span>
+                <span
+                  v-if="varietyTagsMore > 0"
+                  class="tag tag-more tag-shrink"
+                  :title="'还有：' + varietyTagsRest.join('、')"
+                >+{{ varietyTagsMore }}</span>
                 <input 
                   ref="varietyInputRef"
                   v-model="varietySearchText"
                   type="text"
                   class="multi-input"
                   placeholder="搜索并选择"
-                  @input="filterVarietyOptions"
-                  @focus="varietyDropdownVisible = true"
+                  @input="onVarietySearchInput"
+                  @focus="onVarietyFocus"
                   @blur="closeVarietyDropdown"
                   @keydown.enter="handleVarietyKeydown"
                 />
@@ -245,7 +268,8 @@
                   v-for="item in filteredVarietyOptions"
                   :key="item"
                   class="dropdown-item"
-                  @mousedown.prevent="addVariety(item)"
+                  :class="{ 'dropdown-item--selected': selectedVarieties.includes(item) }"
+                  @mousedown.prevent="onVarietyDropdownPick(item)"
                 >
                   {{ item }}
                 </div>
@@ -386,12 +410,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, nextTick } from 'vue'
 import axios from 'axios'
 import * as XLSX from 'xlsx'
 import { ApiPaths } from '@/api/paths'
 import { DELIVERY_HISTORY_FETCH_PAGE_SIZE } from '@/api/fetchLimits'
 import { fetchDeliveryHistoryDimensionOptions } from '@/api/dimensionOptions'
+import { fetchTlCategories } from '@/api/tlApi'
 
 // ==================== 类型定义 ====================
 interface HistoryRecord {
@@ -459,8 +484,8 @@ const errorModalDetails = ref<string[]>([])
 
 // 筛选条件
 const filters = ref({
-  startDate: '',
-  endDate: ''
+  startDate: (() => { const d = new Date(); d.setDate(d.getDate() - 30); return d.toISOString().slice(0, 10) })(),
+  endDate: new Date().toISOString().slice(0, 10)
 })
 
 // 大区经理多选
@@ -494,6 +519,37 @@ const varietyDropdownVisible = ref(false)
 const varietyInputRef = ref<HTMLInputElement>()
 const allVarietyOptions = ref<string[]>([])
 const filteredVarietyOptions = ref<string[]>([])
+
+// 标签预览常量
+const MULTI_PREVIEW_TAG_COUNT = 1
+
+function multiSelectTagsClass(selected: string[]) {
+  return { 'selected-tags--single': selected.length === 1 }
+}
+
+function multiSelectPlaceholder(selected: string[]) {
+  return selected.length > 0 ? '' : '搜索并选择'
+}
+
+// 大区经理标签预览
+const mgrManagersTagsPreview = computed(() => selectedManagers.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
+const mgrManagersTagsMore = computed(() => Math.max(0, selectedManagers.value.length - MULTI_PREVIEW_TAG_COUNT))
+const mgrManagersTagsRest = computed(() => selectedManagers.value.slice(MULTI_PREVIEW_TAG_COUNT))
+
+// 冶炼厂标签预览
+const mgrSmeltersTagsPreview = computed(() => selectedSmelters.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
+const mgrSmeltersTagsMore = computed(() => Math.max(0, selectedSmelters.value.length - MULTI_PREVIEW_TAG_COUNT))
+const mgrSmeltersTagsRest = computed(() => selectedSmelters.value.slice(MULTI_PREVIEW_TAG_COUNT))
+
+// 仓库标签预览
+const whWarehousesTagsPreview = computed(() => selectedWarehouses.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
+const whWarehousesTagsMore = computed(() => Math.max(0, selectedWarehouses.value.length - MULTI_PREVIEW_TAG_COUNT))
+const whWarehousesTagsRest = computed(() => selectedWarehouses.value.slice(MULTI_PREVIEW_TAG_COUNT))
+
+// 品种标签预览
+const varietyTagsPreview = computed(() => selectedVarieties.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
+const varietyTagsMore = computed(() => Math.max(0, selectedVarieties.value.length - MULTI_PREVIEW_TAG_COUNT))
+const varietyTagsRest = computed(() => selectedVarieties.value.slice(MULTI_PREVIEW_TAG_COUNT))
 
 // 分页（仅前端；数据一次性拉齐后按汇总行切片）
 const currentPage = ref(1)
@@ -531,28 +587,40 @@ const closeErrorModal = () => {
 }
 
 // ==================== 大区经理逻辑 ====================
+function filterOptionsBySearch(options: string[], searchLower: string) {
+  if (!searchLower) return [...options]
+  return options.filter((opt) => opt.toLowerCase().includes(searchLower))
+}
+
 const filterManagerOptions = () => {
   const search = managerSearchText.value.toLowerCase()
-  if (search) {
-    filteredManagerOptions.value = allManagerOptions.value.filter(opt => opt.toLowerCase().includes(search))
-  } else {
-    filteredManagerOptions.value = [...allManagerOptions.value]
-  }
-  managerDropdownVisible.value = filteredManagerOptions.value.length > 0
+  filteredManagerOptions.value = filterOptionsBySearch(allManagerOptions.value, search)
+}
+
+function onManagerFocus() {
+  managerDropdownVisible.value = true
+  filterManagerOptions()
+}
+
+function onManagerSearchInput() {
+  managerDropdownVisible.value = true
+  filterManagerOptions()
 }
 
 const addManager = (item: string) => {
-  if (!selectedManagers.value.includes(item)) {
-    selectedManagers.value.push(item)
-  }
+  if (!selectedManagers.value.includes(item)) selectedManagers.value.push(item)
   managerSearchText.value = ''
   filterManagerOptions()
-  managerDropdownVisible.value = false
 }
 
 const removeManager = (item: string) => {
-  selectedManagers.value = selectedManagers.value.filter(i => i !== item)
-  fetchData()
+  selectedManagers.value = selectedManagers.value.filter((i) => i !== item)
+  filterManagerOptions()
+}
+
+function onManagerDropdownPick(item: string) {
+  if (selectedManagers.value.includes(item)) removeManager(item)
+  else addManager(item)
 }
 
 const handleManagerKeydown = (e: KeyboardEvent) => {
@@ -569,32 +637,41 @@ const closeManagerDropdown = () => {
 }
 
 const focusManagerInput = () => {
-  managerInputRef.value?.focus()
+  managerDropdownVisible.value = true
+  filterManagerOptions()
+  nextTick(() => managerInputRef.value?.focus())
 }
 
 // ==================== 冶炼厂逻辑 ====================
 const filterSmelterOptions = () => {
   const search = smelterSearchText.value.toLowerCase()
-  if (search) {
-    filteredSmelterOptions.value = allSmelterOptions.value.filter(opt => opt.toLowerCase().includes(search))
-  } else {
-    filteredSmelterOptions.value = [...allSmelterOptions.value]
-  }
-  smelterDropdownVisible.value = filteredSmelterOptions.value.length > 0
+  filteredSmelterOptions.value = filterOptionsBySearch(allSmelterOptions.value, search)
+}
+
+function onSmelterFocus() {
+  smelterDropdownVisible.value = true
+  filterSmelterOptions()
+}
+
+function onSmelterSearchInput() {
+  smelterDropdownVisible.value = true
+  filterSmelterOptions()
 }
 
 const addSmelter = (item: string) => {
-  if (!selectedSmelters.value.includes(item)) {
-    selectedSmelters.value.push(item)
-  }
+  if (!selectedSmelters.value.includes(item)) selectedSmelters.value.push(item)
   smelterSearchText.value = ''
   filterSmelterOptions()
-  fetchData()
 }
 
 const removeSmelter = (item: string) => {
-  selectedSmelters.value = selectedSmelters.value.filter(i => i !== item)
-  fetchData()
+  selectedSmelters.value = selectedSmelters.value.filter((i) => i !== item)
+  filterSmelterOptions()
+}
+
+function onSmelterDropdownPick(item: string) {
+  if (selectedSmelters.value.includes(item)) removeSmelter(item)
+  else addSmelter(item)
 }
 
 const handleSmelterKeydown = (e: KeyboardEvent) => {
@@ -611,32 +688,41 @@ const closeSmelterDropdown = () => {
 }
 
 const focusSmelterInput = () => {
-  smelterInputRef.value?.focus()
+  smelterDropdownVisible.value = true
+  filterSmelterOptions()
+  nextTick(() => smelterInputRef.value?.focus())
 }
 
 // ==================== 仓库逻辑 ====================
 const filterWarehouseOptions = () => {
   const search = warehouseSearchText.value.toLowerCase()
-  if (search) {
-    filteredWarehouseOptions.value = allWarehouseOptions.value.filter(opt => opt.toLowerCase().includes(search))
-  } else {
-    filteredWarehouseOptions.value = [...allWarehouseOptions.value]
-  }
-  warehouseDropdownVisible.value = filteredWarehouseOptions.value.length > 0
+  filteredWarehouseOptions.value = filterOptionsBySearch(allWarehouseOptions.value, search)
+}
+
+function onWarehouseFocus() {
+  warehouseDropdownVisible.value = true
+  filterWarehouseOptions()
+}
+
+function onWarehouseSearchInput() {
+  warehouseDropdownVisible.value = true
+  filterWarehouseOptions()
 }
 
 const addWarehouse = (item: string) => {
-  if (!selectedWarehouses.value.includes(item)) {
-    selectedWarehouses.value.push(item)
-  }
+  if (!selectedWarehouses.value.includes(item)) selectedWarehouses.value.push(item)
   warehouseSearchText.value = ''
   filterWarehouseOptions()
-  fetchData()
 }
 
 const removeWarehouse = (item: string) => {
-  selectedWarehouses.value = selectedWarehouses.value.filter(i => i !== item)
-  fetchData()
+  selectedWarehouses.value = selectedWarehouses.value.filter((i) => i !== item)
+  filterWarehouseOptions()
+}
+
+function onWarehouseDropdownPick(item: string) {
+  if (selectedWarehouses.value.includes(item)) removeWarehouse(item)
+  else addWarehouse(item)
 }
 
 const handleWarehouseKeydown = (e: KeyboardEvent) => {
@@ -653,32 +739,41 @@ const closeWarehouseDropdown = () => {
 }
 
 const focusWarehouseInput = () => {
-  warehouseInputRef.value?.focus()
+  warehouseDropdownVisible.value = true
+  filterWarehouseOptions()
+  nextTick(() => warehouseInputRef.value?.focus())
 }
 
 // ==================== 品种逻辑 ====================
 const filterVarietyOptions = () => {
   const search = varietySearchText.value.toLowerCase()
-  if (search) {
-    filteredVarietyOptions.value = allVarietyOptions.value.filter(opt => opt.toLowerCase().includes(search))
-  } else {
-    filteredVarietyOptions.value = [...allVarietyOptions.value]
-  }
-  varietyDropdownVisible.value = filteredVarietyOptions.value.length > 0
+  filteredVarietyOptions.value = filterOptionsBySearch(allVarietyOptions.value, search)
+}
+
+function onVarietyFocus() {
+  varietyDropdownVisible.value = true
+  filterVarietyOptions()
+}
+
+function onVarietySearchInput() {
+  varietyDropdownVisible.value = true
+  filterVarietyOptions()
 }
 
 const addVariety = (item: string) => {
-  if (!selectedVarieties.value.includes(item)) {
-    selectedVarieties.value.push(item)
-  }
+  if (!selectedVarieties.value.includes(item)) selectedVarieties.value.push(item)
   varietySearchText.value = ''
   filterVarietyOptions()
-  fetchData()
 }
 
 const removeVariety = (item: string) => {
-  selectedVarieties.value = selectedVarieties.value.filter(i => i !== item)
-  fetchData()
+  selectedVarieties.value = selectedVarieties.value.filter((i) => i !== item)
+  filterVarietyOptions()
+}
+
+function onVarietyDropdownPick(item: string) {
+  if (selectedVarieties.value.includes(item)) removeVariety(item)
+  else addVariety(item)
 }
 
 const handleVarietyKeydown = (e: KeyboardEvent) => {
@@ -695,7 +790,9 @@ const closeVarietyDropdown = () => {
 }
 
 const focusVarietyInput = () => {
-  varietyInputRef.value?.focus()
+  varietyDropdownVisible.value = true
+  filterVarietyOptions()
+  nextTick(() => varietyInputRef.value?.focus())
 }
 
 // ==================== 汇总数据（按日期+大区经理+冶炼厂+仓库分组） ====================
@@ -737,21 +834,16 @@ const aggregateData = (data: HistoryRecord[]): SummaryRow[] => {
 // ==================== 获取下拉选项 ====================
 const fetchOptions = async () => {
   try {
-    const dims = await fetchDeliveryHistoryDimensionOptions()
+    const [dims, categories] = await Promise.all([
+      fetchDeliveryHistoryDimensionOptions(),
+      fetchTlCategories().catch(() => []),
+    ])
     allManagerOptions.value = dims.regional_managers
     allSmelterOptions.value = dims.smelters
     allWarehouseOptions.value = dims.warehouses
-
-    if (dims.product_varieties.length > 0) {
-      allVarietyOptions.value = dims.product_varieties
-    } else {
-      const response = await axios.get(ApiPaths.deliveryHistory, {
-        params: { page: 1, page_size: DELIVERY_HISTORY_FETCH_PAGE_SIZE },
-      })
-      const data = response.data as ApiResponse
-      const items = data.items || []
-      allVarietyOptions.value = [...new Set(items.map((item: HistoryRecord) => item.product_variety))].filter(Boolean)
-    }
+    // 品类去重并排序
+    const uniqueVarieties = [...new Set(categories.map((c) => c.name).filter((n) => n !== ''))]
+    allVarietyOptions.value = uniqueVarieties.sort((a, b) => a.localeCompare(b, 'zh-CN'))
 
     filteredManagerOptions.value = [...allManagerOptions.value]
     filteredSmelterOptions.value = [...allSmelterOptions.value]
@@ -1159,28 +1251,34 @@ onMounted(() => {
 <style scoped>
 .history-manage-page { width: 100%; animation: fadeIn 0.25s ease both; }
 .card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); animation: fadeInUp 0.3s ease both; }
+.filter-card { position: relative; z-index: 40; overflow: visible; }
 .inner-menu { display: flex; gap: 8px; background: #F5F7FA; border-radius: 8px; padding: 4px; }
 .menu-item { padding: 8px 24px; cursor: pointer; font-size: 14px; font-weight: 500; border-radius: 6px; color: #606266; }
 .menu-item:hover { background-color: rgba(74, 122, 156, 0.1); }
 .menu-item.active { background-color: #1476db; color: white; }
-.filter-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
-.filter-item { display: flex; flex-direction: column; gap: 4px; }
-.filter-item label { font-size: 12px; font-weight: 500; color: #606266; white-space: nowrap; }
-.date-range { display: flex; gap: 6px; align-items: center; }
-.filter-input { padding: 6px 10px; border: 1px solid #E5E9F2; border-radius: 4px; font-size: 13px; background: white; }
-.date-input { width: 120px; }
-.filter-actions { display: flex; gap: 8px; margin-left: auto; }
-.multi-select-item { min-width: 200px; }
-.multi-select-container { position: relative; width: 220px; }
-.selected-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; padding: 4px 6px; border: 1px solid #E5E9F2; border-radius: 4px; background: white; min-height: 32px; cursor: text; }
-.tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background-color: #E8F0F8; border-radius: 3px; font-size: 12px; color: #2c3e50; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; overflow: visible; }
+.filter-item { display: flex; flex-direction: column; gap: 6px; min-width: 140px; overflow: visible; }
+.filter-item label { font-size: 13px; font-weight: 500; color: #606266; }
+.date-range { display: flex; gap: 8px; align-items: center; }
+.filter-input { padding: 6px 10px; border: 1px solid #E5E9F2; border-radius: 4px; font-size: 13px; width: 130px; }
+.filter-actions { display: flex; gap: 10px; flex-shrink: 0; margin-left: auto; }
+.multi-select-item { min-width: 200px; max-width: 280px; }
+.multi-select-item--wide { min-width: 300px; max-width: 380px; flex: 1 1 300px; }
+.multi-select-container { position: relative; width: 100%; max-width: 280px; overflow: visible; }
+.multi-select-container--wide { max-width: 100%; }
+.selected-tags { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; padding: 2px 6px; border: 1px solid #E5E9F2; border-radius: 4px; background: white; height: 32px; min-height: 32px; max-height: 32px; overflow: hidden; cursor: text; box-sizing: border-box; }
+.tag { display: inline-flex; align-items: center; gap: 4px; padding: 2px 6px; background-color: #E8F0F8; border-radius: 3px; font-size: 12px; color: #2c3e50; max-width: 118px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag-remove { background: none; border: none; cursor: pointer; font-size: 14px; color: #909399; padding: 0 2px; }
 .tag-remove:hover { color: #f56c6c; }
-.multi-input { flex: 1; min-width: 80px; border: none; outline: none; padding: 4px 6px; font-size: 13px; background: transparent; }
+.tag-shrink { flex-shrink: 0; }
+.tag-more { max-width: none; overflow: visible; text-overflow: clip; background-color: #f0f2f5; color: #606266; }
+.multi-input { border: none; outline: none; font-size: 13px; flex: 1 1 48px; min-width: 48px; }
 .multi-input::placeholder { color: #c0c4cc; }
-.dropdown-list { position: absolute; top: 100%; left: 0; right: 0; max-height: 200px; overflow-y: auto; background: white; border: 1px solid #E5E9F2; border-radius: 4px; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); z-index: 100; margin-top: 2px; }
+.dropdown-list { position: absolute; top: 100%; left: 0; right: 0; max-height: 240px; overflow-y: auto; background: white; border: 1px solid #E5E9F2; border-radius: 4px; box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); z-index: 2500; margin-top: 2px; }
 .dropdown-item { padding: 8px 12px; cursor: pointer; font-size: 13px; color: #606266; text-align: left; }
 .dropdown-item:hover { background-color: #F5F7FA; color: #1476db; }
+.dropdown-item--selected { color: #a8abb2; background-color: #f5f7fa; }
+.dropdown-item--selected:hover { background-color: #ebeef5; color: #909399; }
 .batch-card { padding: 12px 20px; }
 .batch-bar { display: flex; justify-content: flex-start; }
 .btn { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.2s; }
