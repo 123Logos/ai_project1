@@ -59,9 +59,11 @@ function pickRow(r: Record<string, unknown>): WarehouseCurrentStockRow {
     const n = Number(categoryIdRaw)
     if (Number.isFinite(n)) categoryId = n
   }
+  const rawWarehouseId = r['库房id'] ?? r['仓库id'] ?? r.warehouse_id ?? r.warehouseId
+  const warehouseId = rawWarehouseId != null ? Number(rawWarehouseId) : 0
   return {
     id: Number(r.id ?? r.record_id ?? 0),
-    warehouseId: Number(r['库房id'] ?? r.warehouse_id ?? r.id ?? 0),
+    warehouseId: Number.isFinite(warehouseId) ? warehouseId : 0,
     warehouseName: String(r['库房名称'] ?? r['仓库名'] ?? r.warehouse_name ?? r.name ?? ''),
     categoryId,
     categoryName: String(
@@ -123,6 +125,18 @@ export async function saveWarehouseInventoryManual(body: {
     body: JSON.stringify(payload),
   })
   if (!res.ok) throw new Error(readMsg(data) || `保存库存失败（HTTP ${res.status}）`)
+}
+
+export async function deleteWarehouseInventory(warehouseId: number, stockDate?: string): Promise<void> {
+  const payload: Record<string, unknown> = { 库房id: warehouseId }
+  if (stockDate?.trim()) payload['库存日期'] = stockDate.trim()
+
+  const { res, data } = await fetchJson(BASE, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json', ...authHeaders() },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error(readMsg(data) || `删除库存失败（HTTP ${res.status}）`)
 }
 
 export async function downloadWarehouseInventoryTemplate(): Promise<Blob> {
