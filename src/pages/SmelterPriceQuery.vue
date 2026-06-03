@@ -21,7 +21,7 @@
           <p v-else-if="!latestLoading && selectedSmelterId" class="summary-meta text-muted"></p>
           <p v-else-if="!selectedSmelterId" class="summary-meta text-muted">请先选择冶炼厂</p>
         </div>
-        <button type="button" class="btn btn-secondary" @click="emit('navigateToQuote')">AI 比价报价查询</button>
+        <button type="button" class="btn btn-secondary" @click="emit('navigateToQuote')">前往维护</button>
       </div>
 
       <p v-if="latestError && !latest" class="inline-error">{{ latestError }}</p>
