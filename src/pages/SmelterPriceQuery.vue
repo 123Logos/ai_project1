@@ -6,8 +6,8 @@
           <p v-if="latest" class="summary-meta">
             <span>最新报价日期：{{ latest.date }}</span>
           </p>
-          <p v-else-if="!latestLoading && selectedSmelterNames.length > 0" class="summary-meta text-muted">所选冶炼厂暂无报价</p>
-          <p v-else-if="selectedSmelterNames.length === 0" class="summary-meta text-muted">请先在筛选区选择冶炼厂</p>
+          <p v-else-if="!latestLoading && selectedSmelterId" class="summary-meta text-muted"></p>
+          <p v-else-if="!selectedSmelterId" class="summary-meta text-muted">请先选择冶炼厂</p>
         </div>
         <button type="button" class="btn btn-secondary" @click="emit('navigateToQuote')">前往维护</button>
       </div>
