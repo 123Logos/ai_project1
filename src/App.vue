@@ -224,7 +224,7 @@ const predictionSubTabs: Array<{ key: PredictionSubKey; label: string }> = [
 ]
 
 const activeSection = ref<SectionKey>('map')
-const predictionSubTab = ref<PredictionSubKey>('historyManage')
+const predictionSubTab = ref<PredictionSubKey>('forecast')
 const baseUrl = import.meta.env.BASE_URL
 const embeddedCacheVersion = `${Date.now()}`
 const isLoggedIn = ref(!!getToken())
@@ -334,7 +334,7 @@ function logoutNow() {
   navPermissionsReady.value = true
   isLoggedIn.value = false
   activeSection.value = 'map'
-  predictionSubTab.value = 'historyManage'
+  predictionSubTab.value = 'forecast'
 }
 
 async function submitLogin() {
@@ -350,7 +350,7 @@ async function submitLogin() {
     await refreshNavPermissionsOnPageLoad()
     showLogin.value = false
     activeSection.value = firstVisiblePrimarySection()
-    predictionSubTab.value = 'historyManage'
+    predictionSubTab.value = 'forecast'
   } catch (e) {
     loginError.value = e instanceof Error ? e.message : String(e)
   } finally {

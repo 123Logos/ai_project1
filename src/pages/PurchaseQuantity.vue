@@ -59,10 +59,8 @@
                 :class="multiSelectTagsClass(forecastMgrSelectedManagers)"
                 @click="focusMgrManagerInput"
               >
-                <span v-for="item in mgrManagersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeMgrManager(item)">×</button>
-                </span>
+                <span v-for="item in mgrManagersTagsPreview" :key="item" class="tag tag-shrink" :title="item">{{ item }}</span>
+                <button v-for="item in mgrManagersTagsPreview" :key="'rm-' + item" type="button" class="tag-remove" @click.stop="removeMgrManager(item)">×</button>
                 <span
                   v-if="mgrManagersTagsMore > 0"
                   class="tag tag-more tag-shrink"
@@ -102,10 +100,8 @@
                 :class="multiSelectTagsClass(forecastMgrSelectedSmelters)"
                 @click="focusMgrSmelterInput"
               >
-                <span v-for="item in mgrSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeMgrSmelter(item)">×</button>
-                </span>
+                <span v-for="item in mgrSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">{{ item }}</span>
+                <button v-for="item in mgrSmeltersTagsPreview" :key="'rm-' + item" type="button" class="tag-remove" @click.stop="removeMgrSmelter(item)">×</button>
                 <span
                   v-if="mgrSmeltersTagsMore > 0"
                   class="tag tag-more tag-shrink"
@@ -176,10 +172,8 @@
                 :class="multiSelectTagsClass(forecastWhSelectedWarehouses)"
                 @click="focusWhWarehouseInput"
               >
-                <span v-for="item in whWarehousesTagsPreview" :key="item" class="tag tag-shrink" :title="item">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeWhWarehouse(item)">×</button>
-                </span>
+                <span v-for="item in whWarehousesTagsPreview" :key="item" class="tag tag-shrink" :title="item">{{ item }}</span>
+                <button v-for="item in whWarehousesTagsPreview" :key="'rm-' + item" type="button" class="tag-remove" @click.stop="removeWhWarehouse(item)">×</button>
                 <span
                   v-if="whWarehousesTagsMore > 0"
                   class="tag tag-more tag-shrink"
@@ -219,10 +213,8 @@
                 :class="multiSelectTagsClass(forecastWhSelectedSmelters)"
                 @click="focusWhSmelterInput"
               >
-                <span v-for="item in whSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeWhSmelter(item)">×</button>
-                </span>
+                <span v-for="item in whSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">{{ item }}</span>
+                <button v-for="item in whSmeltersTagsPreview" :key="'rm-' + item" type="button" class="tag-remove" @click.stop="removeWhSmelter(item)">×</button>
                 <span
                   v-if="whSmeltersTagsMore > 0"
                   class="tag tag-more tag-shrink"
@@ -293,10 +285,8 @@
                 :class="multiSelectTagsClass(detailSelectedWarehouses)"
                 @click="focusDetailWarehouseInput"
               >
-                <span v-for="item in detailWarehousesTagsPreview" :key="item" class="tag tag-shrink" :title="item">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeDetailWarehouse(item)">×</button>
-                </span>
+                <span v-for="item in detailWarehousesTagsPreview" :key="item" class="tag tag-shrink" :title="item">{{ item }}</span>
+                <button v-for="item in detailWarehousesTagsPreview" :key="'rm-' + item" type="button" class="tag-remove" @click.stop="removeDetailWarehouse(item)">×</button>
                 <span
                   v-if="detailWarehousesTagsMore > 0"
                   class="tag tag-more tag-shrink"
@@ -336,10 +326,8 @@
                 :class="multiSelectTagsClass(detailSelectedSmelters)"
                 @click="focusDetailSmelterInput"
               >
-                <span v-for="item in detailSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeDetailSmelter(item)">×</button>
-                </span>
+                <span v-for="item in detailSmeltersTagsPreview" :key="item" class="tag tag-shrink" :title="item">{{ item }}</span>
+                <button v-for="item in detailSmeltersTagsPreview" :key="'rm-' + item" type="button" class="tag-remove" @click.stop="removeDetailSmelter(item)">×</button>
                 <span
                   v-if="detailSmeltersTagsMore > 0"
                   class="tag tag-more tag-shrink"
@@ -379,10 +367,8 @@
                 :class="multiSelectTagsClass(detailSelectedVarieties)"
                 @click="focusDetailVarietyInput"
               >
-                <span v-for="item in detailVarietiesTagsPreview" :key="item" class="tag tag-shrink" :title="item">
-                  {{ item }}
-                  <button type="button" class="tag-remove" @click.stop="removeDetailVariety(item)">×</button>
-                </span>
+                <span v-for="item in detailVarietiesTagsPreview" :key="item" class="tag tag-shrink" :title="item">{{ item }}</span>
+                <button v-for="item in detailVarietiesTagsPreview" :key="'rm-' + item" type="button" class="tag-remove" @click.stop="removeDetailVariety(item)">×</button>
                 <span
                   v-if="detailVarietiesTagsMore > 0"
                   class="tag tag-more tag-shrink"
@@ -2744,7 +2730,8 @@ onMounted(async () => {
   height: 32px;
   min-height: 32px;
   max-height: 32px;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   cursor: text;
   box-sizing: border-box;
 }
@@ -2784,6 +2771,7 @@ onMounted(async () => {
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 118px;
+  flex-shrink: 0;
 }
 
 .tag-shrink {
