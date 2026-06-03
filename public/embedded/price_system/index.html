@@ -83,10 +83,38 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+      position: relative;
+    }
+    .warehouse-select-combo {
+      overflow: visible !important;
+    }
+    .freight-filter-toolbar,
+    .freight-filter-toolbar .form-group,
+    .card.filter-card,
+    .card.filter-card .card-body {
+      overflow: visible !important;
+    }
+    .freight-filter-toolbar label {
+      display: none !important;
+    }
+    .freight-filter-toolbar {
+      gap: 8px !important;
+      align-items: flex-end !important;
+    }
+    .freight-filter-toolbar .form-group {
+      margin-bottom: 0 !important;
     }
     .warehouse-select-list {
+      display: none;
       max-height: 220px;
       overflow: auto;
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      z-index: 10050;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+      margin-top: 2px;
       border: 1px solid #ced4da;
       border-radius: 6px;
       background: #fff;
@@ -2172,7 +2200,17 @@
           const showType = !typeIdPick
           setAbnormalRowDisplay('abnormal-row-wh-name', showName)
           setAbnormalRowDisplay('abnormal-row-wh-addr', showAddr)
-          setAbnormalRowDisplay('abnormal-row-wh-type', showType)
+          setAbnormalRowDisplay('abnormal-row-wh-type', false)
+          const latPick = pick(row, ['纬度', 'lat', 'latitude'])
+          const lngPick = pick(row, ['经度', 'lng', 'lon', 'longitude'])
+          const showLat = !latPick.trim()
+          const showLng = !lngPick.trim()
+          setAbnormalRowDisplay('abnormal-row-lat', showLat)
+          setAbnormalRowDisplay('abnormal-row-lng', showLng)
+          const inLat = document.getElementById('abnormal-in-lat')
+          const inLng = document.getElementById('abnormal-in-lng')
+          if (inLat) inLat.value = showLat ? '' : latPick
+          if (inLng) inLng.value = showLng ? '' : lngPick
           const inN = document.getElementById('abnormal-in-wh-name')
           const inA = document.getElementById('abnormal-in-wh-addr')
           const sel = document.getElementById('abnormal-in-wh-type')
@@ -2202,6 +2240,16 @@
           const showAddr = !addrPick.trim()
           setAbnormalRowDisplay('abnormal-row-sm-name', showName)
           setAbnormalRowDisplay('abnormal-row-sm-addr', showAddr)
+          const latPick = pick(row, ['纬度', 'lat', 'latitude'])
+          const lngPick = pick(row, ['经度', 'lng', 'lon', 'longitude'])
+          const showLat = !latPick.trim()
+          const showLng = !lngPick.trim()
+          setAbnormalRowDisplay('abnormal-row-lat', showLat)
+          setAbnormalRowDisplay('abnormal-row-lng', showLng)
+          const inLat = document.getElementById('abnormal-in-lat')
+          const inLng = document.getElementById('abnormal-in-lng')
+          if (inLat) inLat.value = showLat ? '' : latPick
+          if (inLng) inLng.value = showLng ? '' : lngPick
           const inN = document.getElementById('abnormal-in-sm-name')
           const inA = document.getElementById('abnormal-in-sm-addr')
           if (inN) inN.value = showName ? '' : namePick
@@ -2428,7 +2476,7 @@
               : pick(row, ['冶炼厂', '冶炼厂名', 'factory_name', 'name'])
           const title = document.getElementById('abnormal-edit-title')
           const meta = document.getElementById('abnormal-edit-meta')
-          if (title) title.textContent = kind === 'wh' ? '补全库房信息' : '补全冶炼厂信息'
+          if (title) title.textContent = kind === 'wh' ? '补全经纬度信息' : '补全经纬度信息'
           if (meta) meta.textContent = `ID: ${id} ｜ ${name || ''}`
 
           hideAllAbnormalKindSpecificRows()
@@ -2526,11 +2574,19 @@
                 }
                 if (tn) extraWh['库房类型名'] = tn
               }
-              const tidAfter = pickNum(full, ['仓库类型id', '类型id', 'warehouse_type_id', 'type_id'])
-              if (!tidAfter && !Object.prototype.hasOwnProperty.call(extraWh, '仓库类型id')) {
-                throw new Error('请选择库房类型')
+              if (abnormalRowVisible('abnormal-row-lat')) {
+                const latVal = parseFloat(document.getElementById('abnormal-in-lat')?.value)
+                if (isNaN(latVal) || latVal < -90 || latVal > 90) throw new Error('纬度须为 -90 到 90 之间的数字')
+                extraWh['纬度'] = latVal
+              }
+              if (abnormalRowVisible('abnormal-row-lng')) {
+                const lngVal = parseFloat(document.getElementById('abnormal-in-lng')?.value)
+                if (isNaN(lngVal) || lngVal < -180 || lngVal > 180) throw new Error('经度须为 -180 到 180 之间的数字')
+                extraWh['经度'] = lngVal
               }
               const payload = buildWarehouseUpdatePayload(full, prov, city, dist, extraWh)
+              if (Object.prototype.hasOwnProperty.call(extraWh, '纬度')) payload['纬度'] = extraWh['纬度']
+              if (Object.prototype.hasOwnProperty.call(extraWh, '经度')) payload['经度'] = extraWh['经度']
               await postAbnormalJson('/tl/update_warehouse', payload)
             } else {
               const sid = pickNum(row, ['冶炼厂id', 'id', 'factory_id'])
@@ -2554,7 +2610,19 @@
               if (abnormalRowVisible('abnormal-row-sm-active')) {
                 extraSm['is_active'] = !!document.getElementById('abnormal-in-sm-active')?.checked
               }
+              if (abnormalRowVisible('abnormal-row-lat')) {
+                const latVal = parseFloat(document.getElementById('abnormal-in-lat')?.value)
+                if (isNaN(latVal) || latVal < -90 || latVal > 90) throw new Error('纬度须为 -90 到 90 之间的数字')
+                extraSm['纬度'] = latVal
+              }
+              if (abnormalRowVisible('abnormal-row-lng')) {
+                const lngVal = parseFloat(document.getElementById('abnormal-in-lng')?.value)
+                if (isNaN(lngVal) || lngVal < -180 || lngVal > 180) throw new Error('经度须为 -180 到 180 之间的数字')
+                extraSm['经度'] = lngVal
+              }
               const payload = buildSmelterUpdatePayload(full, prov, city, dist, extraSm)
+              if (Object.prototype.hasOwnProperty.call(extraSm, '纬度')) payload['纬度'] = extraSm['纬度']
+              if (Object.prototype.hasOwnProperty.call(extraSm, '经度')) payload['经度'] = extraSm['经度']
               await postAbnormalJson('/tl/update_smelter', payload)
             }
             closeAbnormalEdit()

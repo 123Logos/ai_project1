@@ -241,6 +241,15 @@ function clearFeedbackDateFilter() {
   feedbackDateTo.value = ''
 }
 
+/** 初始化反馈日期筛选默认值：今天往前推 30 天 */
+function initFeedbackDateDefault() {
+  const now = new Date()
+  const start = new Date(now)
+  start.setDate(start.getDate() - 30)
+  feedbackDateFrom.value = start.toISOString().slice(0, 10)
+  feedbackDateTo.value = now.toISOString().slice(0, 10)
+}
+
 const selectedManagedHistory = computed(() =>
   managedHistoryRows.value.find((x) => x.id === selectedManagedHistoryId.value) ??
   managedHistoryRows.value[0] ??
@@ -443,7 +452,7 @@ async function handleFeedback(taskId: string, resultIndex: number, judgment: Fee
   try {
     await submitFeedback(taskId, judgment, null, `result_index:${resultIndex}`)
     currentTaskFeedbackStatus.value = judgment
-    await refreshHistoryList()
+    await goHistoryPage(historyPage.value)
   } catch (e) {
     const msg = (e as Error).message
     if (msg.includes('HTTP 409')) {
@@ -1254,6 +1263,33 @@ function correctionTimestamp(entry: FeedbackEntry | null | undefined): string | 
   }
 }
 
+/** 反馈列表行显示时间（MM/DD HH:mm），支持多种后端时间格式 */
+function feedbackListTime(entry: FeedbackEntry): string {
+  const raw = entry.timestamp || entry.updated_at
+  if (!raw) return '—'
+  // 尝试解析 YYYYMMDD_HHMMSS 格式（如 20260603_204200）
+  const m = raw.match(/^(\d{4})(\d{2})(\d{2})[_\s](\d{2})(\d{2})(\d{2})/)
+  if (m) {
+    const mm = m[2]
+    const dd = m[3]
+    const hh = m[4]
+    const mi = m[5]
+    return `${mm}/${dd} ${hh}:${mi}`
+  }
+  // 尝试标准 ISO 格式
+  try {
+    const d = new Date(raw.replace(' ', 'T'))
+    if (Number.isNaN(d.getTime())) return '—'
+    const mo = String(d.getMonth() + 1).padStart(2, '0')
+    const dy = String(d.getDate()).padStart(2, '0')
+    const hh = String(d.getHours()).padStart(2, '0')
+    const mi = String(d.getMinutes()).padStart(2, '0')
+    return `${mo}/${dy} ${hh}:${mi}`
+  } catch {
+    return '—'
+  }
+}
+
 function isHistoryRowActive(entry: DetectionHistoryEntry) {
   if (viewingHistoryId.value === entry.id) return true
   if (
@@ -1377,7 +1413,10 @@ onMounted(() => {
   void refreshHistoryList()
   void checkHealth()
   void loadModelInfo()
-  void loadFeedbackEntries()  // 加载反馈数据，使历史记录能显示"人工审核"信息
+  void loadFeedbackEntries().then(() => {
+    // 反馈数据加载完成后设置默认日期范围（近 30 天）
+    initFeedbackDateDefault()
+  })
 })
 
 async function runV3() {
@@ -2275,8 +2314,11 @@ onUnmounted(() => {
                 <span class="pill sm history-correction-pill" :class="h.feedbackStatus">
                   {{ judgmentText(h.feedbackStatus) }}
                 </span>
+                <span class="history-correction-icon">{{
+                  h.feedbackStatus === 'correct' ? '✓' : h.feedbackStatus === 'wrong' ? '✗' : '—'
+                }}</span>
                 <span class="history-correction-time">{{
-                  correctionTimestamp(feedbackByTaskId.get(h.taskId!)) || '—'
+                  correctionTimestamp(feedbackByTaskId.get(h.taskId!))
                 }}</span>
               </div>
             </li>
@@ -2408,6 +2450,7 @@ onUnmounted(() => {
               <button type="button" class="manage-row-main" @click="selectedFeedbackFolder = entry.folder_name">
                 <span class="manage-row-top">
                   <span class="pill sm" :class="feedbackResultText(entry)">{{ feedbackResultText(entry) }}</span>
+                  <span class="feedback-row-time">{{ feedbackListTime(entry) }}</span>
                   <span class="feedback-row-right">
                     <span class="feedback-audit-label">人工审核</span>
                     <span class="pill sm feedback-judgment-pill" :class="entry.judgment">{{ judgmentText(entry.judgment) }}</span>
@@ -2970,6 +3013,16 @@ onUnmounted(() => {
   line-height: 1.2;
   color: #64748b;
   white-space: nowrap;
+}
+
+.feedback-row-time {
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #94a3b8;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding: 0 0.3rem;
 }
 
 .feedback-judgment-pill {
@@ -3906,6 +3959,14 @@ onUnmounted(() => {
 .history-correction-pill.suspicious {
   background: #ffedd5;
   color: #9a3412;
+}
+
+.history-correction-icon {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  margin-right: 0.2rem;
+  line-height: 1.3;
 }
 
 .history-correction-time {

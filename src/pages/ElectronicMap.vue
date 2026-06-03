@@ -8544,11 +8544,6 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
-.leaflet-tooltip.emap-marker-hover-tip .emap-wh-stock-block,
-.leaflet-popup-content .emap-wh-stock-block {
-  min-height: 80px;
-  flex-grow: 1;
-}
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-head,
 .leaflet-popup-content .emap-wh-hover-freight-head {
@@ -8565,8 +8560,8 @@ onBeforeUnmount(() => {
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-scroll,
 .leaflet-popup-content .emap-wh-hover-freight-scroll {
-  max-height: 450px;
-  overflow-y: auto;
+  max-height: none;
+  overflow-y: visible;
   overflow-x: hidden;
   padding-right: 2px;
   display: flex;
@@ -8576,7 +8571,7 @@ onBeforeUnmount(() => {
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-stock-block .emap-wh-hover-freight-scroll,
 .leaflet-popup-content .emap-wh-stock-block .emap-wh-hover-freight-scroll {
-  min-height: 60px;
+  min-height: 0;
 }
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-item,
