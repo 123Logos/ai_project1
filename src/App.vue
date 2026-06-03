@@ -110,7 +110,7 @@
         <LeadPriceQuery />
       </section>
       <section v-else-if="activeSection === 'prediction' && predictionSubTab === 'smelterPrice'" class="panel inner-page">
-        <SmelterPriceQuery @navigateToQuote="activeSection = 'price'" />
+        <SmelterPriceQuery @navigateToQuote="goToPricePage('quote-query')" />
       </section>
       <section v-else-if="activeSection === 'map'" class="panel emap-panel">
         <ElectronicMap />
@@ -130,9 +130,11 @@
       </section>
       <section v-else class="panel iframe-panel">
         <iframe
+          ref="priceIframeRef"
           class="embedded-frame"
           :src="embeddedIframeSrc"
           :title="activeFrameTitle"
+          @load="onIframeLoad"
         />
       </section>
     </main>
@@ -174,7 +176,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import HistoryManage from './pages/HistoryManage.vue'
 import HistoryQuery from './pages/HistoryQuery.vue'
 import PurchaseQuantity from './pages/PurchaseQuantity.vue'
@@ -234,6 +236,38 @@ const showLogin = ref(false)
 const loginLoading = ref(false)
 const loginError = ref('')
 const loginForm = ref({ username: '', password: '' })
+
+const priceIframeRef = ref<HTMLIFrameElement | null>(null)
+const pendingIframePage = ref<string | null>(null)
+
+function goToPricePage(page: string) {
+  pendingIframePage.value = page
+  activeSection.value = 'price'
+}
+
+function sendIframeNavigate(page: string, retries = 8) {
+  const iframe = priceIframeRef.value
+  if (iframe?.contentWindow) {
+    iframe.contentWindow.postMessage({ type: 'navigate', page }, '*')
+  }
+  if (retries > 0) {
+    setTimeout(() => sendIframeNavigate(page, retries - 1), 400)
+  }
+}
+
+function onIframeLoad() {
+  if (!pendingIframePage.value) return
+  sendIframeNavigate(pendingIframePage.value)
+  pendingIframePage.value = null
+}
+
+watch(activeSection, (v) => {
+  if (v === 'price' && pendingIframePage.value) {
+    const page = pendingIframePage.value
+    pendingIframePage.value = null
+    nextTick(() => sendIframeNavigate(page))
+  }
+})
 
 const visiblePrimaryTabs = computed(() => primaryTabs)
 
