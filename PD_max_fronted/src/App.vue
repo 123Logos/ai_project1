@@ -1377,6 +1377,7 @@ onMounted(() => {
   void refreshHistoryList()
   void checkHealth()
   void loadModelInfo()
+  void loadFeedbackEntries()  // 加载反馈数据，使历史记录能显示"人工审核"信息
 })
 
 async function runV3() {
