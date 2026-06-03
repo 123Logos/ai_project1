@@ -5074,34 +5074,6 @@ function parseForecastDetailError(e: unknown): string {
   )
 }
 
-/** 查询已落库的预测结果（GET /predict/results），支持分页和筛选 */
-async function fetchForecastDetailPaged(
-  warehouses: string[],
-  extra?: { product_variety?: string; smelter?: string },
-): Promise<Record<string, unknown>[]> {
-  const page_size = 200
-  const all: Record<string, unknown>[] = []
-  let page = 1
-  while (page <= 50) {
-    const params: Record<string, string | number | undefined> = {
-      warehouse: warehouses[0] || '',
-      page,
-      page_size,
-      ...(extra?.product_variety && { product_variety: extra.product_variety }),
-      ...(extra?.smelter && { smelter: extra.smelter }),
-    }
-    const response = await axios.get(ApiPaths.predictResults, { params })
-    const data = response.data as { items?: Record<string, unknown>[]; total?: number }
-    const items = data.items ?? []
-    all.push(...items)
-    if (items.length === 0) break
-    if (items.length < page_size) break
-    if (typeof data.total === 'number' && all.length >= data.total) break
-    page++
-  }
-  return all
-}
-
 function resetForecastData() {
   forecastModalMeta.value = null
   forecastModalDates.value = []
@@ -5549,17 +5521,6 @@ async function triggerPredictSync(warehouse: MapPoint): Promise<Record<string, u
     }
   }
   return allItems
-}
-
-/** 轮询 /predict/results 等待异步预测结果落库 */
-async function waitForPredictResult(warehouseName: string, timeoutMs = 60_000): Promise<Record<string, unknown>[]> {
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    const results = await fetchForecastDetailPaged([warehouseName])
-    if (results.length > 0) return results
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-  }
-  throw new Error('预测超时：后端未能在规定时间内完成计算，请稍后重试')
 }
 
 async function runForecastForWarehouse(warehouse: MapPoint) {
