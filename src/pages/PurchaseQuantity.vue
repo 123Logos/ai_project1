@@ -665,7 +665,7 @@ import axios from 'axios'
 import { ApiPaths } from '../api/paths'
 import { FORECAST_DETAILS_FETCH_PAGE_SIZE } from '../api/fetchLimits'
 import { fetchForecastDimensionOptions } from '../api/dimensionOptions'
-import { fetchCategoryMapping } from '../api/tlApi'
+import { fetchTlCategories } from '../api/tlApi'
 import {
   fetchAllPredictResults,
   aggregateChartFromResults,
@@ -960,6 +960,9 @@ const allWarehouseOptions = ref<string[]>([])
 const allManagerOptions = ref<string[]>([])
 const allSmelterOptions = ref<string[]>([])
 const allProductVarietyOptions = ref<string[]>([])
+
+/** 品类显示名 → 全部别名列表（查询时使用全部名称） */
+const varietyNameToAllNames = ref<Map<string, string[]>>(new Map())
 
 /** 与电子地图/比价系统一致的 10 个固定回收品类 */
 const FIXED_CATEGORY_IDS: readonly number[] = [6, 4, 15, 11, 16, 2, 5, 17, 12, 3]
@@ -1357,20 +1360,32 @@ function refreshAllFilterOptionLists() {
   filterDetailVarietyOptions()
 }
 
-// ==================== 获取下拉选项（PRD 规则预测：/forecast/dimension-options + /tl/get_category_mapping） ====================
+// ==================== 获取下拉选项（PRD 规则预测：/forecast/dimension-options + /tl/get_categories） ====================
 async function fetchOptions() {
   try {
     const [dims, categories] = await Promise.all([
       fetchForecastDimensionOptions(),
-      fetchCategoryMapping().catch(() => []),
+      fetchTlCategories().catch(() => []),
     ])
     allWarehouseOptions.value = dims.warehouses
     allManagerOptions.value = dims.regional_managers
     allSmelterOptions.value = dims.smelters
-    // 仅保留固定 10 个品类，按固定 id 顺序排列
-    const idToName = new Map(categories.map((c) => [c.id, c.name]))
+
+    // 解析品类：每个品类的品类名用"、"分隔，第一个作为显示名，全部用于查询
+    const nameMap = new Map<string, string[]>()
+    const idToFirstName = new Map<number, string>()
+    for (const cat of categories) {
+      const allNames = cat.name.split('、').map(s => s.trim()).filter(s => s !== '')
+      if (allNames.length > 0) {
+        idToFirstName.set(cat.id, allNames[0])
+        nameMap.set(allNames[0], allNames)
+      }
+    }
+    varietyNameToAllNames.value = nameMap
+
+    // 仅保留固定 10 个品类，按固定 id 顺序排列，显示第一个名称
     allProductVarietyOptions.value = FIXED_CATEGORY_IDS
-      .map((id) => idToName.get(id) ?? '')
+      .map((id) => idToFirstName.get(id) ?? '')
       .filter((n) => n !== '')
 
     refreshAllFilterOptionLists()
@@ -1784,7 +1799,17 @@ function buildForecastFilterParams(): Record<string, any> {
       params.smelters = detailSelectedSmelters.value
     }
     if (detailSelectedVarieties.value.length > 0) {
-      params.product_varieties = detailSelectedVarieties.value
+      // 查询时使用每个品类的所有别名
+      const allVarietyNames: string[] = []
+      for (const name of detailSelectedVarieties.value) {
+        const allNames = varietyNameToAllNames.value.get(name)
+        if (allNames) {
+          allVarietyNames.push(...allNames)
+        } else {
+          allVarietyNames.push(name)
+        }
+      }
+      params.product_varieties = [...new Set(allVarietyNames)]
     }
     return params
   }
