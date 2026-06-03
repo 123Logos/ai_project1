@@ -298,6 +298,56 @@ export async function fetchTlCategories(): Promise<TlCategoryRow[]> {
     .filter((x) => !Number.isNaN(x.id) && x.name !== '')
 }
 
+/** 报价明细行 */
+export type TlQuoteDetailRow = {
+  id: number
+  date: string
+  smelterId: number
+  smelter: string
+  category: string
+  basePrice: number
+  price1pctVat: number
+  price3pctVat: number
+  price13pctVat: number
+}
+
+/** GET /tl/get_quote_details_list — 报价查询 */
+export async function fetchQuoteDetailsList(params: {
+  factory_id?: number
+  start_date?: string
+  end_date?: string
+  category_id?: number
+  category_name?: string
+  page?: number
+  page_size?: number
+}): Promise<TlQuoteDetailRow[]> {
+  const q = new URLSearchParams()
+  if (params.factory_id) q.set('factory_id', String(params.factory_id))
+  if (params.start_date) q.set('start_date', params.start_date)
+  if (params.end_date) q.set('end_date', params.end_date)
+  if (params.category_id) {
+    q.set('品类id', String(params.category_id))
+    q.set('category_id', String(params.category_id))
+  }
+  if (params.category_name) q.set('category_name', params.category_name)
+  q.set('page', String(params.page ?? 1))
+  q.set('page_size', String(params.page_size ?? 500))
+
+  const raw = await tlGetJson(`/tl/get_quote_details_list?${q.toString()}`)
+  const list = unwrapList(raw)
+  return list.map((r) => ({
+    id: Number(r.id ?? 0),
+    date: String(r['报价日期'] ?? ''),
+    smelterId: Number(r['冶炼厂id'] ?? 0),
+    smelter: String(r['冶炼厂'] ?? ''),
+    category: String(r['品类名'] ?? ''),
+    basePrice: Number(r['普通价'] ?? 0),
+    price1pctVat: Number(r['价格_1pct增值税'] ?? 0),
+    price3pctVat: Number(r['价格_3pct增值税'] ?? 0),
+    price13pctVat: Number(r['价格_13pct增值税'] ?? 0),
+  }))
+}
+
 /** 品类映射（GET /tl/get_category_mapping）；取每个品类的品类名称[0] 作为主名称 */
 export async function fetchCategoryMapping(): Promise<TlCategoryRow[]> {
   const raw = await tlGetJson('/tl/get_category_mapping')

@@ -16,26 +16,34 @@
             </select>
           </div>
           <p v-if="latest" class="summary-meta">
-            <span>定价日期：{{ latest.date }}</span>
+            <span>最新报价日期：{{ latest.date }}</span>
           </p>
-          <p v-else-if="!latestLoading && selectedSmelterId" class="summary-meta text-muted">该冶炼厂暂无标定价格</p>
+          <p v-else-if="!latestLoading && selectedSmelterId" class="summary-meta text-muted">该冶炼厂暂无报价</p>
           <p v-else-if="!selectedSmelterId" class="summary-meta text-muted">请先选择冶炼厂</p>
         </div>
-        <button type="button" class="btn btn-secondary" @click="emit('maintain')">前往维护</button>
+        <button type="button" class="btn btn-secondary" @click="emit('navigateToQuote')">AI 比价报价查询</button>
       </div>
 
       <p v-if="latestError && !latest" class="inline-error">{{ latestError }}</p>
       <p v-else-if="latestError && latest" class="inline-warn">{{ latestError }}</p>
 
-      <div v-if="latestLoading" class="summary-loading">正在查询最新标定价格…</div>
+      <div v-if="latestLoading" class="summary-loading">正在查询最新报价…</div>
       <div v-else-if="latest" class="price-summary">
         <div class="price-cell price-cell--main">
-          <span class="price-label">标定价格</span>
-          <span class="price-value price-value--main">{{ formatPrice(latest.price) }}</span>
+          <span class="price-label">基准价</span>
+          <span class="price-value price-value--main">{{ formatPrice(latest.basePrice) }}</span>
           <span v-if="dayChange !== null" class="price-change" :class="dayChange >= 0 ? 'up' : 'down'">
             {{ dayChange >= 0 ? '+' : '' }}{{ formatPrice(dayChange) }}
             <span v-if="dayChangePct !== null">（{{ dayChangePct >= 0 ? '+' : '' }}{{ dayChangePct.toFixed(2) }}%）</span>
           </span>
+        </div>
+        <div class="price-cell">
+          <span class="price-label">3% 含税价</span>
+          <span class="price-value">{{ formatPrice(latest.price3pctVat) }}</span>
+        </div>
+        <div class="price-cell">
+          <span class="price-label">13% 含税价</span>
+          <span class="price-value">{{ formatPrice(latest.price13pctVat) }}</span>
         </div>
         <div class="price-unit">元/吨</div>
       </div>
@@ -44,12 +52,19 @@
     <div class="card">
       <div class="filter-row">
         <div class="filter-item">
-          <label>定价日期</label>
+          <label>报价日期</label>
           <div class="date-range">
             <input v-model="filters.dateFrom" type="date" class="filter-input" />
             <span>至</span>
             <input v-model="filters.dateTo" type="date" class="filter-input" />
           </div>
+        </div>
+        <div class="filter-item">
+          <label>品类</label>
+          <select v-model="selectedCategory" class="filter-input" :disabled="categoryOptions.length === 0">
+            <option value="">全部品类</option>
+            <option v-for="c in categoryOptions" :key="c.id" :value="c.name">{{ c.name }}</option>
+          </select>
         </div>
         <div class="filter-actions">
           <button class="btn btn-primary" :disabled="!selectedSmelterId || chartLoading || listLoading" @click="handleQuery">
@@ -61,9 +76,9 @@
 
       <div class="chart-section">
         <div class="chart-head">
-          <span class="chart-title">标定价格走势</span>
+          <span class="chart-title">基准价走势</span>
           <span class="chart-legend">
-            <span class="legend-item"><i class="legend-line"></i>标定价格</span>
+            <span class="legend-item"><i class="legend-line"></i>基准价</span>
           </span>
         </div>
         <p v-if="chartError" class="inline-error">{{ chartError }}</p>
@@ -84,7 +99,7 @@
           >
             <div class="chart-tooltip-date">{{ chartSeries[chartHoverIndex]?.date }}</div>
             <div class="chart-tooltip-price">
-              {{ formatPrice(chartSeries[chartHoverIndex]?.price ?? 0) }} 元/吨
+              {{ formatPrice(chartSeries[chartHoverIndex]?.basePrice ?? 0) }} 元/吨
             </div>
           </div>
         </div>
@@ -93,7 +108,7 @@
 
     <div class="card">
       <div class="table-head">
-        <span class="table-title">历史记录</span>
+        <span class="table-title">报价记录</span>
         <span class="table-count">共 {{ listTotal }} 条</span>
       </div>
       <p v-if="listError" class="inline-error">{{ listError }}</p>
@@ -102,24 +117,30 @@
           <thead>
             <tr>
               <th>冶炼厂</th>
-              <th>标定价格（元/吨）</th>
-              <th>定价日期</th>
+              <th>品类</th>
+              <th>基准价</th>
+              <th>3% 含税价</th>
+              <th>13% 含税价</th>
+              <th>报价日期</th>
               <th>涨跌</th>
             </tr>
           </thead>
           <tbody>
             <tr v-if="listLoading">
-              <td colspan="4" class="empty-data">正在查询…</td>
+              <td colspan="7" class="empty-data">正在查询…</td>
             </tr>
             <tr v-else-if="!selectedSmelterId">
-              <td colspan="4" class="empty-data">请先选择冶炼厂</td>
+              <td colspan="7" class="empty-data">请先选择冶炼厂</td>
             </tr>
             <tr v-else-if="listRows.length === 0">
-              <td colspan="4" class="empty-data">暂无历史数据</td>
+              <td colspan="7" class="empty-data">暂无报价数据</td>
             </tr>
             <tr v-for="(row, idx) in listRows" v-else :key="row.id">
-              <td>{{ row.smelter || smelterName(row.smelterId) }}</td>
-              <td class="col-price">{{ formatPrice(row.price) }}</td>
+              <td>{{ row.smelter }}</td>
+              <td>{{ row.category }}</td>
+              <td class="col-price">{{ formatPrice(row.basePrice) }}</td>
+              <td>{{ formatPrice(row.price3pctVat) }}</td>
+              <td>{{ formatPrice(row.price13pctVat) }}</td>
               <td>{{ row.date }}</td>
               <td>
                 <span v-if="rowChange(row, idx) !== null" :class="rowChange(row, idx)! >= 0 ? 'chg-up' : 'chg-down'">
@@ -139,23 +160,16 @@
     </div>
 
     <p class="page-footer">
-      数据为各冶炼厂标定价格，仅供参考。新增与修改请前往「AI 定价 → 冶炼厂标定价格」维护。
+      数据为各冶炼厂报价信息，仅供参考。详细管理请前往「AI 比价系统」。
     </p>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { fetchTlSmeltersAll } from '@/api/tlApi'
-import {
-  fetchLatestCalibrationForSmelter,
-  fetchSmelterCalibrationChartSeries,
-  fetchSmelterCalibrationForQuery,
-  formatSmelterCalibrationError,
-  type SmelterPriceRow,
-} from '@/api/smelterPriceApi'
+import { fetchCategoryMapping, fetchTlSmeltersAll, fetchQuoteDetailsList, type TlCategoryRow, type TlQuoteDetailRow } from '@/api/tlApi'
 
-const emit = defineEmits<{ maintain: [] }>()
+const emit = defineEmits<{ navigateToQuote: [] }>()
 
 interface SmelterOption {
   id: number
@@ -165,12 +179,15 @@ interface SmelterOption {
 const smelterOptions = ref<SmelterOption[]>([])
 const selectedSmelterId = ref(0)
 
-const latest = ref<SmelterPriceRow | null>(null)
+const categoryOptions = ref<TlCategoryRow[]>([])
+const selectedCategory = ref('')
+
+const latest = ref<TlQuoteDetailRow | null>(null)
 const latestLoading = ref(false)
 const latestError = ref('')
 
 const filters = ref({ dateFrom: '', dateTo: '' })
-const chartSeries = ref<SmelterPriceRow[]>([])
+const chartSeries = ref<TlQuoteDetailRow[]>([])
 const chartLoading = ref(false)
 const chartError = ref('')
 const chartCanvasRef = ref<HTMLCanvasElement | null>(null)
@@ -187,7 +204,7 @@ interface ChartLayout {
 
 let chartLayout: ChartLayout | null = null
 
-const listAllRows = ref<SmelterPriceRow[]>([])
+const listAllRows = ref<TlQuoteDetailRow[]>([])
 const listPage = ref(1)
 const listPageSize = 20
 const listLoading = ref(false)
@@ -205,7 +222,7 @@ const dayChange = computed(() => {
   const sorted = [...chartSeries.value].sort((a, b) => a.date.localeCompare(b.date))
   const idx = sorted.findIndex((r) => r.date === latest.value!.date)
   if (idx <= 0) return null
-  return latest.value.price - sorted[idx - 1]!.price
+  return latest.value.basePrice - sorted[idx - 1]!.basePrice
 })
 
 const dayChangePct = computed(() => {
@@ -213,17 +230,13 @@ const dayChangePct = computed(() => {
   const sorted = [...chartSeries.value].sort((a, b) => a.date.localeCompare(b.date))
   const idx = sorted.findIndex((r) => r.date === latest.value!.date)
   if (idx <= 0) return null
-  const prev = sorted[idx - 1]!.price
+  const prev = sorted[idx - 1]!.basePrice
   if (prev === 0) return null
   return (dayChange.value / prev) * 100
 })
 
-function smelterName(id: number): string {
-  return smelterOptions.value.find((s) => s.id === id)?.name ?? '—'
-}
-
 function formatPrice(n: number): string {
-  if (!Number.isFinite(n)) return '—'
+  if (!Number.isFinite(n) || n === 0) return '—'
   return n.toLocaleString('zh-CN', { maximumFractionDigits: 0 })
 }
 
@@ -245,10 +258,10 @@ function applyDefaultFilters() {
   filters.value = { dateFrom: from, dateTo: to }
 }
 
-function rowChange(row: SmelterPriceRow, idx: number): number | null {
+function rowChange(row: TlQuoteDetailRow, idx: number): number | null {
   const prev = listRows.value[idx + 1]
   if (!prev) return null
-  return row.price - prev.price
+  return row.basePrice - prev.basePrice
 }
 
 async function loadSmelterOptions() {
@@ -268,6 +281,38 @@ async function loadSmelterOptions() {
   }
 }
 
+async function loadCategories() {
+  try {
+    categoryOptions.value = await fetchCategoryMapping()
+  } catch {
+    categoryOptions.value = []
+  }
+}
+
+async function fetchAll(params: {
+  factory_id?: number
+  start_date?: string
+  end_date?: string
+  category_id?: number
+  category_name?: string
+}): Promise<TlQuoteDetailRow[]> {
+  try {
+    return await fetchQuoteDetailsList({
+      ...params,
+      page_size: 500,
+    })
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    throw new Error(msg.includes('404') ? '报价查询接口尚未部署（HTTP 404）。' : msg)
+  }
+}
+
+function selectedCategoryId(): number | undefined {
+  if (!selectedCategory.value) return undefined
+  const found = categoryOptions.value.find((c) => c.name === selectedCategory.value)
+  return found?.id
+}
+
 async function loadLatest() {
   if (!selectedSmelterId.value) {
     latest.value = null
@@ -276,9 +321,11 @@ async function loadLatest() {
   latestLoading.value = true
   latestError.value = ''
   try {
-    latest.value = await fetchLatestCalibrationForSmelter(selectedSmelterId.value)
+    const rows = await fetchAll({ factory_id: selectedSmelterId.value })
+    const sorted = [...rows].sort((a, b) => b.date.localeCompare(a.date))
+    latest.value = sorted[0] ?? null
   } catch (e) {
-    latestError.value = formatSmelterCalibrationError(e)
+    latestError.value = e instanceof Error ? e.message : '请稍后重试'
     latest.value = null
   } finally {
     latestLoading.value = false
@@ -296,13 +343,15 @@ async function loadChart() {
     ? { from: filters.value.dateFrom, to: filters.value.dateTo }
     : defaultChartDateRange()
   try {
-    chartSeries.value = await fetchSmelterCalibrationChartSeries(
-      selectedSmelterId.value,
-      range.from,
-      range.to,
-    )
+    chartSeries.value = await fetchAll({
+      factory_id: selectedSmelterId.value,
+      start_date: range.from,
+      end_date: range.to,
+      category_id: selectedCategoryId(),
+      category_name: selectedCategory.value || undefined,
+    })
   } catch (e) {
-    chartError.value = formatSmelterCalibrationError(e)
+    chartError.value = e instanceof Error ? e.message : '请稍后重试'
     chartSeries.value = []
   } finally {
     chartLoading.value = false
@@ -319,14 +368,15 @@ async function loadList() {
   listLoading.value = true
   listError.value = ''
   try {
-    listAllRows.value = await fetchSmelterCalibrationForQuery({
-      smelter_id: selectedSmelterId.value,
-      date_from: filters.value.dateFrom || undefined,
-      date_to: filters.value.dateTo || undefined,
-      page_size: 500,
+    listAllRows.value = await fetchAll({
+      factory_id: selectedSmelterId.value,
+      start_date: filters.value.dateFrom || undefined,
+      end_date: filters.value.dateTo || undefined,
+      category_id: selectedCategoryId(),
+      category_name: selectedCategory.value || undefined,
     })
   } catch (e) {
-    listError.value = formatSmelterCalibrationError(e)
+    listError.value = e instanceof Error ? e.message : '请稍后重试'
     listAllRows.value = []
   } finally {
     listLoading.value = false
@@ -349,6 +399,7 @@ async function handleQuery() {
 
 function resetFilters() {
   applyDefaultFilters()
+  selectedCategory.value = ''
   listPage.value = 1
   void loadChart()
   void loadList()
@@ -361,15 +412,15 @@ function gotoPage(p: number) {
 function buildChartLayout(
   width: number,
   height: number,
-  _prices: number[],
+  prices: number[],
   n: number,
 ): ChartLayout & { W: number; H: number; yMin: number; yMax: number; yRange: number } {
   const margin = { t: 24, r: 20, b: 56, l: 72 }
   const W = width - margin.l - margin.r
   const H = height - margin.t - margin.b
-  const yMin = 0
-  const yMax = 400
-  const yRange = yMax - yMin
+  const yMin = Math.floor(Math.min(...prices) / 100) * 100
+  const yMax = Math.ceil(Math.max(...prices) / 100) * 100
+  const yRange = yMax - yMin || 1
   const xStep = n <= 1 ? W / 2 : W / (n - 1)
   const toY = (v: number) => margin.t + H - ((v - yMin) / yRange) * H
   const toX = (i: number) => margin.l + i * xStep
@@ -385,7 +436,7 @@ function drawChart(highlightIndex = -1) {
 
   const series = chartSeries.value
   const dates = series.map((r) => r.date)
-  const prices = series.map((r) => r.price)
+  const prices = series.map((r) => r.basePrice)
 
   const ctx = canvas.getContext('2d')
   if (!ctx) return
@@ -475,8 +526,8 @@ function drawChart(highlightIndex = -1) {
 
   ctx.fillStyle = '#475569'
   ctx.font = '12px system-ui, sans-serif'
-  ctx.fillText('标定价格（元/吨）', margin.l, margin.t - 8)
-  ctx.fillText('定价日期', margin.l + W / 2 - 28, height - 6)
+  ctx.fillText('基准价（元/吨）', margin.l, margin.t - 8)
+  ctx.fillText('报价日期', margin.l + W / 2 - 28, height - 6)
 
   if (highlightIndex >= 0) {
     updateChartTooltipPosition(highlightIndex)
@@ -519,7 +570,7 @@ function updateChartTooltipPosition(index: number) {
   const scaleX = rect.width / canvas.width
   const scaleY = rect.height / canvas.height
   const left = chartLayout.toX(index) * scaleX
-  const top = chartLayout.toY(row.price) * scaleY
+  const top = chartLayout.toY(row.basePrice) * scaleY
   chartTooltipStyle.value = {
     left: `${left}px`,
     top: `${top}px`,
@@ -553,7 +604,7 @@ watch(chartSeries, () => {
 
 onMounted(async () => {
   applyDefaultFilters()
-  await loadSmelterOptions()
+  await Promise.all([loadSmelterOptions(), loadCategories()])
   if (selectedSmelterId.value) {
     await reloadAll()
   }
@@ -576,7 +627,7 @@ onBeforeUnmount(() => {
 .smelter-select { min-width: 220px; max-width: 360px; }
 .summary-meta { margin: 0; font-size: 13px; color: #606266; }
 .summary-loading { padding: 24px 0; color: #909399; text-align: center; }
-.price-summary { display: flex; align-items: flex-end; gap: 16px; margin-top: 16px; flex-wrap: wrap; }
+.price-summary { display: flex; align-items: flex-end; gap: 24px; margin-top: 16px; flex-wrap: wrap; }
 .price-cell { display: flex; flex-direction: column; gap: 4px; }
 .price-cell--main { align-items: flex-start; }
 .price-label { font-size: 12px; color: #909399; }
