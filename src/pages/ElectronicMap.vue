@@ -5074,34 +5074,6 @@ function parseForecastDetailError(e: unknown): string {
   )
 }
 
-/** 查询已落库的预测结果（GET /predict/results），支持分页和筛选 */
-async function fetchForecastDetailPaged(
-  warehouses: string[],
-  extra?: { product_variety?: string; smelter?: string },
-): Promise<Record<string, unknown>[]> {
-  const page_size = 200
-  const all: Record<string, unknown>[] = []
-  let page = 1
-  while (page <= 50) {
-    const params: Record<string, string | number | undefined> = {
-      warehouse: warehouses[0] || '',
-      page,
-      page_size,
-      ...(extra?.product_variety && { product_variety: extra.product_variety }),
-      ...(extra?.smelter && { smelter: extra.smelter }),
-    }
-    const response = await axios.get(ApiPaths.predictResults, { params })
-    const data = response.data as { items?: Record<string, unknown>[]; total?: number }
-    const items = data.items ?? []
-    all.push(...items)
-    if (items.length === 0) break
-    if (items.length < page_size) break
-    if (typeof data.total === 'number' && all.length >= data.total) break
-    page++
-  }
-  return all
-}
-
 function resetForecastData() {
   forecastModalMeta.value = null
   forecastModalDates.value = []
@@ -5514,31 +5486,41 @@ watch([forecastModalDates, forecastModalValues, forecastSectionCollapsed], () =>
   }
 })
 
-/** 异步触发 v2 智能预测，返回 batch_id */
-async function triggerPredictAsync(warehouseName: string): Promise<string> {
+/** 同步触发 v2 智能预测，直接返回预测结果 */
+async function triggerPredictSync(warehouse: MapPoint): Promise<Record<string, unknown>[]> {
+  const whTitle = warehouse.title.trim()
+  // 从 warehouse.raw 中尝试提取品类，取不到则用默认值
+  const productVariety = pickStr(warehouse.raw, ['product_variety', 'productVariety', '品类', '品种', '产品品种']) || '废铅酸电池'
   const body = {
     items: [
       {
-        warehouse: warehouseName,
+        warehouse: whTitle,
+        product_variety: productVariety,
         horizonDays: 15,
       },
     ],
   }
-  const response = await axios.post(ApiPaths.predictAsync, body)
-  const data = response.data as { batch_id?: string }
-  if (!data.batch_id) throw new Error('触发预测失败：未返回 batch_id')
-  return data.batch_id
-}
-
-/** 轮询 /predict/results 等待异步预测结果落库 */
-async function waitForPredictResult(warehouseName: string, timeoutMs = 60_000): Promise<Record<string, unknown>[]> {
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    const results = await fetchForecastDetailPaged([warehouseName])
-    if (results.length > 0) return results
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+  console.log('[预测] 请求体:', JSON.stringify(body))
+  const response = await axios.post(ApiPaths.predict, body)
+  console.log('[预测] 响应:', JSON.stringify(response.data))
+  const results = response.data as Record<string, unknown>[]
+  if (!results || !results.length) {
+    throw new Error('同步预测未返回结果')
   }
-  throw new Error('预测超时：后端未能在规定时间内完成计算，请稍后重试')
+  // 响应结构: [{ warehouse, productVariety, items: [...] }]
+  // 展平所有 items
+  const allItems: Record<string, unknown>[] = []
+  for (const group of results) {
+    const items = group.items as Record<string, unknown>[] | undefined
+    if (items) {
+      // 为每条 item 附加外层字段（warehouse, productVariety, smelter 等）
+      const { items: _, ...meta } = group
+      for (const item of items) {
+        allItems.push({ ...meta, ...item })
+      }
+    }
+  }
+  return allItems
 }
 
 async function runForecastForWarehouse(warehouse: MapPoint) {
@@ -5546,17 +5528,8 @@ async function runForecastForWarehouse(warehouse: MapPoint) {
   forecastError.value = ''
   try {
     const whTitle = warehouse.title.trim()
-    // 1. 先触发异步预测
-    const batchId = await triggerPredictAsync(whTitle)
-    console.log('[预测] 已触发异步预测，batch_id:', batchId)
-    // 2. 轮询等待结果落库
-    const rawItems = await waitForPredictResult(whTitle)
-    const itemsFiltered = rawItems.filter((row) => {
-      const w = pickStr(row, ['warehouse', '仓库', 'warehouse_name', '仓库名'])
-      if (!w) return true
-      return w === whTitle || w.includes(whTitle) || whTitle.includes(w)
-    })
-    const working = itemsFiltered.length ? itemsFiltered : rawItems
+    // 同步预测：直接返回结果，无需轮询
+    const working = await triggerPredictSync(warehouse)
 
     const byDate = new Map<string, number>()
     for (const row of working) {
