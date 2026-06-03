@@ -4844,8 +4844,6 @@ async function onWarehouseDistanceMonitorClick() {
     }
     return
   }
-  comparisonSectionCollapsed.value = true
-  forecastSectionCollapsed.value = true
   comparisonModalVisible.value = true
   const title = wh.title?.trim()
   comparisonModalTitle.value = title ? `库房距离监测：${title}` : '库房距离监测'
@@ -4854,6 +4852,8 @@ async function onWarehouseDistanceMonitorClick() {
   warehouseDistanceLoading.value = true
   try {
     await drawWarehouseBindingDistanceLines(wh)
+    comparisonSectionCollapsed.value = true
+    forecastSectionCollapsed.value = true
     warehouseDistanceMonitorOn.value = true
     compareError.value = ''
   } catch (e) {
