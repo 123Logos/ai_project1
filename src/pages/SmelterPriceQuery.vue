@@ -3,23 +3,11 @@
     <div class="card summary-card">
       <div class="summary-head">
         <div class="summary-head-main">
-          <div class="smelter-select-wrap">
-            <label class="smelter-select-label">冶炼厂</label>
-            <select
-              v-model.number="selectedSmelterId"
-              class="filter-input smelter-select"
-              :disabled="smelterOptions.length === 0"
-              @change="onSmelterChange"
-            >
-              <option v-if="smelterOptions.length === 0" :value="0">暂无冶炼厂数据</option>
-              <option v-for="s in smelterOptions" :key="s.id" :value="s.id">{{ s.name }}</option>
-            </select>
-          </div>
           <p v-if="latest" class="summary-meta">
             <span>最新报价日期：{{ latest.date }}</span>
           </p>
-          <p v-else-if="!latestLoading && selectedSmelterId" class="summary-meta text-muted">该冶炼厂暂无报价</p>
-          <p v-else-if="!selectedSmelterId" class="summary-meta text-muted">请先选择冶炼厂</p>
+          <p v-else-if="!latestLoading && selectedSmelterNames.length > 0" class="summary-meta text-muted">所选冶炼厂暂无报价</p>
+          <p v-else-if="selectedSmelterNames.length === 0" class="summary-meta text-muted">请先在筛选区选择冶炼厂</p>
         </div>
         <button type="button" class="btn btn-secondary" @click="emit('navigateToQuote')">前往维护</button>
       </div>
@@ -51,6 +39,47 @@
 
     <div class="card">
       <div class="filter-row">
+        <div class="filter-item multi-select-item">
+          <label>冶炼厂</label>
+          <div class="multi-select-container multi-select-container--wide">
+            <div
+              class="selected-tags"
+              :class="multiSelectTagsClass(selectedSmelterNames)"
+              @click="focusSmelterInput"
+            >
+              <span v-for="item in smelterTagsPreview" :key="item" class="tag tag-shrink" :title="item">{{ item }}</span>
+              <button v-for="item in smelterTagsPreview" :key="'rm-' + item" type="button" class="tag-remove" @click.stop="removeSmelter(item)">×</button>
+              <span
+                v-if="smelterTagsMore > 0"
+                class="tag tag-more tag-shrink"
+                :title="'还有：' + smelterTagsRest.join('、')"
+              >+{{ smelterTagsMore }}</span>
+              <input
+                ref="smelterInputRef"
+                v-model="smelterSearchText"
+                type="text"
+                class="multi-input"
+                :placeholder="multiSelectPlaceholder(selectedSmelterNames)"
+                @input="onSmelterSearchInput"
+                @focus="onSmelterFocus"
+                @blur="closeSmelterDropdown"
+                @keydown.enter="handleSmelterKeydown"
+              />
+            </div>
+            <div v-show="smelterDropdownVisible && filteredSmelterOptions.length > 0" class="dropdown-list">
+              <div
+                v-for="item in filteredSmelterOptions"
+                :key="item"
+                class="dropdown-item"
+                :class="{ 'dropdown-item--selected': selectedSmelterNames.includes(item) }"
+                @mousedown.prevent="onSmelterDropdownPick(item)"
+              >
+                {{ item }}
+              </div>
+            </div>
+          </div>
+        </div>
+
         <div class="filter-item">
           <label>报价日期</label>
           <div class="date-range">
@@ -59,32 +88,73 @@
             <input v-model="filters.dateTo" type="date" class="filter-input" />
           </div>
         </div>
-        <div class="filter-item">
+
+        <div class="filter-item multi-select-item">
           <label>品类</label>
-          <select v-model="selectedCategory" class="filter-input" :disabled="categoryOptions.length === 0">
-            <option value="">全部品类</option>
-            <option v-for="c in categoryOptions" :key="c.id" :value="c.name">{{ c.name }}</option>
-          </select>
+          <div class="multi-select-container">
+            <div
+              class="selected-tags"
+              :class="multiSelectTagsClass(selectedCategoryNames)"
+              @click="focusCategoryInput"
+            >
+              <span v-for="item in categoryTagsPreview" :key="item" class="tag tag-shrink" :title="item">{{ item }}</span>
+              <button v-for="item in categoryTagsPreview" :key="'rm-' + item" type="button" class="tag-remove" @click.stop="removeCategory(item)">×</button>
+              <span
+                v-if="categoryTagsMore > 0"
+                class="tag tag-more tag-shrink"
+                :title="'还有：' + categoryTagsRest.join('、')"
+              >+{{ categoryTagsMore }}</span>
+              <input
+                ref="categoryInputRef"
+                v-model="categorySearchText"
+                type="text"
+                class="multi-input"
+                :placeholder="multiSelectPlaceholder(selectedCategoryNames)"
+                @input="onCategorySearchInput"
+                @focus="onCategoryFocus"
+                @blur="closeCategoryDropdown"
+                @keydown.enter="handleCategoryKeydown"
+              />
+            </div>
+            <div v-show="categoryDropdownVisible && filteredCategoryOptions.length > 0" class="dropdown-list">
+              <div
+                v-for="item in filteredCategoryOptions"
+                :key="item"
+                class="dropdown-item"
+                :class="{ 'dropdown-item--selected': selectedCategoryNames.includes(item) }"
+                @mousedown.prevent="onCategoryDropdownPick(item)"
+              >
+                {{ item }}
+              </div>
+            </div>
+          </div>
         </div>
+
         <div class="filter-actions">
-          <button class="btn btn-primary" :disabled="!selectedSmelterId || chartLoading || listLoading" @click="handleQuery">
+          <button class="btn btn-primary" :disabled="chartLoading || listLoading || !canQuery" @click="handleQuery">
             {{ chartLoading || listLoading ? '正在查询...' : '查询' }}
           </button>
-          <button class="btn btn-secondary" :disabled="!selectedSmelterId" @click="resetFilters">重置</button>
+          <button class="btn btn-secondary" @click="resetFilters">重置</button>
         </div>
       </div>
+      <p v-if="!canQuery" class="filter-hint filter-hint--warn">请至少选择一个冶炼厂和一个品类后再查询</p>
+      <p v-else class="filter-hint">冶炼厂与品类不可同时多选，图表将按多选项分组展示多条曲线</p>
 
       <div class="chart-section">
         <div class="chart-head">
           <span class="chart-title">基准价走势</span>
-          <span class="chart-legend">
-            <span class="legend-item"><i class="legend-line"></i>基准价</span>
-          </span>
+          <div class="chart-legend">
+            <template v-if="chartMultiSeries.length > 1">
+              <span v-for="(s, si) in chartMultiSeries" :key="si" class="legend-item">
+                <i class="legend-line" :style="{ background: s.color }"></i>{{ s.name }}
+              </span>
+            </template>
+            <span v-else class="legend-item"><i class="legend-line"></i>基准价</span>
+          </div>
         </div>
         <p v-if="chartError" class="inline-error">{{ chartError }}</p>
-        <div v-if="!selectedSmelterId" class="chart-empty">请先选择冶炼厂</div>
-        <div v-else-if="chartLoading" class="chart-empty">正在查询走势数据…</div>
-        <div v-else-if="chartSeries.length === 0" class="chart-empty">暂无走势数据，请调整日期范围后查询</div>
+        <div v-if="chartLoading" class="chart-empty">正在查询走势数据…</div>
+        <div v-else-if="chartMultiSeries.length === 0 || chartMultiSeries.every(s => s.data.length === 0)" class="chart-empty">暂无走势数据，请调整筛选条件后查询</div>
         <div v-else class="chart-wrap">
           <canvas
             ref="chartCanvasRef"
@@ -93,13 +163,16 @@
             @mouseleave="onChartMouseLeave"
           />
           <div
-            v-if="chartHoverIndex >= 0"
+            v-if="chartHoverPoint"
             class="chart-tooltip"
             :style="chartTooltipStyle"
           >
-            <div class="chart-tooltip-date">{{ chartSeries[chartHoverIndex]?.date }}</div>
+            <div class="chart-tooltip-series" :style="{ color: chartMultiSeries[chartHoverPoint.seriesIdx]?.color }">
+              {{ chartMultiSeries[chartHoverPoint.seriesIdx]?.name }}
+            </div>
+            <div class="chart-tooltip-date">{{ chartMultiSeries[chartHoverPoint.seriesIdx]?.data[chartHoverPoint.dataIdx]?.date }}</div>
             <div class="chart-tooltip-price">
-              {{ formatPrice(chartSeries[chartHoverIndex]?.basePrice ?? 0) }} 元/吨
+              {{ formatPrice(chartMultiSeries[chartHoverPoint.seriesIdx]?.data[chartHoverPoint.dataIdx]?.basePrice ?? 0) }} 元/吨
             </div>
           </div>
         </div>
@@ -117,11 +190,11 @@
           <thead>
             <tr>
               <th>冶炼厂</th>
+              <th>报价日期</th>
               <th>品类</th>
               <th>基准价</th>
               <th>3% 含税价</th>
               <th>13% 含税价</th>
-              <th>报价日期</th>
               <th>涨跌</th>
             </tr>
           </thead>
@@ -129,19 +202,16 @@
             <tr v-if="listLoading">
               <td colspan="7" class="empty-data">正在查询…</td>
             </tr>
-            <tr v-else-if="!selectedSmelterId">
-              <td colspan="7" class="empty-data">请先选择冶炼厂</td>
-            </tr>
             <tr v-else-if="listRows.length === 0">
               <td colspan="7" class="empty-data">暂无报价数据</td>
             </tr>
             <tr v-for="(row, idx) in listRows" v-else :key="row.id">
               <td>{{ row.smelter }}</td>
+              <td>{{ row.date }}</td>
               <td>{{ row.category }}</td>
               <td class="col-price">{{ formatPrice(row.basePrice) }}</td>
               <td>{{ formatPrice(row.price3pctVat) }}</td>
               <td>{{ formatPrice(row.price13pctVat) }}</td>
-              <td>{{ row.date }}</td>
               <td>
                 <span v-if="rowChange(row, idx) !== null" :class="rowChange(row, idx)! >= 0 ? 'chg-up' : 'chg-down'">
                   {{ formatChange(rowChange(row, idx)!) }}
@@ -162,6 +232,12 @@
     <p class="page-footer">
       数据为各冶炼厂报价信息，仅供参考。详细管理请前往「AI 比价系统」。
     </p>
+
+    <Transition name="toast-fade">
+      <div v-if="toastMsg" class="toast-tip" @click="toastMsg = ''">
+        <i class="bi bi-info-circle"></i> {{ toastMsg }}
+      </div>
+    </Transition>
   </div>
 </template>
 
@@ -171,27 +247,200 @@ import { fetchCategoryMapping, fetchTlSmeltersAll, fetchQuoteDetailsList, type T
 
 const emit = defineEmits<{ navigateToQuote: [] }>()
 
-interface SmelterOption {
-  id: number
-  name: string
+const MULTI_PREVIEW_TAG_COUNT = 1
+
+const MULTI_LINE_COLORS = [
+  '#1476db', '#e53935', '#2e7d32', '#f57c00', '#7b1fa2',
+  '#00838f', '#c62828', '#1565c0', '#6a1b9a', '#2e7d32',
+]
+
+// ==================== 多选互斥 ====================
+const activeMultiSelectDim = ref<'smelter' | 'category' | null>(null)
+const toastMsg = ref('')
+let toastTimer: ReturnType<typeof setTimeout> | null = null
+
+function showToast(msg: string) {
+  if (toastTimer) clearTimeout(toastTimer)
+  toastMsg.value = msg
+  toastTimer = setTimeout(() => { toastMsg.value = '' }, 2500)
 }
 
-const smelterOptions = ref<SmelterOption[]>([])
-const selectedSmelterId = ref(0)
+function checkSmelterMulti() {
+  activeMultiSelectDim.value = selectedSmelterNames.value.length > 1 ? 'smelter' : null
+}
 
-const categoryOptions = ref<TlCategoryRow[]>([])
-const selectedCategory = ref('')
+function checkCategoryMulti() {
+  activeMultiSelectDim.value = selectedCategoryNames.value.length > 1 ? 'category' : null
+}
 
+// ==================== 冶炼厂多选 ====================
+const allSmelterNames = ref<string[]>([])
+const selectedSmelterNames = ref<string[]>([])
+const smelterSearchText = ref('')
+const smelterDropdownVisible = ref(false)
+const filteredSmelterOptions = ref<string[]>([])
+const smelterInputRef = ref<HTMLInputElement | null>(null)
+
+const smelterTagsPreview = computed(() => selectedSmelterNames.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
+const smelterTagsMore = computed(() => Math.max(0, selectedSmelterNames.value.length - MULTI_PREVIEW_TAG_COUNT))
+const smelterTagsRest = computed(() => selectedSmelterNames.value.slice(MULTI_PREVIEW_TAG_COUNT))
+
+function filterSmelterOptions() {
+  const search = smelterSearchText.value.toLowerCase()
+  filteredSmelterOptions.value = filterBySearch(allSmelterNames.value, search)
+}
+
+function onSmelterFocus() {
+  smelterDropdownVisible.value = true
+  filterSmelterOptions()
+}
+
+function onSmelterSearchInput() {
+  smelterDropdownVisible.value = true
+  filterSmelterOptions()
+}
+
+function addSmelter(item: string) {
+  // 互斥：品类已多选时不允许冶炼厂再多选
+  if (selectedCategoryNames.value.length > 1) {
+    showToast('品类已多选，冶炼厂只能选一个')
+    return
+  }
+  if (!selectedSmelterNames.value.includes(item)) selectedSmelterNames.value.push(item)
+  smelterSearchText.value = ''
+  filterSmelterOptions()
+  checkSmelterMulti()
+}
+
+function removeSmelter(item: string) {
+  selectedSmelterNames.value = selectedSmelterNames.value.filter((i) => i !== item)
+  filterSmelterOptions()
+  checkSmelterMulti()
+}
+
+function onSmelterDropdownPick(item: string) {
+  if (selectedSmelterNames.value.includes(item)) removeSmelter(item)
+  else addSmelter(item)
+}
+
+function handleSmelterKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && smelterSearchText.value.trim()) {
+    addSmelter(smelterSearchText.value.trim())
+    e.preventDefault()
+  }
+}
+
+function closeSmelterDropdown() {
+  setTimeout(() => { smelterDropdownVisible.value = false }, 200)
+}
+
+function focusSmelterInput() {
+  smelterDropdownVisible.value = true
+  filterSmelterOptions()
+  nextTick(() => smelterInputRef.value?.focus())
+}
+
+// ==================== 品类多选 ====================
+const allCategoryNames = ref<string[]>([])
+const selectedCategoryNames = ref<string[]>([])
+const categorySearchText = ref('')
+const categoryDropdownVisible = ref(false)
+const filteredCategoryOptions = ref<string[]>([])
+const categoryInputRef = ref<HTMLInputElement | null>(null)
+
+const categoryTagsPreview = computed(() => selectedCategoryNames.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
+const categoryTagsMore = computed(() => Math.max(0, selectedCategoryNames.value.length - MULTI_PREVIEW_TAG_COUNT))
+const categoryTagsRest = computed(() => selectedCategoryNames.value.slice(MULTI_PREVIEW_TAG_COUNT))
+
+function filterCategoryOptions() {
+  const search = categorySearchText.value.toLowerCase()
+  filteredCategoryOptions.value = filterBySearch(allCategoryNames.value, search)
+}
+
+function onCategoryFocus() {
+  categoryDropdownVisible.value = true
+  filterCategoryOptions()
+}
+
+function onCategorySearchInput() {
+  categoryDropdownVisible.value = true
+  filterCategoryOptions()
+}
+
+function addCategory(item: string) {
+  // 互斥：冶炼厂已多选时不允许品类再多选
+  if (selectedSmelterNames.value.length > 1) {
+    showToast('冶炼厂已多选，品类只能选一个')
+    return
+  }
+  if (!selectedCategoryNames.value.includes(item)) selectedCategoryNames.value.push(item)
+  categorySearchText.value = ''
+  filterCategoryOptions()
+  checkCategoryMulti()
+}
+
+function removeCategory(item: string) {
+  selectedCategoryNames.value = selectedCategoryNames.value.filter((i) => i !== item)
+  filterCategoryOptions()
+  checkCategoryMulti()
+}
+
+function onCategoryDropdownPick(item: string) {
+  if (selectedCategoryNames.value.includes(item)) removeCategory(item)
+  else addCategory(item)
+}
+
+function handleCategoryKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && categorySearchText.value.trim()) {
+    addCategory(categorySearchText.value.trim())
+    e.preventDefault()
+  }
+}
+
+function closeCategoryDropdown() {
+  setTimeout(() => { categoryDropdownVisible.value = false }, 200)
+}
+
+function focusCategoryInput() {
+  categoryDropdownVisible.value = true
+  filterCategoryOptions()
+  nextTick(() => categoryInputRef.value?.focus())
+}
+
+// ==================== 通用工具 ====================
+function filterBySearch(options: string[], searchLower: string) {
+  if (!searchLower) return [...options]
+  return options.filter((opt) => opt.toLowerCase().includes(searchLower))
+}
+
+function multiSelectTagsClass(selected: string[]) {
+  return { 'selected-tags--single': selected.length === 1 }
+}
+
+function multiSelectPlaceholder(selected: string[]) {
+  return selected.length > 0 ? '' : '搜索并选择'
+}
+
+const canQuery = computed(() => selectedSmelterNames.value.length > 0 && selectedCategoryNames.value.length > 0)
+
+// ==================== 价格数据 ====================
 const latest = ref<TlQuoteDetailRow | null>(null)
 const latestLoading = ref(false)
 const latestError = ref('')
 
 const filters = ref({ dateFrom: '', dateTo: '' })
-const chartSeries = ref<TlQuoteDetailRow[]>([])
 const chartLoading = ref(false)
 const chartError = ref('')
-const chartCanvasRef = ref<HTMLCanvasElement | null>(null)
-const chartHoverIndex = ref(-1)
+const chartCanvasRef = ref<HTMLIFrameElement | null>(null)
+
+interface ChartSeriesItem {
+  name: string
+  data: TlQuoteDetailRow[]
+  color: string
+}
+
+const chartMultiSeries = ref<ChartSeriesItem[]>([])
+const chartHoverPoint = ref<{ seriesIdx: number; dataIdx: number } | null>(null)
 const chartTooltipStyle = ref<Record<string, string>>({})
 
 interface ChartLayout {
@@ -200,6 +449,13 @@ interface ChartLayout {
   margin: { t: number; r: number; b: number; l: number }
   toX: (i: number) => number
   toY: (v: number) => number
+  allDates: string[]
+  dateIndexMap: Map<string, number>
+  yMin: number
+  yMax: number
+  yRange: number
+  W: number
+  H: number
 }
 
 let chartLayout: ChartLayout | null = null
@@ -218,8 +474,10 @@ const listRows = computed(() => {
 const listTotalPages = computed(() => Math.max(1, Math.ceil(listTotal.value / listPageSize)))
 
 const dayChange = computed(() => {
-  if (!latest.value || chartSeries.value.length < 2) return null
-  const sorted = [...chartSeries.value].sort((a, b) => a.date.localeCompare(b.date))
+  if (!latest.value) return null
+  const allData = chartMultiSeries.value.flatMap((s) => s.data)
+  if (allData.length < 2) return null
+  const sorted = [...allData].sort((a, b) => a.date.localeCompare(b.date))
   const idx = sorted.findIndex((r) => r.date === latest.value!.date)
   if (idx <= 0) return null
   return latest.value.basePrice - sorted[idx - 1]!.basePrice
@@ -227,7 +485,8 @@ const dayChange = computed(() => {
 
 const dayChangePct = computed(() => {
   if (dayChange.value === null || !latest.value) return null
-  const sorted = [...chartSeries.value].sort((a, b) => a.date.localeCompare(b.date))
+  const allData = chartMultiSeries.value.flatMap((s) => s.data)
+  const sorted = [...allData].sort((a, b) => a.date.localeCompare(b.date))
   const idx = sorted.findIndex((r) => r.date === latest.value!.date)
   if (idx <= 0) return null
   const prev = sorted[idx - 1]!.basePrice
@@ -264,64 +523,107 @@ function rowChange(row: TlQuoteDetailRow, idx: number): number | null {
   return row.basePrice - prev.basePrice
 }
 
-async function loadSmelterOptions() {
+// ==================== 数据加载 ====================
+let smelterOptionsCache: Array<{ id: number; name: string }> = []
+let categoryCache: TlCategoryRow[] = []
+
+async function loadSmelterOptionsWithCache() {
   try {
     const rows = await fetchTlSmeltersAll()
-    smelterOptions.value = rows
+    smelterOptionsCache = rows
       .map((r) => ({
         id: Number(r['冶炼厂id'] ?? r.id ?? 0),
         name: String(r['冶炼厂'] ?? r.name ?? ''),
       }))
       .filter((s) => s.id > 0 && s.name)
-    if (smelterOptions.value.length > 0 && !selectedSmelterId.value) {
-      selectedSmelterId.value = smelterOptions.value[0]!.id
-    }
+    allSmelterNames.value = smelterOptionsCache.map((s) => s.name).sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    filterSmelterOptions()
   } catch {
-    smelterOptions.value = []
+    smelterOptionsCache = []
+    allSmelterNames.value = []
   }
 }
 
-async function loadCategories() {
+async function loadCategoriesWithCache() {
   try {
-    categoryOptions.value = await fetchCategoryMapping()
+    categoryCache = await fetchCategoryMapping()
+    allCategoryNames.value = categoryCache.map((c) => c.name).filter((n) => n !== '')
+    filterCategoryOptions()
   } catch {
-    categoryOptions.value = []
+    categoryCache = []
+    allCategoryNames.value = []
   }
 }
 
-async function fetchAll(params: {
-  factory_id?: number
+function resolveSmelterIds(): number[] {
+  return selectedSmelterNames.value
+    .map((name) => smelterOptionsCache.find((s) => s.name === name)?.id ?? 0)
+    .filter((id) => id > 0)
+}
+
+function resolveCategoryIds(): number[] {
+  return selectedCategoryNames.value
+    .map((name) => categoryCache.find((c) => c.name === name)?.id ?? 0)
+    .filter((id) => id > 0)
+}
+
+async function fetchAllQuotes(extra: {
   start_date?: string
   end_date?: string
-  category_id?: number
-  category_name?: string
 }): Promise<TlQuoteDetailRow[]> {
-  try {
-    return await fetchQuoteDetailsList({
-      ...params,
-      page_size: 500,
-    })
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    throw new Error(msg.includes('404') ? '报价查询接口尚未部署（HTTP 404）。' : msg)
+  const smelterIds = resolveSmelterIds()
+  const tasks: Promise<TlQuoteDetailRow[]>[] = []
+  if (smelterIds.length === 0) {
+    tasks.push(fetchQuoteDetailsList({ ...extra, page_size: 500 }))
+  } else {
+    for (const id of smelterIds) {
+      tasks.push(fetchQuoteDetailsList({ factory_id: id, ...extra, page_size: 500 }))
+    }
   }
+  let results = (await Promise.all(tasks)).flat()
+  // 品类客户端过滤
+  const catNames = new Set(selectedCategoryNames.value)
+  if (catNames.size > 0) {
+    results = results.filter((r) => catNames.has(r.category))
+  }
+  // 去重：同一冶炼厂+品类+日期只保留第一条
+  const seen = new Set<string>()
+  results = results.filter((r) => {
+    const key = `${r.smelter}|${r.category}|${r.date}`
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  return results
 }
 
-function selectedCategoryId(): number | undefined {
-  if (!selectedCategory.value) return undefined
-  const found = categoryOptions.value.find((c) => c.name === selectedCategory.value)
-  return found?.id
+function buildChartSeriesFromData(allData: TlQuoteDetailRow[]): ChartSeriesItem[] {
+  const dim = activeMultiSelectDim.value
+  if (!dim) {
+    return [{ name: '基准价', data: allData, color: MULTI_LINE_COLORS[0] }]
+  }
+
+  const groups = new Map<string, TlQuoteDetailRow[]>()
+  for (const row of allData) {
+    const key = dim === 'smelter' ? row.smelter : row.category
+    if (!key) continue
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key)!.push(row)
+  }
+
+  const sorted = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0], 'zh-CN'))
+  return sorted.map(([name, data], i) => ({
+    name,
+    data: [...data].sort((a, b) => a.date.localeCompare(b.date)),
+    color: MULTI_LINE_COLORS[i % MULTI_LINE_COLORS.length],
+  }))
 }
 
 async function loadLatest() {
-  if (!selectedSmelterId.value) {
-    latest.value = null
-    return
-  }
   latestLoading.value = true
   latestError.value = ''
   try {
-    const rows = await fetchAll({ factory_id: selectedSmelterId.value })
+    const rows = await fetchAllQuotes({})
     const sorted = [...rows].sort((a, b) => b.date.localeCompare(a.date))
     latest.value = sorted[0] ?? null
   } catch (e) {
@@ -333,26 +635,17 @@ async function loadLatest() {
 }
 
 async function loadChart() {
-  if (!selectedSmelterId.value) {
-    chartSeries.value = []
-    return
-  }
   chartLoading.value = true
   chartError.value = ''
   const range = filters.value.dateFrom && filters.value.dateTo
     ? { from: filters.value.dateFrom, to: filters.value.dateTo }
     : defaultChartDateRange()
   try {
-    chartSeries.value = await fetchAll({
-      factory_id: selectedSmelterId.value,
-      start_date: range.from,
-      end_date: range.to,
-      category_id: selectedCategoryId(),
-      category_name: selectedCategory.value || undefined,
-    })
+    const allData = await fetchAllQuotes({ start_date: range.from, end_date: range.to })
+    chartMultiSeries.value = buildChartSeriesFromData(allData)
   } catch (e) {
     chartError.value = e instanceof Error ? e.message : '请稍后重试'
-    chartSeries.value = []
+    chartMultiSeries.value = []
   } finally {
     chartLoading.value = false
     await nextTick()
@@ -361,19 +654,12 @@ async function loadChart() {
 }
 
 async function loadList() {
-  if (!selectedSmelterId.value) {
-    listAllRows.value = []
-    return
-  }
   listLoading.value = true
   listError.value = ''
   try {
-    listAllRows.value = await fetchAll({
-      factory_id: selectedSmelterId.value,
+    listAllRows.value = await fetchAllQuotes({
       start_date: filters.value.dateFrom || undefined,
       end_date: filters.value.dateTo || undefined,
-      category_id: selectedCategoryId(),
-      category_name: selectedCategory.value || undefined,
     })
   } catch (e) {
     listError.value = e instanceof Error ? e.message : '请稍后重试'
@@ -387,11 +673,6 @@ async function reloadAll() {
   await Promise.all([loadLatest(), loadChart(), loadList()])
 }
 
-async function onSmelterChange() {
-  listPage.value = 1
-  await reloadAll()
-}
-
 async function handleQuery() {
   listPage.value = 1
   await Promise.all([loadChart(), loadList()])
@@ -399,62 +680,79 @@ async function handleQuery() {
 
 function resetFilters() {
   applyDefaultFilters()
-  selectedCategory.value = ''
+  selectedSmelterNames.value = allSmelterNames.value.includes('河南金利金铅集团有限公司')
+    ? ['河南金利金铅集团有限公司'] : []
+  selectedCategoryNames.value = allCategoryNames.value.includes('电动车电瓶')
+    ? ['电动车电瓶'] : []
+  activeMultiSelectDim.value = null
   listPage.value = 1
-  void loadChart()
-  void loadList()
 }
 
 function gotoPage(p: number) {
   listPage.value = p
 }
 
-function buildChartLayout(
-  width: number,
-  height: number,
-  prices: number[],
-  n: number,
-): ChartLayout & { W: number; H: number; yMin: number; yMax: number; yRange: number } {
-  const margin = { t: 24, r: 20, b: 56, l: 72 }
+// ==================== 图表绘制 ====================
+function gatherAllDates(): string[] {
+  const set = new Set<string>()
+  for (const s of chartMultiSeries.value) {
+    for (const r of s.data) set.add(r.date)
+  }
+  return [...set].sort()
+}
+
+function gatherAllPrices(): number[] {
+  const prices: number[] = []
+  for (const s of chartMultiSeries.value) {
+    for (const r of s.data) prices.push(r.basePrice)
+  }
+  return prices
+}
+
+function buildChartLayout(width: number, height: number, allDates: string[]): ChartLayout {
+  const margin = { t: 28, r: 20, b: 56, l: 72 }
   const W = width - margin.l - margin.r
   const H = height - margin.t - margin.b
-  const yMin = Math.floor(Math.min(...prices) / 100) * 100
-  const yMax = Math.ceil(Math.max(...prices) / 100) * 100
+  const prices = gatherAllPrices()
+  const yMin = prices.length > 0 ? Math.floor(Math.min(...prices) / 100) * 100 : 0
+  const yMax = prices.length > 0 ? Math.ceil(Math.max(...prices) / 100) * 100 : 100
   const yRange = yMax - yMin || 1
+  const n = allDates.length
   const xStep = n <= 1 ? W / 2 : W / (n - 1)
   const toY = (v: number) => margin.t + H - ((v - yMin) / yRange) * H
   const toX = (i: number) => margin.l + i * xStep
-  return { width, height, margin, W, H, yMin, yMax, yRange, toX, toY }
+  const dateIndexMap = new Map(allDates.map((d, i) => [d, i]))
+  return { width, height, margin, W, H, yMin, yMax, yRange, toX, toY, allDates, dateIndexMap }
 }
 
-function drawChart(highlightIndex = -1) {
-  const canvas = chartCanvasRef.value
-  if (!canvas || chartSeries.value.length === 0) {
+function drawChart(highlightPoint: { seriesIdx: number; dataIdx: number } | null = null) {
+  const canvas = chartCanvasRef.value as HTMLCanvasElement | null
+  if (!canvas || chartMultiSeries.value.length === 0 || chartMultiSeries.value.every((s) => s.data.length === 0)) {
     chartLayout = null
     return
   }
 
-  const series = chartSeries.value
-  const dates = series.map((r) => r.date)
-  const prices = series.map((r) => r.basePrice)
-
+  const allDates = gatherAllDates()
   const ctx = canvas.getContext('2d')
   if (!ctx) return
 
   const wrap = canvas.parentElement
-  const width = Math.max((wrap?.clientWidth ?? 720) - 8, 320)
-  const height = 280
+  const width = wrap?.clientWidth ?? 720
+  const height = chartMultiSeries.value.length > 1 ? 320 : 280
   canvas.width = width
   canvas.height = height
 
-  const layout = buildChartLayout(width, height, prices, dates.length)
-  const { margin, W, H, toX, toY } = layout
+  const layout = buildChartLayout(width, height, allDates)
+  const { margin, W, H, toX, toY, yMin, yRange } = layout
   chartLayout = layout
-  const n = dates.length
+  const n = allDates.length
+  const dateIndexMap = new Map(allDates.map((d, i) => [d, i]))
 
+  // 白色背景
   ctx.fillStyle = '#fff'
   ctx.fillRect(0, 0, width, height)
 
+  // 坐标轴
   ctx.strokeStyle = '#d1d5db'
   ctx.lineWidth = 1
   ctx.beginPath()
@@ -463,12 +761,13 @@ function drawChart(highlightIndex = -1) {
   ctx.lineTo(margin.l + W, margin.t + H)
   ctx.stroke()
 
+  // Y 轴刻度
   const ySteps = 5
   ctx.font = '11px system-ui, sans-serif'
   ctx.fillStyle = '#64748b'
   for (let i = 0; i <= ySteps; i++) {
     const y = margin.t + H - (i / ySteps) * H
-    const val = layout.yMin + (i / ySteps) * layout.yRange
+    const val = yMin + (i / ySteps) * yRange
     ctx.strokeStyle = '#f1f5f9'
     ctx.beginPath()
     ctx.moveTo(margin.l, y)
@@ -477,65 +776,96 @@ function drawChart(highlightIndex = -1) {
     ctx.fillText(formatPrice(val), 4, y + 4)
   }
 
-  if (highlightIndex >= 0 && highlightIndex < n) {
-    const hx = toX(highlightIndex)
-    ctx.strokeStyle = 'rgba(20, 118, 219, 0.35)'
-    ctx.lineWidth = 1
-    ctx.setLineDash([4, 4])
-    ctx.beginPath()
-    ctx.moveTo(hx, margin.t)
-    ctx.lineTo(hx, margin.t + H)
-    ctx.stroke()
-    ctx.setLineDash([])
+  // 高亮竖线
+  if (highlightPoint) {
+    const dateStr = chartMultiSeries.value[highlightPoint.seriesIdx]?.data[highlightPoint.dataIdx]?.date
+    if (dateStr) {
+      const xi = dateIndexMap.get(dateStr) ?? 0
+      const hx = toX(xi)
+      ctx.strokeStyle = 'rgba(20, 118, 219, 0.35)'
+      ctx.lineWidth = 1
+      ctx.setLineDash([4, 4])
+      ctx.beginPath()
+      ctx.moveTo(hx, margin.t)
+      ctx.lineTo(hx, margin.t + H)
+      ctx.stroke()
+      ctx.setLineDash([])
+    }
   }
 
-  ctx.strokeStyle = '#1476db'
-  ctx.lineWidth = 2
-  ctx.beginPath()
-  prices.forEach((v, i) => {
-    const x = toX(i)
-    const y = toY(v)
-    if (i === 0) ctx.moveTo(x, y)
-    else ctx.lineTo(x, y)
-  })
-  ctx.stroke()
-
-  prices.forEach((v, i) => {
-    const x = toX(i)
-    const y = toY(v)
-    const active = i === highlightIndex
-    ctx.fillStyle = '#1476db'
+  // 绘制每条线
+  chartMultiSeries.value.forEach((series, si) => {
+    if (series.data.length === 0) return
+    ctx.strokeStyle = series.color
+    ctx.lineWidth = 2
     ctx.beginPath()
-    ctx.arc(x, y, active ? 6 : 3, 0, Math.PI * 2)
-    ctx.fill()
-    if (active) {
-      ctx.strokeStyle = '#fff'
-      ctx.lineWidth = 2
-      ctx.stroke()
-    }
+    series.data.forEach((row, di) => {
+      const xi = dateIndexMap.get(row.date) ?? 0
+      const x = toX(xi)
+      const y = toY(row.basePrice)
+      if (di === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    })
+    ctx.stroke()
+
+    // 数据点
+    series.data.forEach((row, di) => {
+      const xi = dateIndexMap.get(row.date) ?? 0
+      const x = toX(xi)
+      const y = toY(row.basePrice)
+      const active = highlightPoint && highlightPoint.seriesIdx === si && highlightPoint.dataIdx === di
+      ctx.fillStyle = series.color
+      ctx.beginPath()
+      ctx.arc(x, y, active ? 6 : 3, 0, Math.PI * 2)
+      ctx.fill()
+      if (active) {
+        ctx.strokeStyle = '#fff'
+        ctx.lineWidth = 2
+        ctx.stroke()
+      }
+    })
   })
 
+  // X 轴标签
   const maxLabs = Math.max(2, Math.floor(W / 56))
   const labStep = Math.max(1, Math.ceil(n / maxLabs))
   ctx.fillStyle = '#64748b'
-  dates.forEach((d, i) => {
+  allDates.forEach((d, i) => {
     if (i % labStep !== 0 && i !== n - 1) return
     const label = d.length >= 10 ? d.slice(5) : d
     ctx.fillText(label, toX(i) - 16, margin.t + H + 20)
   })
 
+  // 坐标轴标题
   ctx.fillStyle = '#475569'
   ctx.font = '12px system-ui, sans-serif'
-  ctx.fillText('基准价（元/吨）', margin.l, margin.t - 8)
+  ctx.fillText('基准价（元/吨）', margin.l, margin.t - 10)
   ctx.fillText('报价日期', margin.l + W / 2 - 28, height - 6)
 
-  if (highlightIndex >= 0) {
-    updateChartTooltipPosition(highlightIndex)
+  // 底部图例（多线时）
+  if (chartMultiSeries.value.length > 1) {
+    let legendX = margin.l
+    const legendY = margin.t + H + 38
+    ctx.font = '11px system-ui, sans-serif'
+    chartMultiSeries.value.forEach((s) => {
+      ctx.fillStyle = s.color
+      ctx.fillRect(legendX, legendY - 4, 12, 3)
+      ctx.fillStyle = '#475569'
+      const textW = ctx.measureText(s.name).width
+      ctx.fillText(s.name, legendX + 16, legendY)
+      legendX += 16 + textW + 14
+    })
+  }
+
+  // 更新 tooltip 位置
+  if (highlightPoint) {
+    updateChartTooltipPosition(highlightPoint)
   }
 }
 
 function canvasPointer(ev: MouseEvent): { x: number; y: number } {
-  const canvas = chartCanvasRef.value!
+  const canvas = chartCanvasRef.value as HTMLCanvasElement
+  if (!canvas) return { x: 0, y: 0 }
   const rect = canvas.getBoundingClientRect()
   const scaleX = canvas.width / rect.width
   const scaleY = canvas.height / rect.height
@@ -545,31 +875,44 @@ function canvasPointer(ev: MouseEvent): { x: number; y: number } {
   }
 }
 
-function findNearestChartPoint(px: number, _py: number): number {
-  if (!chartLayout) return -1
-  const series = chartSeries.value
-  if (series.length === 0) return -1
-  let best = 0
-  let bestDist = Math.abs(px - chartLayout!.toX(0))
-  series.forEach((_row, i) => {
-    const dx = Math.abs(px - chartLayout!.toX(i))
-    if (dx < bestDist) {
-      bestDist = dx
-      best = i
-    }
+function findNearestChartPoint(px: number, py: number): { seriesIdx: number; dataIdx: number } | null {
+  if (!chartLayout || chartMultiSeries.value.length === 0) return null
+  const { toX, toY, dateIndexMap } = chartLayout
+
+  let bestSi = 0
+  let bestDi = -1
+  let bestDist = Infinity
+
+  chartMultiSeries.value.forEach((series, si) => {
+    series.data.forEach((row, di) => {
+      const xi = dateIndexMap.get(row.date) ?? -1
+      if (xi < 0) return
+      const x = toX(xi)
+      const y = toY(row.basePrice)
+      const d = Math.hypot(px - x, py - y)
+      if (d < bestDist) {
+        bestDist = d
+        bestSi = si
+        bestDi = di
+      }
+    })
   })
-  return best
+
+  return bestDi >= 0 ? { seriesIdx: bestSi, dataIdx: bestDi } : null
 }
 
-function updateChartTooltipPosition(index: number) {
-  const canvas = chartCanvasRef.value
-  if (!canvas || !chartLayout || index < 0) return
-  const row = chartSeries.value[index]
+function updateChartTooltipPosition(point: { seriesIdx: number; dataIdx: number }) {
+  const canvas = chartCanvasRef.value as HTMLCanvasElement
+  if (!canvas || !chartLayout) return
+  const series = chartMultiSeries.value[point.seriesIdx]
+  if (!series) return
+  const row = series.data[point.dataIdx]
   if (!row) return
   const rect = canvas.getBoundingClientRect()
   const scaleX = rect.width / canvas.width
   const scaleY = rect.height / canvas.height
-  const left = chartLayout.toX(index) * scaleX
+  const dateIdx = chartLayout.dateIndexMap.get(row.date) ?? -1
+  const left = chartLayout.toX(dateIdx >= 0 ? dateIdx : 0) * scaleX
   const top = chartLayout.toY(row.basePrice) * scaleY
   chartTooltipStyle.value = {
     left: `${left}px`,
@@ -579,36 +922,44 @@ function updateChartTooltipPosition(index: number) {
 }
 
 function onChartMouseMove(ev: MouseEvent) {
-  if (!chartLayout || chartSeries.value.length === 0) return
+  if (!chartLayout || chartMultiSeries.value.length === 0) return
   const { x, y } = canvasPointer(ev)
   const hit = findNearestChartPoint(x, y)
-  if (hit === chartHoverIndex.value) return
-  chartHoverIndex.value = hit
+  if (!hit) return
+  const prev = chartHoverPoint.value
+  if (prev && prev.seriesIdx === hit.seriesIdx && prev.dataIdx === hit.dataIdx) return
+  chartHoverPoint.value = hit
   drawChart(hit)
 }
 
 function onChartMouseLeave() {
-  if (chartHoverIndex.value < 0) return
-  chartHoverIndex.value = -1
+  if (chartHoverPoint.value === null) return
+  chartHoverPoint.value = null
   chartTooltipStyle.value = {}
-  drawChart(-1)
+  drawChart(null)
 }
 
 let chartResizeHandler: (() => void) | null = null
 
-watch(chartSeries, () => {
-  chartHoverIndex.value = -1
+watch(chartMultiSeries, () => {
+  chartHoverPoint.value = null
   chartTooltipStyle.value = {}
-  nextTick(() => drawChart(-1))
+  nextTick(() => drawChart(null))
 })
 
 onMounted(async () => {
   applyDefaultFilters()
-  await Promise.all([loadSmelterOptions(), loadCategories()])
-  if (selectedSmelterId.value) {
-    await reloadAll()
+  await Promise.all([loadSmelterOptionsWithCache(), loadCategoriesWithCache()])
+  // 默认选中
+  if (allSmelterNames.value.includes('河南金利金铅集团有限公司')) {
+    selectedSmelterNames.value = ['河南金利金铅集团有限公司']
+    checkSmelterMulti()
   }
-  chartResizeHandler = () => drawChart(chartHoverIndex.value)
+  if (allCategoryNames.value.includes('电动车电瓶')) {
+    selectedCategoryNames.value = ['电动车电瓶']
+    checkCategoryMulti()
+  }
+  chartResizeHandler = () => drawChart(chartHoverPoint.value)
   window.addEventListener('resize', chartResizeHandler)
 })
 
@@ -622,9 +973,6 @@ onBeforeUnmount(() => {
 .card { background: white; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); }
 .summary-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; flex-wrap: wrap; }
 .summary-head-main { flex: 1; min-width: 200px; }
-.smelter-select-wrap { display: flex; flex-direction: column; gap: 4px; margin-bottom: 8px; }
-.smelter-select-label { font-size: 12px; font-weight: 500; color: #606266; }
-.smelter-select { min-width: 220px; max-width: 360px; }
 .summary-meta { margin: 0; font-size: 13px; color: #606266; }
 .summary-loading { padding: 24px 0; color: #909399; text-align: center; }
 .price-summary { display: flex; align-items: flex-end; gap: 24px; margin-top: 16px; flex-wrap: wrap; }
@@ -637,23 +985,155 @@ onBeforeUnmount(() => {
 .price-change { font-size: 13px; margin-top: 4px; }
 .price-change.up, .chg-up { color: #e53935; }
 .price-change.down, .chg-down { color: #2e7d32; }
-.filter-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; margin-bottom: 16px; overflow: visible; }
+
+.filter-row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; margin-bottom: 8px; overflow: visible; }
 .filter-item { display: flex; flex-direction: column; gap: 6px; min-width: 140px; overflow: visible; }
 .filter-item label { font-size: 13px; font-weight: 500; color: #606266; }
 .date-range { display: flex; gap: 8px; align-items: center; }
 .filter-input { padding: 6px 10px; border: 1px solid #e5e9f2; border-radius: 4px; font-size: 13px; width: 130px; }
 .filter-actions { display: flex; gap: 10px; flex-shrink: 0; margin-left: auto; }
+.filter-hint { font-size: 12px; color: #909399; margin: 0 0 12px; }
+.filter-hint--warn { color: #e65100; }
 .btn { padding: 6px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: 500; }
 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-primary { background: #1476db; color: white; }
 .btn-secondary { background: #f5f7fa; color: #606266; border: 1px solid #e5e9f2; }
+
+/* ==================== 多选下拉 ==================== */
+.multi-select-item { min-width: 200px; flex: 1; overflow: visible; }
+.multi-select-container { position: relative; width: 100%; max-width: 280px; overflow: visible; }
+.multi-select-container--wide { max-width: 100%; }
+
+.selected-tags {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid #E5E9F2;
+  border-radius: 4px;
+  background: white;
+  height: 32px;
+  min-height: 32px;
+  max-height: 32px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  cursor: text;
+  box-sizing: border-box;
+}
+
+.selected-tags--single {
+  height: auto;
+  min-height: 32px;
+  max-height: none;
+  flex-wrap: nowrap;
+  overflow: visible;
+}
+
+.selected-tags--single .tag {
+  max-width: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.selected-tags--single .multi-input {
+  flex: 0 0 24px;
+  min-width: 24px;
+  width: 24px;
+}
+
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  background-color: #E8F0F8;
+  border-radius: 3px;
+  font-size: 12px;
+  color: #2c3e50;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 118px;
+  flex-shrink: 0;
+}
+
+.tag-shrink { flex-shrink: 0; }
+
+.tag-more {
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  background-color: #f0f2f5;
+  color: #606266;
+  cursor: default;
+  flex-shrink: 0;
+}
+
+.tag-remove {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  color: #909399;
+  padding: 0 2px;
+}
+
+.tag-remove:hover { color: #f56c6c; }
+
+.multi-input {
+  flex: 1 1 48px;
+  min-width: 48px;
+  width: 0;
+  border: none;
+  outline: none;
+  padding: 2px 4px;
+  font-size: 13px;
+  background: transparent;
+}
+
+.multi-input::placeholder { color: #c0c4cc; }
+
+.dropdown-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  background: white;
+  border: 1px solid #E5E9F2;
+  border-radius: 4px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  z-index: 2500;
+  margin-top: 2px;
+}
+
+.dropdown-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #606266;
+  text-align: left;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.dropdown-item:hover { background-color: #F5F7FA; color: #4A7A9C; }
+
+.dropdown-item--selected { color: #a8abb2; background-color: #f5f7fa; }
+.dropdown-item--selected:hover { background-color: #ebeef5; color: #909399; }
+
+/* ==================== 图表 ==================== */
 .chart-section { border-top: 1px solid #e5e9f2; padding-top: 16px; }
 .chart-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .chart-title { font-size: 14px; font-weight: 600; color: #2c3e50; }
-.chart-legend { display: flex; gap: 16px; font-size: 12px; color: #606266; }
+.chart-legend { display: flex; gap: 16px; font-size: 12px; color: #606266; flex-wrap: wrap; }
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 .legend-line { display: inline-block; width: 16px; height: 2px; background: #1476db; }
-.chart-wrap { position: relative; width: 100%; overflow-x: auto; }
+.chart-wrap { position: relative; width: 100%; overflow: hidden; }
 .chart-canvas { display: block; width: 100%; cursor: crosshair; }
 .chart-tooltip {
   position: absolute;
@@ -668,9 +1148,12 @@ onBeforeUnmount(() => {
   white-space: nowrap;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
+.chart-tooltip-series { font-weight: 600; font-size: 11px; margin-bottom: 2px; }
 .chart-tooltip-date { color: #cbd5e1; font-size: 11px; margin-bottom: 2px; }
 .chart-tooltip-price { font-weight: 600; }
 .chart-empty { text-align: center; padding: 48px 16px; color: #909399; font-size: 14px; }
+
+/* ==================== 表格 ==================== */
 .table-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .table-title { font-size: 14px; font-weight: 600; color: #2c3e50; }
 .table-count { font-size: 12px; color: #909399; }
@@ -688,4 +1171,27 @@ onBeforeUnmount(() => {
 .text-muted { color: #909399; }
 .page-footer { font-size: 12px; color: #909399; line-height: 1.6; margin: 0 4px 8px; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.toast-tip {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 10px 20px;
+  background: #fff3e0;
+  color: #e65100;
+  border: 1px solid #ffcc80;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.toast-tip i { margin-right: 4px; }
+
+.toast-fade-enter-active { transition: all 0.25s ease; }
+.toast-fade-leave-active { transition: all 0.2s ease; }
+.toast-fade-enter-from, .toast-fade-leave-to { opacity: 0; transform: translateX(-50%) translateY(-8px); }
 </style>
