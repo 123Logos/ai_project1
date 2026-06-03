@@ -1396,7 +1396,14 @@ var Nn = new WeakMap,
                     g = In(e.props),
                     y = g ? n : p,
                     b = g ? r : h;
-                if (o === `svg` || Rn(p) ? o = `svg` : (o === `mathml` || zn(p)) && (o = `mathml`), v ? (f(e.dynamicChildren, v, y, i, a, o, s), Ti(e, t, !0)) : c || d(e, t, y, b, i, a, o, s, !1), _) g ? t.props && e.props && t.props.to !== e.props.to && (t.props.to = e.props.to) : Hn(t, n, r, l, 1);
+                if (o === `svg` || Rn(p) ? o = `svg`
+                    : (o === `mathml` || zn(p)) && (o = `mathml`),
+                    v ? (f(e.dynamicChildren, v, y, i, a, o, s), Ti(e, t, !0))
+                    : c || d(e, t, y, b, i, a, o, s, !1),
+                    _)
+                    g ? t.props && e.props && t.props.to !== e.props.to &&
+                        (t.props.to = e.props.to)
+                    : Hn(t, n, r, l, 1);
                 else if ((t.props && t.props.to) !== (e.props && e.props.to)) {
                     let e = t.target = Bn(t.props, m);
                     e && Hn(t, e, null, l, 0)
@@ -2517,7 +2524,14 @@ function xi(e, i) {
         let m = e.props || t,
             h = n.props || t,
             g;
-        if (r && Ci(r, !1), (g = h.onVnodeBeforeUpdate) && ea(g, r, n, e), f && wn(n, e, r, `beforeUpdate`), r && Ci(r, !0), (m.innerHTML && h.innerHTML == null || m.textContent && h.textContent == null) && p(l, ``), d ? D(e.dynamicChildren, d, l, r, i, Si(n, a), o) : s || ue(e, n, l, null, r, i, Si(n, a), o, !1), u > 0) {
+        if (r && Ci(r, !1),
+            (g = h.onVnodeBeforeUpdate) && ea(g, r, n, e),
+            f && wn(n, e, r, `beforeUpdate`),
+            r && Ci(r, !0),
+            (m.innerHTML && h.innerHTML == null || m.textContent && h.textContent == null) && p(l, ``),
+            d ? D(e.dynamicChildren, d, l, r, i, Si(n, a), o)
+                : s || ue(e, n, l, null, r, i, Si(n, a), o, !1),
+            u > 0) {
             if (u & 16) re(l, m, h, r, a);
             else if (u & 2 && m.class !== h.class && c(l, `class`, null, h.class, a), u & 4 && c(l, `style`, m.style, h.style, a), u & 8) {
                 let e = n.dynamicProps;
@@ -2559,7 +2573,14 @@ function xi(e, i) {
                 dynamicChildren: m,
                 slotScopeIds: h
             } = t;
-        h && (c = c ? c.concat(h) : h), e == null ? (o(d, n, r), o(f, n, r), E(t.children || [], n, f, i, a, s, c, l)) : p > 0 && p & 64 && m && e.dynamicChildren && e.dynamicChildren.length === m.length ? (D(e.dynamicChildren, m, n, i, a, s, c), (t.key != null || i && t === i.subTree) && Ti(e, t, !0)) : ue(e, t, n, f, i, a, s, c, l)
+        h && (c = c ? c.concat(h) : h),
+            e == null ? (o(d, n, r), o(f, n, r),
+                E(t.children || [], n, f, i, a, s, c, l))
+            : p > 0 && p & 64 && m && e.dynamicChildren &&
+                e.dynamicChildren.length === m.length
+                ? (D(e.dynamicChildren, m, n, i, a, s, c),
+                    (t.key != null || i && t === i.subTree) && Ti(e, t, !0))
+            : ue(e, t, n, f, i, a, s, c, l)
     }, O = (e, t, n, r, i, a, o, s, c) => {
         t.slotScopeIds = s, e == null ? t.shapeFlag & 512 ? i.ctx.activate(t, n, r, o, c) : k(t, n, r, i, a, o, c) : oe(e, t, c)
     }, k = (e, t, n, r, i, a, o) => {
@@ -3562,7 +3583,22 @@ function to(e, t) {
 var no = e => e.charCodeAt(0) === 111 && e.charCodeAt(1) === 110 && e.charCodeAt(2) > 96 && e.charCodeAt(2) < 123,
     ro = (e, t, n, r, i, s) => {
         let c = i === `svg`;
-        t === `class` ? ja(e, r, c) : t === `style` ? Ia(e, n, r) : a(t) ? o(t) || Ja(e, t, n, r, s) : (t[0] === `.` ? (t = t.slice(1), !0) : t[0] === `^` ? (t = t.slice(1), !1) : io(e, t, r, c)) ? (Wa(e, t, r), !e.tagName.includes(`-`) && (t === `value` || t === `checked` || t === `selected`) && Ua(e, t, r, c, s, t !== `value`)) : e._isVueCE && (ao(e, t) || e._def.__asyncLoader && (/[A-Z]/.test(t) || !g(r))) ? Wa(e, E(t), r, s, t) : (t === `true-value` ? e._trueValue = r : t === `false-value` && (e._falseValue = r), Ua(e, t, r, c))
+        t === `class` ? ja(e, r, c)
+            : t === `style` ? Ia(e, n, r)
+            : a(t) ? o(t) || Ja(e, t, n, r, s)
+            : (t[0] === `.` ? (t = t.slice(1), !0)
+                : t[0] === `^` ? (t = t.slice(1), !1)
+                : io(e, t, r, c))
+                ? (Wa(e, t, r),
+                    !e.tagName.includes(`-`) &&
+                    (t === `value` || t === `checked` || t === `selected`) &&
+                    Ua(e, t, r, c, s, t !== `value`))
+                : e._isVueCE &&
+                    (ao(e, t) || e._def.__asyncLoader && (/[A-Z]/.test(t) || !g(r)))
+                    ? Wa(e, E(t), r, s, t)
+                    : (t === `true-value` ? e._trueValue = r
+                        : t === `false-value` && (e._falseValue = r),
+                        Ua(e, t, r, c))
     };
 
 function io(e, t, n, r) {
@@ -3929,7 +3965,12 @@ function Qo(e, t, n) {
 function $o(e) {
     let t = e.toLowerCase(),
         n = e => e.some(e => t.includes(e));
-    return n([`没有p图`, `未p图`, `无p图`, `未ps`, `no_ps`, `nop`]) ? `normal` : n([`p图`, `有p图`, `ps图`, `ps_`, `_ps`, `photoshop`]) ? `tamper` : n([`正常`, `normal`, `authentic`, `real`, `true`]) ? `normal` : n([`可疑`, `suspicious`, `suspect`, `疑似`]) ? `suspicious` : n([`篡改`, `tamper`, `forg`, `fake`, `ps`, `编辑`]) ? `tamper` : `mixed`
+    return n([`没有p图`, `未p图`, `无p图`, `未ps`, `no_ps`, `nop`]) ? `normal`
+        : n([`p图`, `有p图`, `ps图`, `ps_`, `_ps`, `photoshop`]) ? `tamper`
+        : n([`正常`, `normal`, `authentic`, `real`, `true`]) ? `normal`
+        : n([`可疑`, `suspicious`, `suspect`, `疑似`]) ? `suspicious`
+        : n([`篡改`, `tamper`, `forg`, `fake`, `ps`, `编辑`]) ? `tamper`
+        : `mixed`
 }
 
 function es(e) {
@@ -4887,7 +4928,15 @@ yo(((e, t) => {
             class: `switch-text`
         }, `仅分析我框出的区域`, -1)]), s[12] ||= Y(`p`, {
             class: `option-hint`
-        }, ` 关闭此项时，将由系统自动在图中选取多个关键位置分别判断。 `, -1)]), a.value ? (q(), J(`div`, Ds, [s[13] ||= Y(`p`, null, ` 在右侧预览区按住拖拽即可框选。开启本模式后请先框选再开始分析；也可框选整张图范围。 `, -1), l.value ? (q(), J(`p`, Os, ` 已选区域（像素）：` + j(l.value.join(`, `)), 1)) : X(``, !0)])) : X(``, !0)]), Y(`section`, ks, [Y(`button`, {
+        }, ` 关闭此项时，将由系统自动在图中选取多个关键位置分别判断。 `, -1)]),
+            a.value ? (q(), J(`div`, Ds, [
+                s[13] ||= Y(`p`, null,
+                    ` 在右侧预览区按住拖拽即可框选。开启本模式后请先框选再开始分析；也可框选整张图范围。 `, -1),
+                l.value ? (q(), J(`p`, Os,
+                    ` 已选区域（像素）：` + j(l.value.join(`, `)), 1))
+                    : X(``, !0)
+            ])) : X(``, !0)]),
+            Y(`section`, ks, [Y(`button`, {
             type: `button`,
             class: `btn btn-primary`,
             disabled: u.value || !t.value,
@@ -5021,7 +5070,11 @@ yo(((e, t) => {
             }
         }, j(e.n), 9, $s)]))), 128))], 8, Xs))])) : T.value && h.value && _.value ? (q(), J(`div`, ec, [...s[19] ||= [Y(`p`, null, `正在加载标注示意图…`, -1)]])) : T.value && h.value ? (q(), J(`div`, tc, [...s[20] ||= [Y(`p`, null, `当前为历史记录`, -1), Y(`p`, {
             class: `history-preview-hint`
-        }, ` 原图未保存在本机。下方可查看当时结论与标注示意图（若服务端仍保留任务）；若无坐标数据则仅显示文字结论。 `, -1)]])) : (q(), J(`div`, nc, [...s[21] ||= [Y(`p`, null, `请先在左侧上传一张图片`, -1)]]))]), Y(`section`, rc, [s[25] ||= Y(`h2`, {
+        }, ` 原图未保存在本机。下方可查看当时结论与标注示意图（若服务端仍保留任务）；若无坐标数据则仅显示文字结论。 `, -1)]]))
+            : (q(), J(`div`, nc, [
+                ...s[21] ||= [Y(`p`, null, `请先在左侧上传一张图片`, -1)]
+            ]))]),
+            Y(`section`, rc, [s[25] ||= Y(`h2`, {
             class: `section-title tight`
         }, `检测报告`, -1), h.value ? (q(), J(`div`, ic, [h.value.result ? (q(), J(G, {
             key: 0
@@ -5044,7 +5097,16 @@ yo(((e, t) => {
             src: g.value,
             alt: `检测标注示意`,
             class: `viz-img`
-        }, null, 8, yc)])])) : X(``, !0), Se.value ? (q(), J(`p`, bc, ` 本条任务的标注图在服务端已过期或未生成，故无示意图；左侧「区域位置示意」或下方文字为当前可用信息。 `)) : X(``, !0), !h.value && !f.value && !u.value ? (q(), J(`p`, xc, ` 完成检测后，将在此展示结论、说明与示意图。 `)) : X(``, !0)])])]), Y(`aside`, Sc, [Y(`section`, Cc, [Y(`div`, wc, [s[26] ||= Y(`h2`, {
+        }, null, 8, yc)])]))
+            : X(``, !0),
+            Se.value ? (q(), J(`p`, bc,
+                ` 本条任务的标注图在服务端已过期或未生成，故无示意图；左侧「区域位置示意」或下方文字为当前可用信息。 `))
+                : X(``, !0),
+            !h.value && !f.value && !u.value
+                ? (q(), J(`p`, xc,
+                    ` 完成检测后，将在此展示结论、说明与示意图。 `))
+                : X(``, !0)])])]),
+            Y(`aside`, Sc, [Y(`section`, Cc, [Y(`div`, wc, [s[26] ||= Y(`h2`, {
             class: `section-title history-title-merged`
         }, `历史记录`, -1), Y(`button`, {
             type: `button`,
