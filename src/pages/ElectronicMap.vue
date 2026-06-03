@@ -709,6 +709,17 @@
           <div class="emap-cmp-forecast-head">
             <div class="emap-cmp-forecast-title">送货量预测</div>
             <div class="emap-cmp-forecast-actions">
+              <select
+                v-if="selectedWarehouse && forecastVarietyOptions.length > 0"
+                v-model="forecastSelectedVariety"
+                class="forecast-variety-select"
+                :disabled="forecastLoading"
+                @change="onForecastVarietyChange"
+              >
+                <option v-for="v in forecastVarietyOptions" :key="v.value" :value="v.value">
+                  {{ v.label }}（近{{ v.days }}天共{{ v.totalWeight }}吨）
+                </option>
+              </select>
               <button
                 type="button"
                 class="btn btn-sm btn-outline-success"
@@ -1259,6 +1270,15 @@ const warehouseDistanceFocusToId = ref<number | null>(null)
 const forecastLoading = ref(false)
 const compareError = ref('')
 const forecastError = ref('')
+/** 预测品种选项（按送货量排序） */
+interface ForecastVarietyOption {
+  value: string
+  label: string
+  totalWeight: string
+  days: number
+}
+const forecastVarietyOptions = ref<ForecastVarietyOption[]>([])
+const forecastSelectedVariety = ref('')
 const forecastModalMeta = ref<ForecastChartMeta | null>(null)
 const forecastModalDates = ref<string[]>([])
 const forecastModalValues = ref<number[]>([])
@@ -1513,6 +1533,26 @@ watch(categoryPrefs, () => {
   if (categoryPrefsHydrating) return
   persistCategoryPrefsSnapshot()
 }, { deep: true })
+
+/** 仓库切换时：加载品种选项并默认选中送货量最大的 */
+watch(selectedWarehouse, async (wh) => {
+  forecastVarietyOptions.value = []
+  forecastSelectedVariety.value = ''
+  forecastModalDates.value = []
+  forecastModalValues.value = []
+  forecastDetailRows.value = []
+  forecastError.value = ''
+  if (!wh) return
+  try {
+    const opts = await fetchWarehouseVarieties(wh.title.trim())
+    forecastVarietyOptions.value = opts
+    if (opts.length > 0) {
+      forecastSelectedVariety.value = opts[0].value // 默认送货量最大
+    }
+  } catch (e) {
+    console.warn('[预测] 获取品种选项失败', e)
+  }
+})
 
 const confirmedCategoryIds = ref<number[]>([])
 const confirmedTotalTons = ref(0)
@@ -2060,7 +2100,7 @@ function focusMapPointFromSearch(p: MapPoint, opts?: { silent?: boolean }) {
   if (p.kind === 'warehouse') {
     selectedWarehouse.value = p
     forecastError.value = ''
-    void runComparisonAndForecastForWarehouse(p)
+    void runComparisonForWarehouse(p)
   }
   if (!opts?.silent) {
     emapSearchFeedback.value =
@@ -2852,7 +2892,7 @@ function renderMarkers(points: MapPoint[], options?: { preserveMapView?: boolean
           const zoom = Math.max(map.getZoom(), 9)
           setMapViewWithWarehouseLeftPanelBias(map, [p.lat, p.lng], zoom, { animate: true })
         }
-        void runComparisonAndForecastForWarehouse(p)
+        void runComparisonForWarehouse(p)
       })
     } else {
       marker.on('click', () => {
@@ -5486,16 +5526,79 @@ watch([forecastModalDates, forecastModalValues, forecastSectionCollapsed], () =>
   }
 })
 
+/** 查询某仓库按品种汇总的送货量（用于品种下拉框） */
+async function fetchWarehouseVarieties(warehouseName: string): Promise<ForecastVarietyOption[]> {
+  const all: Array<{ product_variety: string; weight: number; delivery_date: string }> = []
+  let page = 1
+  const pageSize = 500
+  while (page <= 50) {
+    const { data } = await axios.get(ApiPaths.deliveryHistory, {
+      params: { warehouse: warehouseName, page, page_size: pageSize },
+    })
+    const items = data.items || []
+    for (const it of items) {
+      all.push({
+        product_variety: it.product_variety || '未知品类',
+        weight: Number(it.weight || 0),
+        delivery_date: it.delivery_date || '',
+      })
+    }
+    if (items.length < pageSize) break
+    page++
+  }
+  // 按品种聚合
+  const byVariety = new Map<string, { totalWeight: number; dates: Set<string> }>()
+  for (const r of all) {
+    const existing = byVariety.get(r.product_variety) || { totalWeight: 0, dates: new Set<string>() }
+    existing.totalWeight += r.weight
+    if (r.delivery_date) existing.dates.add(r.delivery_date)
+    byVariety.set(r.product_variety, existing)
+  }
+  // 按送货量降序
+  const options: ForecastVarietyOption[] = [...byVariety.entries()]
+    .map(([value, stats]) => ({
+      value,
+      label: value,
+      totalWeight: stats.totalWeight.toFixed(2),
+      days: stats.dates.size,
+    }))
+    .sort((a, b) => Number(b.totalWeight) - Number(a.totalWeight))
+  return options
+}
+
+/** 切换预测品种时清空现有预测 */
+function onForecastVarietyChange() {
+  forecastModalDates.value = []
+  forecastModalValues.value = []
+  forecastDetailRows.value = []
+  forecastError.value = ''
+}
+
 /** 同步触发 v2 智能预测，直接返回预测结果 */
 async function triggerPredictSync(warehouse: MapPoint): Promise<Record<string, unknown>[]> {
   const whTitle = warehouse.title.trim()
-  // 从 warehouse.raw 中尝试提取品类，取不到则用默认值
-  const productVariety = pickStr(warehouse.raw, ['product_variety', 'productVariety', '品类', '品种', '产品品种']) || '废铅酸电池'
+  // 确保品种选项已加载（避免 watch 竞态：首次点击时 watch 尚未完成）
+  if (!forecastVarietyOptions.value.length) {
+    try {
+      const opts = await fetchWarehouseVarieties(whTitle)
+      forecastVarietyOptions.value = opts
+      if (opts.length > 0 && !forecastSelectedVariety.value) {
+        forecastSelectedVariety.value = opts[0].value // 默认送货量最大
+      }
+    } catch (e) {
+      console.warn('[预测] 获取品种选项失败，使用默认值', e)
+    }
+  }
+  // 使用用户选择的品种（未选则用选项第一个，即送货量最大）
+  const productVariety = forecastSelectedVariety.value || forecastVarietyOptions.value[0]?.value || '废铅酸电池'
+  // 尝试从数据中提取冶炼厂，默认不传（由后端从历史自动推断）
+  const smelter = pickStr(warehouse.raw, ['smelter', 'smelter_name', '冶炼厂', '冶炼厂名称']) || null
   const body = {
     items: [
       {
         warehouse: whTitle,
         product_variety: productVariety,
+        ...(smelter && { smelter }),
         horizonDays: 15,
       },
     ],
@@ -5774,7 +5877,7 @@ async function loadAndPlot(ui: MarkersLoadUi = 'full') {
         refreshAllMarkerVisualState()
         refreshWarehouseMarkerLockInteractivity()
         if (shouldRerunComparison) {
-          void runComparisonAndForecastForWarehouse(wh)
+          void runComparisonForWarehouse(wh)
         }
       }
     }
@@ -7025,6 +7128,33 @@ onBeforeUnmount(() => {
 .emap-cmp-forecast-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+.forecast-variety-select {
+  background: rgba(15, 23, 42, 0.8);
+  color: #e2e8f0;
+  border: 1px solid rgba(100, 116, 139, 0.4);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  max-width: 200px;
+  outline: none;
+  cursor: pointer;
+}
+
+.forecast-variety-select:hover {
+  border-color: rgba(56, 189, 248, 0.6);
+}
+
+.forecast-variety-select:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+}
+
+.forecast-variety-select option {
+  background: #0f172a;
+  color: #e2e8f0;
 }
 
 /* 固定列宽：厂名省略；金额列完整显示 */
