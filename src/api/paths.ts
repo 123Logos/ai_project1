@@ -19,6 +19,8 @@ export const ApiPaths = {
   predict: '/predict',
   /** 已落库预测结果查询（GET） */
   predictResults: '/predict/results',
+  /** 异步触发智能预测（POST），返回 { batch_id } */
+  predictAsync: '/predict/async',
   /** 已落库预测结果中的维度（pd_ip_prediction_results） */
   predictDimensionOptions: '/predict/dimension-options',
 } as const

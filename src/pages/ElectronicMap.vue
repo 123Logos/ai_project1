@@ -5514,12 +5514,43 @@ watch([forecastModalDates, forecastModalValues, forecastSectionCollapsed], () =>
   }
 })
 
+/** 异步触发 v2 智能预测，返回 batch_id */
+async function triggerPredictAsync(warehouseName: string): Promise<string> {
+  const body = {
+    items: [
+      {
+        warehouse: warehouseName,
+        horizonDays: 15,
+      },
+    ],
+  }
+  const response = await axios.post(ApiPaths.predictAsync, body)
+  const data = response.data as { batch_id?: string }
+  if (!data.batch_id) throw new Error('触发预测失败：未返回 batch_id')
+  return data.batch_id
+}
+
+/** 轮询 /predict/results 等待异步预测结果落库 */
+async function waitForPredictResult(warehouseName: string, timeoutMs = 60_000): Promise<Record<string, unknown>[]> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const results = await fetchForecastDetailPaged([warehouseName])
+    if (results.length > 0) return results
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+  }
+  throw new Error('预测超时：后端未能在规定时间内完成计算，请稍后重试')
+}
+
 async function runForecastForWarehouse(warehouse: MapPoint) {
   forecastLoading.value = true
   forecastError.value = ''
   try {
     const whTitle = warehouse.title.trim()
-    const rawItems = await fetchForecastDetailPaged([whTitle])
+    // 1. 先触发异步预测
+    const batchId = await triggerPredictAsync(whTitle)
+    console.log('[预测] 已触发异步预测，batch_id:', batchId)
+    // 2. 轮询等待结果落库
+    const rawItems = await waitForPredictResult(whTitle)
     const itemsFiltered = rawItems.filter((row) => {
       const w = pickStr(row, ['warehouse', '仓库', 'warehouse_name', '仓库名'])
       if (!w) return true
