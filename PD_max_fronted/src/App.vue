@@ -162,6 +162,9 @@ const feedbackError = ref<string | null>(null)
 const feedbackTotal = ref(0)
 const selectedFeedbackFolder = ref<string | null>(null)
 const feedbackActionBusy = ref<Record<string, boolean>>({})
+/** 反馈日期筛选：起止日期 */
+const feedbackDateFrom = ref('')
+const feedbackDateTo = ref('')
 const datasetFilter = ref<TrainingDatasetFilter>('all')
 const datasetIncludeEnhanced = ref(true)
 const datasetEntries = ref<TrainingDatasetEntry[]>([])
@@ -193,6 +196,50 @@ const selectedFeedback = computed(() =>
   feedbackEntries.value[0] ??
   null,
 )
+
+/** 按日期范围筛选反馈条目（本地过滤，后端未提供日期范围参数时兜底） */
+const filteredFeedbackEntries = computed(() => {
+  let items = feedbackEntries.value
+  if (feedbackDateFrom.value) {
+    items = items.filter((e) => {
+      const d = feedbackFilterDate(e)
+      return d && d >= feedbackDateFrom.value
+    })
+  }
+  if (feedbackDateTo.value) {
+    items = items.filter((e) => {
+      const d = feedbackFilterDate(e)
+      return d && d <= feedbackDateTo.value + ' 23:59:59'
+    })
+  }
+  return items
+})
+
+/** 从字符串中提取 YYYY-MM-DD 格式的日期 */
+function extractDateStr(s: string | undefined): string | null {
+  if (!s) return null
+  // 优先匹配 YYYY-MM-DD
+  const m1 = s.match(/(\d{4})-(\d{2})-(\d{2})/)
+  if (m1) return `${m1[1]}-${m1[2]}-${m1[3]}`
+  // 再尝试 YYYYMMDD 格式（如 20260602）
+  const m2 = s.match(/(\d{4})(\d{2})(\d{2})/)
+  if (m2) return `${m2[1]}-${m2[2]}-${m2[3]}`
+  return null
+}
+
+/** 获取条目用于日期筛选的日期字符串（优先 feedback_marked_at，兜底 timestamp/updated_at） */
+function feedbackFilterDate(entry: FeedbackEntry): string | null {
+  const raw = entry.feedback_marked_at
+  if (raw) return raw.slice(0, 10)
+  // 兜底：从 timestamp 或 updated_at 中提取日期
+  return extractDateStr(entry.timestamp || entry.updated_at)
+}
+
+/** 清除日期筛选 */
+function clearFeedbackDateFilter() {
+  feedbackDateFrom.value = ''
+  feedbackDateTo.value = ''
+}
 
 const selectedManagedHistory = computed(() =>
   managedHistoryRows.value.find((x) => x.id === selectedManagedHistoryId.value) ??
@@ -1963,7 +2010,7 @@ onUnmounted(() => {
                 </dl>
               </div>
               <div v-if="!currentTaskFeedbackStatus" class="feedback-row">
-                <span class="feedback-label">人工纠错结果</span>
+                <span class="feedback-label">人工审核结果</span>
                 <button
                   type="button"
                   class="btn btn-feedback btn-feedback-correct"
@@ -1971,14 +2018,6 @@ onUnmounted(() => {
                   @click="handleFeedback(v3TaskId ?? '', 0, 'correct')"
                 >
                   {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '正确' }}
-                </button>
-                <button
-                  type="button"
-                  class="btn btn-feedback btn-feedback-suspicious"
-                  :disabled="isDetectionMockMode() || feedbackSubmitting[v3TaskId + '-0']"
-                  @click="handleFeedback(v3TaskId ?? '', 0, 'suspicious')"
-                >
-                  {{ feedbackSubmitting[v3TaskId + '-0'] ? '...' : '疑似' }}
                 </button>
                 <button
                   type="button"
@@ -2215,11 +2254,6 @@ onUnmounted(() => {
                   <span v-if="historyKindLabel(h)" class="history-kind">{{
                     historyKindLabel(h)
                   }}</span>
-                  <span
-                    v-if="historyFeedbackStatusLabel(h)"
-                    class="history-kind history-kind--feedback"
-                    :class="historyFeedbackStatusPillClass(h)"
-                  >{{ historyFeedbackStatusLabel(h) }}</span>
                 </span>
                 <span class="history-file" :title="h.fileName">{{
                   truncateName(h.fileName)
@@ -2234,7 +2268,7 @@ onUnmounted(() => {
               >
                 <div class="history-correction-divider">
                   <span class="history-correction-divider-line" />
-                  <span class="history-correction-divider-text">人工纠错</span>
+                  <span class="history-correction-divider-text">人工审核</span>
                   <span class="history-correction-divider-line" />
                 </div>
                 <span class="pill sm history-correction-pill" :class="h.feedbackStatus">
@@ -2328,13 +2362,44 @@ onUnmounted(() => {
               {{ f === 'all' ? '全部' : judgmentText(f) }}
             </button>
           </div>
+          <div class="manage-date-filter-wrap">
+            <span class="filter-label">反馈日期：</span>
+          </div>
+          <div class="manage-date-filter-controls">
+            <input
+              type="date"
+              class="filter-date-input"
+              :value="feedbackDateFrom"
+              @input="feedbackDateFrom = ($event.target as HTMLInputElement).value"
+            />
+            <span class="filter-date-sep">~</span>
+            <input
+              type="date"
+              class="filter-date-input"
+              :value="feedbackDateTo"
+              @input="feedbackDateTo = ($event.target as HTMLInputElement).value"
+            />
+            <button
+              type="button"
+              class="filter-chip"
+              :class="{ active: feedbackDateFrom || feedbackDateTo }"
+              @click="clearFeedbackDateFilter"
+            >
+              清除
+            </button>
+          </div>
           <p v-if="feedbackError" class="history-error">{{ feedbackError }}</p>
-          <p v-if="!feedbackLoading && !feedbackEntries.length && !feedbackError" class="history-empty">
-            暂无反馈标注。
+          <p v-if="!feedbackLoading && !filteredFeedbackEntries.length && !feedbackError" class="history-empty">
+            <template v-if="feedbackDateFrom || feedbackDateTo">
+              当前筛选条件下无反馈记录。
+            </template>
+            <template v-else>
+              暂无反馈标注。
+            </template>
           </p>
-          <ul v-if="feedbackEntries.length" class="manage-list">
+          <ul v-if="filteredFeedbackEntries.length" class="manage-list">
             <li
-              v-for="entry in feedbackEntries"
+              v-for="entry in filteredFeedbackEntries"
               :key="entry.folder_name"
               class="manage-row"
               :class="{ active: selectedFeedbackFolder === entry.folder_name }"
@@ -2342,7 +2407,10 @@ onUnmounted(() => {
               <button type="button" class="manage-row-main" @click="selectedFeedbackFolder = entry.folder_name">
                 <span class="manage-row-top">
                   <span class="pill sm" :class="feedbackResultText(entry)">{{ feedbackResultText(entry) }}</span>
-                  <span class="history-kind">{{ judgmentText(entry.judgment) }}</span>
+                  <span class="feedback-row-right">
+                    <span class="feedback-audit-label">人工审核</span>
+                    <span class="pill sm feedback-judgment-pill" :class="entry.judgment">{{ judgmentText(entry.judgment) }}</span>
+                  </span>
                 </span>
                 <span class="history-file">{{ entry.task_id || entry.folder_name }}</span>
               </button>
@@ -2368,7 +2436,7 @@ onUnmounted(() => {
               </div>
               <div class="manage-detail-body">
                 <dl class="manage-facts">
-                  <div><dt>当前标注</dt><dd>{{ judgmentText(selectedFeedback.judgment) }}</dd></div>
+                  <div><dt>当前标注</dt><dd class="feedback-detail-judgment">{{ judgmentText(selectedFeedback.judgment) }}<span class="feedback-check">✔</span></dd></div>
                   <div><dt>AI 原判</dt><dd>{{ feedbackResultText(selectedFeedback) }} · {{ feedbackConfidenceText(selectedFeedback) }}</dd></div>
                   <div><dt>任务</dt><dd>{{ selectedFeedback.task_id || '—' }}</dd></div>
                   <div><dt>时间</dt><dd>{{ selectedFeedback.timestamp || selectedFeedback.updated_at || '—' }}</dd></div>
@@ -2390,14 +2458,6 @@ onUnmounted(() => {
                     @click="changeFeedbackJudgment(selectedFeedback, 'wrong')"
                   >
                     确认为错误
-                  </button>
-                  <button
-                    type="button"
-                    class="btn btn-feedback btn-feedback-suspicious"
-                    :disabled="feedbackActionBusy[selectedFeedback.folder_name + ':suspicious']"
-                    @click="changeFeedbackJudgment(selectedFeedback, 'suspicious')"
-                  >
-                    标为疑似
                   </button>
                   <button
                     type="button"
@@ -2797,6 +2857,35 @@ onUnmounted(() => {
   flex-wrap: wrap;
 }
 
+.manage-date-filter-row {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.manage-date-filter-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.45rem;
+}
+
+.manage-date-filter-wrap .filter-label {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--text-muted);
+}
+
+.manage-date-filter-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+  width: 100%;
+}
+
 .manage-tab,
 .filter-chip {
   border: 1px solid var(--border);
@@ -2815,6 +2904,109 @@ onUnmounted(() => {
   border-color: #93c5fd;
   background: #eff6ff;
   color: var(--brand);
+}
+
+.filter-label {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--text-muted);
+  padding: 0 0.2rem;
+  white-space: nowrap;
+}
+
+.filter-date-input {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 0.35rem 0.55rem;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.filter-date-input:focus {
+  border-color: var(--brand);
+  outline: none;
+}
+
+.filter-date-sep {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--text-muted);
+  padding: 0 0.15rem;
+}
+
+.feedback-date-pill {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 0.1rem 0.38rem;
+  border-radius: 999px;
+  background: #e2e8f0;
+  color: #475569;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* 反馈列表右侧区域：人工审核 + 判定 pill */
+.feedback-row-right {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin-left: auto;
+}
+
+.feedback-audit-label {
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.2;
+  color: #64748b;
+  white-space: nowrap;
+}
+
+.feedback-judgment-pill {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 0.1rem 0.38rem;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.feedback-judgment-pill.correct {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.feedback-judgment-pill.wrong {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.feedback-judgment-pill.suspicious {
+  background: #ffedd5;
+  color: #9a3412;
+}
+
+/* 反馈详情标注行 */
+.feedback-detail-judgment {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.feedback-check {
+  color: #16a34a;
+  font-weight: 700;
+  font-size: 0.75rem;
 }
 
 .manage-summary-row {
