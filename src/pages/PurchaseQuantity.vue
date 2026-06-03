@@ -994,10 +994,6 @@ const mgrSmeltersTagsMore = computed(() =>
 )
 const mgrSmeltersTagsRest = computed(() => forecastMgrSelectedSmelters.value.slice(MULTI_PREVIEW_TAG_COUNT))
 
-const whWarehousesTagsPreview = computed(() => forecastWhSelectedWarehouses.value ? [forecastWhSelectedWarehouses.value] : [])
-const whWarehousesTagsMore = computed(() => 0)
-const whWarehousesTagsRest = computed(() => [] as string[])
-
 const whSmeltersTagsPreview = computed(() => forecastWhSelectedSmelters.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
 const whSmeltersTagsMore = computed(() =>
   Math.max(0, forecastWhSelectedSmelters.value.length - MULTI_PREVIEW_TAG_COUNT)
@@ -1890,8 +1886,8 @@ async function fetchDetailData() {
         await triggerPrediction({
           warehouse,
           smelter,
-          startDate: forecastWhFilters.startDate,
-          endDate: forecastWhFilters.endDate,
+          startDate: forecastWhFilters.value.startDate,
+          endDate: forecastWhFilters.value.endDate,
         })
       } catch (triggerErr) {
         console.warn('触发预测失败，尝试读取已有结果:', triggerErr)

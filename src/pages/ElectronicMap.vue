@@ -5672,16 +5672,6 @@ async function runForecastForWarehouse(warehouse: MapPoint) {
   }
 }
 
-async function runComparisonAndForecastForWarehouse(
-  warehouse: MapPoint,
-  options?: RunComparisonOptions,
-) {
-  await Promise.allSettled([
-    runComparisonForWarehouse(warehouse, options),
-    runForecastForWarehouse(warehouse),
-  ])
-}
-
 /** 地图弹层/副标题展示：仅地址等，不含 id（兼容旧缓存「地址 · id: n」） */
 function mapPointSubtitleForDisplay(raw: Record<string, unknown>, legacySubtitle: string): string {
   const addr = addressText(raw).trim()
