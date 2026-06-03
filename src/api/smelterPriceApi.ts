@@ -8,6 +8,7 @@ export interface SmelterPriceRow {
   price: number
   date: string
   isLatest: boolean
+  category?: string
 }
 
 export interface SmelterPriceHistoryRow {
@@ -80,6 +81,7 @@ function pickSmelterRow(r: Record<string, unknown>): SmelterPriceRow {
     price: Number(r['标定价格'] ?? 0),
     date: String(r['定价日期'] ?? ''),
     isLatest: r['是否当前冶炼厂最新'] === true,
+    category: String(r['品类'] ?? r['category_name'] ?? r['category'] ?? ''),
   }
 }
 
@@ -120,12 +122,13 @@ function throwIfFailed(res: Response, data: unknown, ctx: string): void {
 
 function filterCalibrationRows(
   rows: SmelterPriceRow[],
-  opts: { smelter_id?: number; date_from?: string; date_to?: string },
+  opts: { smelter_id?: number; date_from?: string; date_to?: string; category?: string },
 ): SmelterPriceRow[] {
   return rows.filter((r) => {
     if (opts.smelter_id != null && opts.smelter_id > 0 && r.smelterId !== opts.smelter_id) return false
     if (opts.date_from && r.date < opts.date_from) return false
     if (opts.date_to && r.date > opts.date_to) return false
+    if (opts.category && opts.category !== '' && r.category !== opts.category) return false
     return true
   })
 }

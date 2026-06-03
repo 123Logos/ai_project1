@@ -110,7 +110,7 @@
         <LeadPriceQuery />
       </section>
       <section v-else-if="activeSection === 'prediction' && predictionSubTab === 'smelterPrice'" class="panel inner-page">
-        <SmelterPriceQuery @maintain="openAiPricingSmelterMaintain" />
+        <SmelterPriceQuery @navigateToQuote="activeSection = 'price'" />
       </section>
       <section v-else-if="activeSection === 'map'" class="panel emap-panel">
         <ElectronicMap />
@@ -274,11 +274,6 @@ function onPageShow(ev: PageTransitionEvent) {
 function onSelectPredictionSub(key: PredictionSubKey) {
   activeSection.value = 'prediction'
   predictionSubTab.value = key
-}
-
-function openAiPricingSmelterMaintain() {
-  sessionStorage.setItem('ai_pricing_active_page', 'smelterPrice')
-  activeSection.value = 'aiPricing'
 }
 
 onMounted(() => {
