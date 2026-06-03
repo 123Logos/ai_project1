@@ -26,7 +26,7 @@
             预测明细
           </div>
         </div>
-        <button class="btn btn-secondary" @click="exportExcel" :disabled="loading">导出Excel</button>
+        <button class="btn btn-secondary" @click="exportCsv" :disabled="loading">导出CSV</button>
       </div>
     </div>
 
@@ -412,7 +412,7 @@
         <span>预测趋势（汇总）</span>
         <span v-if="chartLoading" class="unit-hint">加载中…</span>
       </div>
-      <ForecastBasisPanel :summary="chartSummaryAnalysis" :placeholder="chartBasisPlaceholder" />
+      <ForecastBasisPanel :summary="chartSummaryText" :placeholder="chartBasisPlaceholder" />
       <div class="summary-chart-wrap">
         <p v-if="!chartLoading && chartDates.length === 0" class="chart-empty-hint">{{ chartEmptyHint }}</p>
         <canvas
@@ -542,8 +542,8 @@
                 <th>大区经理</th>
                 <th>冶炼厂</th>
                 <th>品类</th>
-                <th>预测重量(吨)</th>
-                <th>预测依据</th>
+                <th>预计发货量(吨)</th>
+                <th>综合分析</th>
               </tr>
             </thead>
             <tbody>
@@ -558,9 +558,9 @@
                 <td>{{ row.regionalManager }}</td>
                 <td>{{ row.smelter || '—' }}</td>
                 <td>{{ row.productVariety }}</td>
-                <td>{{ row.predictedWeight.toFixed(2) }}</td>
+                <td>{{ row.expectedShipment.toFixed(2) }}</td>
                 <td class="analysis-cell">
-                  <span class="analysis-cell-preview">{{ truncateAnalysis(row.analysis) }}</span>
+                  <span class="analysis-cell-preview">{{ truncateAnalysis(row.comprehensiveAnalysis) }}</span>
                   <span class="analysis-cell-action">查看</span>
                 </td>
               </tr>
@@ -583,6 +583,7 @@
       :title="analysisDrawerTitle"
       :analysis="analysisDrawerText"
       :meta-lines="analysisDrawerMeta"
+      :sections="analysisDrawerSections"
       @close="closeAnalysisDrawer"
     />
 
@@ -666,10 +667,10 @@ import { FORECAST_DETAILS_FETCH_PAGE_SIZE } from '../api/fetchLimits'
 import { fetchForecastDimensionOptions } from '../api/dimensionOptions'
 import { fetchCategoryMapping } from '../api/tlApi'
 import {
-  fetchForecastChart,
-  normalizeForecastDetailList,
-  type PrdForecastDetailRow,
-} from '../api/forecastApi'
+  fetchAllPredictResults,
+  aggregateChartFromResults,
+  type PredictResultRow,
+} from '../api/predictApi'
 import ForecastBasisPanel from '../components/ForecastBasisPanel.vue'
 import PredictionAnalysisDrawer from '../components/PredictionAnalysisDrawer.vue'
 import {
@@ -677,27 +678,10 @@ import {
   paginatePivotRowsByGroup,
   pivotGroupTotalPages,
 } from '../utils/pivotTablePagination'
-import {
-  buildLatestRegionalManagerByWarehouse,
-  resolveRegionalManagerForWarehouse,
-} from '../utils/warehouseLatestRegionalManager'
 
 const pivotGroupsPerPage = PIVOT_GROUPS_PER_PAGE
 
 // ==================== 类型定义 ====================
-/** 与「送货量预测/明细」接口 items 项一致 */
-interface ForecastDetailItem {
-  target_date: string
-  regional_manager?: string
-  smelter?: string | null
-  warehouse?: string
-  product_variety?: string
-  predicted_weight: string
-  wma_base?: string
-  week_coef?: string
-  analysis?: string | null
-}
-
 interface ForecastPivotCell {
   text: string
   isPlaceholder: boolean
@@ -729,7 +713,6 @@ interface ForecastChartMeta {
 
 // ==================== 状态 ====================
 const loading = ref(false)
-const detailData = ref<ForecastDetailItem[]>([])
 
 const detailTableTotalPages = computed(() =>
   Math.max(1, Math.ceil(detailRows.value.length / detailTablePageSize)),
@@ -743,11 +726,8 @@ const chartBasisPlaceholder = computed(() => {
   if (!forecastQueried.value) {
     return '请先选择筛选条件并点击「查询」。'
   }
-  if (chartLoadFailed.value) {
-    return '汇总依据加载失败，请检查 GET /forecast/chart 是否可用（需返回 summary_analysis）。'
-  }
-  if (chartDates.value.length > 0 && !chartSummaryAnalysis.value.trim()) {
-    return 'chart 接口已返回趋势数据，但未包含 summary_analysis 字段，请确认后端已按 v1.1.0 联调说明部署。'
+  if (chartDates.value.length > 0 && !chartSummaryText.value.trim()) {
+    return '暂无汇总预测依据'
   }
   return '暂无预测依据'
 })
@@ -792,8 +772,7 @@ const forecastQueried = ref(false)
 const forecastActiveTab = ref<'warehouse' | 'manager' | 'detail'>('warehouse')
 
 const chartLoading = ref(false)
-const chartLoadFailed = ref(false)
-const chartSummaryAnalysis = ref('')
+const chartSummaryText = ref('')
 const chartDates = ref<string[]>([])
 const chartTotalByDate = ref<number[]>([])
 const summaryChartCanvasRef = ref<HTMLCanvasElement | null>(null)
@@ -811,7 +790,7 @@ interface SummaryChartLayout {
 }
 let summaryChartLayout: SummaryChartLayout | null = null
 
-const detailRows = ref<PrdForecastDetailRow[]>([])
+const detailRows = ref<PredictResultRow[]>([])
 const detailTabFilters = ref({ startDate: '', endDate: '' })
 const detailTablePage = ref(1)
 const detailTablePageSize = 20
@@ -820,6 +799,7 @@ const analysisDrawerVisible = ref(false)
 const analysisDrawerTitle = ref('预测依据详情')
 const analysisDrawerText = ref<string | null>(null)
 const analysisDrawerMeta = ref<string[]>([])
+const analysisDrawerSections = ref<Array<{ title: string; content: string }>>([])
 const forecastDateColumns = ref<string[]>([])
 const forecastManagerTableRows = ref<ForecastManagerTableRow[]>([])
 const forecastWarehouseTableRows = ref<ForecastWarehouseTableRow[]>([])
@@ -1137,7 +1117,7 @@ function validateDetailTabDateRange() {
   validateForecastDateRange(detailTabFilters)
 }
 
-function rowKey(row: PrdForecastDetailRow) {
+function rowKey(row: PredictResultRow) {
   return `${row.targetDate}|${row.warehouse}|${row.productVariety}|${row.regionalManager}|${row.smelter ?? ''}`
 }
 
@@ -1147,16 +1127,26 @@ function truncateAnalysis(analysis: string | null | undefined, maxLen = 80) {
   return t.length <= maxLen ? t : `${t.slice(0, maxLen)}…`
 }
 
-function openDetailAnalysis(row: PrdForecastDetailRow) {
+function openDetailAnalysis(row: PredictResultRow) {
   analysisDrawerTitle.value = `预测依据 · ${row.targetDate}`
-  analysisDrawerText.value = row.analysis
+  analysisDrawerText.value = row.comprehensiveAnalysis || row.analysis
   analysisDrawerMeta.value = [
     `仓库：${row.warehouse}`,
     `大区经理：${row.regionalManager}`,
     `品类：${row.productVariety}`,
     ...(row.smelter ? [`冶炼厂：${row.smelter}`] : []),
-    `预测重量：${row.predictedWeight.toFixed(2)} 吨`,
+    `预计发货量：${row.expectedShipment.toFixed(2)} 吨`,
+    ...(row.shipProbability ? [`发货概率：${row.shipProbability}`] : []),
+    ...(row.confidenceLevel ? [`预测置信度：${row.confidenceLevel}`] : []),
+    ...(row.expectedShipDate ? [`预计发货时间：${row.expectedShipDate}`] : []),
   ]
+  const sections: Array<{ title: string; content: string }> = []
+  if (row.historyAnalysis) sections.push({ title: '历史发货规律分析', content: row.historyAnalysis })
+  if (row.priceSensitivityAnalysis) sections.push({ title: '价格敏感度分析', content: row.priceSensitivityAnalysis })
+  if (row.priceCompetitivenessAnalysis) sections.push({ title: '目标冶炼厂价格竞争力分析', content: row.priceCompetitivenessAnalysis })
+  if (row.holidayAnalysis) sections.push({ title: '节假日影响', content: row.holidayAnalysis })
+  if (row.weatherAnalysis) sections.push({ title: '天气物流影响', content: row.weatherAnalysis })
+  analysisDrawerSections.value = sections
   analysisDrawerVisible.value = true
 }
 
@@ -1833,8 +1823,9 @@ function smelterKey(s: string | null | undefined) {
   return t ? t : '未知'
 }
 
-function rebuildForecastPivotFromDetail(items: ForecastDetailItem[]) {
-  const dates = [...new Set(items.map((i) => i.target_date))].sort().reverse()
+/** 从 v2 明细行重建透视表（客户端聚合 expectedShipment） */
+function rebuildForecastPivotFromResults(rows: PredictResultRow[]) {
+  const dates = [...new Set(rows.map((r) => r.targetDate))].sort().reverse()
   forecastDateColumns.value = dates
 
   const cellFor = (dateMap: Map<string, number>, date: string): ForecastPivotCell => {
@@ -1848,157 +1839,100 @@ function rebuildForecastPivotFromDetail(items: ForecastDetailItem[]) {
   const mgrMap = new Map<string, Map<string, number>>()
   const whMap = new Map<string, Map<string, number>>()
 
-  const latestRmByWarehouse = buildLatestRegionalManagerByWarehouse(
-    items,
-    (i) => i.warehouse || '未知',
-    (i) => i.regional_manager || '未知',
-    (i) => i.target_date,
-  )
-
-  items.forEach((item) => {
-    const smelterRaw = smelterKey(item.smelter)
-    const rmRaw = item.regional_manager || '未知'
-    const whRaw = item.warehouse || '未知'
-    const w = parseFloat(item.predicted_weight)
-    const wt = Number.isNaN(w) ? 0 : w
+  rows.forEach((row) => {
+    const smelterRaw = smelterKey(row.smelter)
+    const rmRaw = row.regionalManager || '未知'
+    const whRaw = row.warehouse || '未知'
 
     const mk = `${rmRaw}|${smelterRaw}`
     if (!mgrMap.has(mk)) mgrMap.set(mk, new Map())
-    const md = mgrMap.get(mk)!
-    md.set(item.target_date, (md.get(item.target_date) || 0) + wt)
+    mgrMap.get(mk)!.set(row.targetDate, (mgrMap.get(mk)!.get(row.targetDate) || 0) + row.expectedShipment)
 
-    const whRmRaw = resolveRegionalManagerForWarehouse(whRaw, rmRaw, latestRmByWarehouse)
-    const wk = `${whRaw}|${whRmRaw}|${smelterRaw}`
+    const wk = `${whRaw}|${rmRaw}|${smelterRaw}`
     if (!whMap.has(wk)) whMap.set(wk, new Map())
-    const wd = whMap.get(wk)!
-    wd.set(item.target_date, (wd.get(item.target_date) || 0) + wt)
+    whMap.get(wk)!.set(row.targetDate, (whMap.get(wk)!.get(row.targetDate) || 0) + row.expectedShipment)
   })
 
-  const managerRows: ForecastManagerTableRow[] = []
-  mgrMap.forEach((dateMap, key) => {
+  forecastManagerTableRows.value = Array.from(mgrMap.entries()).map(([key, dateMap]) => {
     const [rmRaw, smelterRaw] = key.split('|')
-    managerRows.push({
+    return {
       id: key,
       regional_manager: rmRaw === '未知' ? '-' : rmRaw,
       smelter: smelterRaw === '未知' ? '-' : smelterRaw,
       cells: dates.map((d) => cellFor(dateMap, d)),
-    })
+    }
   })
 
-  const warehouseRows: ForecastWarehouseTableRow[] = []
-  whMap.forEach((dateMap, key) => {
+  forecastWarehouseTableRows.value = Array.from(whMap.entries()).map(([key, dateMap]) => {
     const [whRaw, rmRaw, smelterRaw] = key.split('|')
-    warehouseRows.push({
+    return {
       id: key,
       warehouse: whRaw === '未知' ? '-' : whRaw,
       regional_manager: rmRaw === '未知' ? '-' : rmRaw,
       smelter: smelterRaw === '未知' ? '-' : smelterRaw,
       cells: dates.map((d) => cellFor(dateMap, d)),
-    })
+    }
   })
 
-  forecastManagerTableRows.value = managerRows
-  forecastWarehouseTableRows.value = warehouseRows
   forecastManagerCurrentPage.value = 1
   forecastWarehouseCurrentPage.value = 1
 }
 
-function detailRowToLegacy(row: PrdForecastDetailRow): ForecastDetailItem {
-  return {
-    target_date: row.targetDate,
-    regional_manager: row.regionalManager,
-    smelter: row.smelter,
-    warehouse: row.warehouse,
-    product_variety: row.productVariety,
-    predicted_weight: String(row.predictedWeight),
-    wma_base: row.wmaBase != null ? String(row.wmaBase) : undefined,
-    week_coef: row.weekCoef != null ? String(row.weekCoef) : undefined,
-    analysis: row.analysis,
-  }
+/** 解析预测结果中的错误信息 */
+function parsePredictError(e: unknown): string {
+  const err = e as { response?: { data?: { message?: string; detail?: string } }; message?: string }
+  const data = err.response?.data
+  return (
+    (typeof data?.message === 'string' && data.message) ||
+    (typeof data?.detail === 'string' && data.detail) ||
+    err.message ||
+    '获取预测明细失败'
+  )
 }
 
-async function fetchAllDetailRows(
-  base: Record<string, string | number | string[] | undefined>,
-): Promise<PrdForecastDetailRow[]> {
-  const page_size = FORECAST_DETAILS_FETCH_PAGE_SIZE
-  const rawItems: unknown[] = []
-  let page = 1
-  while (page <= 200) {
-    const params: Record<string, unknown> = { ...base, page, page_size }
-    const response = await axios.get(ApiPaths.forecastDetail, { params })
-    const data = response.data as { items?: unknown[]; total?: number }
-    const items = data.items ?? []
-    rawItems.push(...items)
-    if (items.length === 0) break
-    if (items.length < page_size) break
-    if (typeof data.total === 'number' && rawItems.length >= data.total) break
-    page++
-  }
-  return normalizeForecastDetailList(rawItems)
-}
-
-// ==================== 从 chart + 明细拉取并填充 ====================
+// ==================== 从 v2 明细拉取并填充 ====================
 async function fetchDetailData() {
   loading.value = true
-  chartLoadFailed.value = false
   const base = buildForecastFilterParams()
-  const emptyChart = {
-    dates: [] as string[],
-    totalByDate: [] as number[],
-    byRegionalManager: [] as { regionalManager: string; totals: number[] }[],
-    warehouseProfiles: [] as unknown[],
-    summaryAnalysis: '',
-  }
-
-  const chartResult = await fetchForecastChart(base).catch((e: unknown) => {
-    console.error('获取预测图表失败', e)
-    chartLoadFailed.value = true
-    return emptyChart
-  })
-  chartSummaryAnalysis.value = chartResult.summaryAnalysis
-  chartDates.value = chartResult.dates
-  chartTotalByDate.value = chartResult.totalByDate
-  await nextTick()
-  drawSummaryChart()
 
   try {
-    const normalized = await fetchAllDetailRows(base)
-    detailRows.value = normalized
-    const legacy = normalized.map(detailRowToLegacy)
-    detailData.value = legacy
-    rebuildForecastPivotFromDetail(legacy)
-    mergeSmelterOptionsFromForecastItems(legacy)
-    mergeVarietyOptionsFromForecastItems(legacy)
+    const rows = await fetchAllPredictResults(base)
+    detailRows.value = rows
+
+    // 客户端图表聚合（替代 /forecast/chart）
+    const chart = aggregateChartFromResults(rows)
+    chartDates.value = chart.dates
+    chartTotalByDate.value = chart.totalByDate
+
+    // 汇总预测依据（从第一条记录的综合分析提取）
+    chartSummaryText.value = rows.length > 0 ? (rows[0].comprehensiveAnalysis || '') : ''
+
+    await nextTick()
+    drawSummaryChart()
+
+    rebuildForecastPivotFromResults(rows)
     detailTablePage.value = 1
   } catch (error: unknown) {
     console.error('获取预测明细失败', error)
     detailRows.value = []
-    detailData.value = []
-    rebuildForecastPivotFromDetail([])
-    const err = error as { response?: { data?: { message?: string; detail?: string } }; message?: string }
-    const data = err.response?.data
-    const msg =
-      (typeof data?.message === 'string' && data.message) ||
-      (typeof data?.detail === 'string' && data.detail) ||
-      err.message ||
-      '获取预测明细失败'
-    showError(msg, ['汇总趋势与预测依据仍来自 chart 接口；请检查明细接口或筛选条件'])
+    chartDates.value = []
+    chartTotalByDate.value = []
+    chartSummaryText.value = ''
+    rebuildForecastPivotFromResults([])
+    showError(parsePredictError(error))
   } finally {
     loading.value = false
-    chartLoading.value = false
   }
 }
 
 // ==================== 查询 ====================
 function clearForecastResults() {
   forecastQueried.value = false
-  chartLoadFailed.value = false
-  chartSummaryAnalysis.value = ''
+  chartSummaryText.value = ''
   chartDates.value = []
   chartTotalByDate.value = []
   detailRows.value = []
-  detailData.value = []
-  rebuildForecastPivotFromDetail([])
+  rebuildForecastPivotFromResults([])
   detailTablePage.value = 1
 }
 
@@ -2058,14 +1992,14 @@ function openManagerRowTrend(row: ForecastManagerTableRow) {
   const dates = forecastDateColumns.value
   const values = row.cells.map((c) => parseCellWeight(c))
   const [rmRaw, smelterRaw] = row.id.split('|')
-  const slice = detailData.value.filter(
-    (d) => (d.regional_manager || '未知') === rmRaw && smelterKey(d.smelter) === smelterRaw
+  const slice = detailRows.value.filter(
+    (d) => (d.regionalManager || '未知') === rmRaw && smelterKey(d.smelter) === smelterRaw
   )
   const whs = [
     ...new Set(slice.map((d) => d.warehouse?.trim()).filter((x): x is string => !!x)),
   ].sort((a, b) => a.localeCompare(b, 'zh-CN'))
   const vars = [
-    ...new Set(slice.map((d) => d.product_variety?.trim()).filter((x): x is string => !!x)),
+    ...new Set(slice.map((d) => d.productVariety?.trim()).filter((x): x is string => !!x)),
   ].sort((a, b) => a.localeCompare(b, 'zh-CN'))
 
   modalChartMeta.value = {
@@ -2084,14 +2018,14 @@ function openWarehouseRowTrend(row: ForecastWarehouseTableRow) {
   const dates = forecastDateColumns.value
   const values = row.cells.map((c) => parseCellWeight(c))
   const [whRaw, rmRaw, smelterRaw] = row.id.split('|')
-  const slice = detailData.value.filter(
+  const slice = detailRows.value.filter(
     (d) =>
       (d.warehouse || '未知') === whRaw &&
-      (d.regional_manager || '未知') === rmRaw &&
+      (d.regionalManager || '未知') === rmRaw &&
       smelterKey(d.smelter) === smelterRaw
   )
   const vars = [
-    ...new Set(slice.map((d) => d.product_variety?.trim()).filter((x): x is string => !!x)),
+    ...new Set(slice.map((d) => d.productVariety?.trim()).filter((x): x is string => !!x)),
   ].sort((a, b) => a.localeCompare(b, 'zh-CN'))
 
   modalChartMeta.value = {
@@ -2360,33 +2294,34 @@ onBeforeUnmount(() => {
   }
 })
 
-// ==================== 导出预测明细（服务端 Excel） ====================
-async function exportExcel() {
-  const err = getForecastFilterValidationError()
-  if (err) {
-    showError(err)
+// ==================== 导出预测明细（客户端 CSV） ====================
+function exportCsv() {
+  if (detailRows.value.length === 0) {
+    showError('没有可导出的数据，请先查询', [])
     return
   }
-  const params = buildForecastFilterParams()
-
-  const response = await axios
-    .get(ApiPaths.forecastExport, { params, responseType: 'blob' })
-    .catch((e: unknown) => {
-      const err = e as { response?: { data?: { message?: string } }; message?: string }
-      console.error('导出失败', e)
-      showError(err?.response?.data?.message || err?.message || '导出失败', [])
-      return null
-    })
-
-  if (!response) return
-
-  const blob = new Blob([response.data], {
-    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  })
+  const header = '预测日期,仓库,大区经理,冶炼厂,品类,预计发货量(吨),发货概率,预测置信度,综合分析'
+  const rows = detailRows.value.map((r) =>
+    [
+      r.targetDate,
+      r.warehouse,
+      r.regionalManager,
+      r.smelter || '',
+      r.productVariety,
+      r.expectedShipment.toFixed(2),
+      r.shipProbability || '',
+      r.confidenceLevel || '',
+      (r.comprehensiveAnalysis || '').replace(/\n/g, ' '),
+    ]
+      .map(escapeCsvCell)
+      .join(','),
+  )
+  const csv = '﻿' + [header, ...rows].join('\n')
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const link = document.createElement('a')
   const timestamp = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15)
   link.href = URL.createObjectURL(blob)
-  link.download = `送货量预测_${timestamp}.xlsx`
+  link.download = `送货量预测_${timestamp}.csv`
   link.click()
   URL.revokeObjectURL(link.href)
 }
