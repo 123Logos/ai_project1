@@ -5194,13 +5194,11 @@ function openComparisonModal() {
   if (warehouseDistanceMonitorOn.value) {
     exitWarehouseDistanceMonitorMode(false)
   }
-  const wasVisible = comparisonModalVisible.value
   const wh = selectedWarehouse.value?.title?.trim()
   comparisonModalTitle.value = wh ? `比价预测结果：${wh}` : '比价预测结果'
-  if (!wasVisible) {
-    comparisonSectionCollapsed.value = false
-    forecastSectionCollapsed.value = false
-  }
+  compareError.value = ''
+  comparisonSectionCollapsed.value = false
+  forecastSectionCollapsed.value = false
   comparisonModalVisible.value = true
   const sel = selectedWarehouse.value
   if (sel && comparisonRanks.value.length) {

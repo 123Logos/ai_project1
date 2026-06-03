@@ -113,6 +113,13 @@
                 >
                   修改
                 </button>
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-danger ms-1"
+                  @click="confirmDelete(row)"
+                >
+                  删除
+                </button>
               </td>
             </tr>
           </tbody>
@@ -173,6 +180,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { fetchTlCategories, fetchTlWarehousesAll } from '@/api/tlApi'
 import {
+  deleteWarehouseInventory,
   downloadWarehouseInventoryTemplate,
   fetchWarehouseCurrentStockList,
   importWarehouseCurrentStockExcel,
@@ -346,6 +354,10 @@ function closeEditDialog() {
 }
 
 async function confirmEdit() {
+  if (!editForm.value.id) {
+    editError.value = '记录信息缺失，无法修改'
+    return
+  }
   if (!editForm.value.categoryId) {
     editError.value = '品类信息缺失，无法修改'
     return
@@ -354,7 +366,7 @@ async function confirmEdit() {
   editError.value = ''
   try {
     await saveWarehouseInventoryManual({
-      warehouseId: editForm.value.warehouseId,
+      warehouseId: editForm.value.id,
       categoryId: editForm.value.categoryId,
       stock: editForm.value.stock,
       stockDate: editForm.value.stockDate || undefined,
@@ -366,6 +378,28 @@ async function confirmEdit() {
     editError.value = formatApiError(e, '修改库存')
   } finally {
     editLoading.value = false
+  }
+}
+
+const deleteLoading = ref(false)
+
+async function confirmDelete(row: WarehouseCurrentStockRow) {
+  if (deleteLoading.value) return
+  if (!row.id) {
+    listError.value = '记录信息缺失，无法删除'
+    return
+  }
+  if (!window.confirm(`确定删除「${row.warehouseName} - ${row.categoryName || '—'}」的库存记录？删除后不可恢复。`)) return
+  deleteLoading.value = true
+  listError.value = ''
+  try {
+    await deleteWarehouseInventory(row.id, row.stockDate || undefined)
+    message.value = '删除成功'
+    await loadList()
+  } catch (e) {
+    listError.value = formatApiError(e, '删除库存')
+  } finally {
+    deleteLoading.value = false
   }
 }
 
