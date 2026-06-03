@@ -553,7 +553,6 @@ function getHistoryFilterValidationError(tab: 'manager' | 'warehouse' = activeTa
   }
   const missing: string[] = []
   if (warehouseSelectedWarehouses.value.length === 0) missing.push('仓库')
-  if (warehouseSelectedManagers.value.length === 0) missing.push('大区经理')
   if (warehouseSelectedSmelters.value.length === 0) missing.push('冶炼厂')
   if (missing.length > 0) return `请先选择${missing.join('、')}后再查询`
   const f = warehouseFilters.value
