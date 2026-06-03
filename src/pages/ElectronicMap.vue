@@ -5672,16 +5672,6 @@ async function runForecastForWarehouse(warehouse: MapPoint) {
   }
 }
 
-async function runComparisonAndForecastForWarehouse(
-  warehouse: MapPoint,
-  options?: RunComparisonOptions,
-) {
-  await Promise.allSettled([
-    runComparisonForWarehouse(warehouse, options),
-    runForecastForWarehouse(warehouse),
-  ])
-}
-
 /** 地图弹层/副标题展示：仅地址等，不含 id（兼容旧缓存「地址 · id: n」） */
 function mapPointSubtitleForDisplay(raw: Record<string, unknown>, legacySubtitle: string): string {
   const addr = addressText(raw).trim()
@@ -8554,11 +8544,6 @@ onBeforeUnmount(() => {
   min-height: 0;
 }
 
-.leaflet-tooltip.emap-marker-hover-tip .emap-wh-stock-block,
-.leaflet-popup-content .emap-wh-stock-block {
-  min-height: 80px;
-  flex-grow: 1;
-}
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-head,
 .leaflet-popup-content .emap-wh-hover-freight-head {
@@ -8575,8 +8560,8 @@ onBeforeUnmount(() => {
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-scroll,
 .leaflet-popup-content .emap-wh-hover-freight-scroll {
-  max-height: 450px;
-  overflow-y: auto;
+  max-height: none;
+  overflow-y: visible;
   overflow-x: hidden;
   padding-right: 2px;
   display: flex;
@@ -8586,7 +8571,7 @@ onBeforeUnmount(() => {
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-stock-block .emap-wh-hover-freight-scroll,
 .leaflet-popup-content .emap-wh-stock-block .emap-wh-hover-freight-scroll {
-  min-height: 60px;
+  min-height: 0;
 }
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-item,

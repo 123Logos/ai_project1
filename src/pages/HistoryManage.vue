@@ -1329,8 +1329,8 @@ onMounted(() => {
 .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .data-table th, .data-table td { padding: 10px 12px; text-align: center; border-bottom: 1px solid #E5E9F2; white-space: nowrap; }
 .data-table th { background-color: #E8F0F8; font-weight: 600; color: #2c3e50; }
-.data-table tbody tr { transition: background 0.15s ease, transform 0.15s ease; }
-.data-table tbody tr:hover { background-color: #f0f7ff; transform: scale(1.003); }
+.data-table tbody tr { transition: background 0.15s ease; }
+.data-table tbody tr:hover { background-color: #f0f7ff; }
 .empty-data { text-align: center; padding: 40px; color: #909399; }
 .pagination { display: flex; justify-content: flex-end; align-items: center; gap: 12px; margin-top: 16px; }
 .pagination button { padding: 4px 12px; border: 1px solid #E5E9F2; background: white; border-radius: 4px; cursor: pointer; }

@@ -33,7 +33,7 @@
     <div v-if="forecastActiveTab === 'manager'" class="card filter-card">
       <div class="filter-row">
           <div class="filter-item">
-            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
+            <label>送货日期</label>
             <div class="date-range">
               <input
                 type="date"
@@ -146,7 +146,7 @@
     <div v-if="forecastActiveTab === 'warehouse'" class="card filter-card">
       <div class="filter-row">
           <div class="filter-item">
-            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
+            <label>送货日期 <span class="date-hint"></span></label>
             <div class="date-range">
               <input
                 type="date"
@@ -253,7 +253,7 @@
     <div v-if="forecastActiveTab === 'detail'" class="card filter-card">
       <div class="filter-row">
           <div class="filter-item">
-            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
+            <label>送货日期 <span class="date-hint"></span></label>
             <div class="date-range">
               <input
                 type="date"
@@ -1077,7 +1077,7 @@ function applyDefaultForecastDateRange() {
   detailTabFilters.value = { ...range }
 }
 
-// ==================== 验证日期范围（预测最多 15 天） ====================
+// ==================== 验证日期范围 ====================
 function validateForecastDateRange(f: Ref<{ startDate: string; endDate: string }>) {
   const startStr = f.value.startDate
   const endStr = f.value.endDate
@@ -1087,14 +1087,6 @@ function validateForecastDateRange(f: Ref<{ startDate: string; endDate: string }
   if (start > end) {
     showError('开始日期不能晚于结束日期', [])
     f.value.endDate = startStr
-    return
-  }
-  const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
-  if (days > 14) {
-    showError('日期范围最多可选15天（含起止日）', [])
-    const cap = new Date(start)
-    cap.setDate(cap.getDate() + 14)
-    f.value.endDate = cap.toISOString().slice(0, 10)
   }
 }
 

@@ -27,7 +27,7 @@
       <div class="card filter-card">
         <div class="filter-row">
           <div class="filter-item">
-            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
+            <label>送货日期 <span class="date-hint"></span></label>
             <div class="date-range">
               <input
                 type="date"
@@ -187,7 +187,7 @@
       <div class="card filter-card">
         <div class="filter-row">
           <div class="filter-item">
-            <label>送货日期 <span class="date-hint">(最多15天)</span></label>
+            <label>送货日期 <span class="date-hint"></span></label>
             <div class="date-range">
               <input
                 type="date"
@@ -482,7 +482,7 @@ const DEFAULT_SMELTER = '河南金利金铅集团有限公司'
 function defaultHistoryDateRange(): { startDate: string; endDate: string } {
   const end = new Date()
   const start = new Date(end)
-  start.setDate(start.getDate() - 29)
+  start.setMonth(start.getMonth() - 2)
   const fmt = (d: Date) => d.toISOString().slice(0, 10)
   return { startDate: fmt(start), endDate: fmt(end) }
 }
@@ -503,13 +503,6 @@ function validateHistoryDateRange(f: Ref<{ startDate: string; endDate: string }>
     showError('开始日期不能晚于结束日期', [])
     f.value.endDate = startStr
     return
-  }
-  const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
-  if (days > 14) {
-    showError('日期范围最多可选15天（含起止日）', [])
-    const cap = new Date(start)
-    cap.setDate(cap.getDate() + 14)
-    f.value.endDate = cap.toISOString().slice(0, 10)
   }
 }
 
