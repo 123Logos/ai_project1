@@ -1019,6 +1019,10 @@ type ForecastChartMeta = {
   smelter?: string
 }
 
+/**
+ * 预测明细行（v2 响应结构）
+ * v2 将单条 analysis 拆分为六大段分析，预测量字段从 predicted_weight 改为 expectedShipment
+ */
 type ForecastDetailRow = {
   targetDate: string
   predictedWeight: number
@@ -1032,10 +1036,10 @@ type ForecastDetailRow = {
   mainFactors: string
   comprehensiveAnalysis: string
   historyAnalysis: string
-  priceAnalysis: string
-  trendAnalysis: string
-  riskAnalysis: string
-  recommendationAnalysis: string
+  priceSensitivityAnalysis: string
+  priceCompetitivenessAnalysis: string
+  holidayAnalysis: string
+  weatherAnalysis: string
 }
 
 const GAODE_TILE =
@@ -5070,24 +5074,23 @@ function parseForecastDetailError(e: unknown): string {
   )
 }
 
-/** 与 PurchaseQuantity.fetchDetailData 相同的分页请求方式 */
+/** 查询已落库的预测结果（GET /predict/results），支持分页和筛选 */
 async function fetchForecastDetailPaged(
   warehouses: string[],
-  extra?: { product_variety?: string; smelter?: string; horizon_days?: number },
+  extra?: { product_variety?: string; smelter?: string },
 ): Promise<Record<string, unknown>[]> {
-  const page_size = 500
+  const page_size = 200
   const all: Record<string, unknown>[] = []
   let page = 1
   while (page <= 50) {
-    const body: Record<string, unknown> = {
+    const params: Record<string, string | number | undefined> = {
       warehouse: warehouses[0] || '',
       page,
       page_size,
+      ...(extra?.product_variety && { product_variety: extra.product_variety }),
+      ...(extra?.smelter && { smelter: extra.smelter }),
     }
-    if (extra?.product_variety) body.product_variety = extra.product_variety
-    if (extra?.smelter) body.smelter = extra.smelter
-    if (extra?.horizon_days) body.horizon_days = extra.horizon_days
-    const response = await axios.post(ApiPaths.predictComprehensive, body)
+    const response = await axios.get(ApiPaths.predictResults, { params })
     const data = response.data as { items?: Record<string, unknown>[]; total?: number }
     const items = data.items ?? []
     all.push(...items)
@@ -5120,25 +5123,28 @@ function truncateForecastAnalysis(analysis: string | null | undefined, maxLen = 
   return `${t.slice(0, maxLen)}…`
 }
 
+/**
+ * 打开预测依据详情抽屉，展示 v2 六大段分析
+ */
 function openForecastAnalysisDrawer(row: ForecastDetailRow) {
   forecastAnalysisDrawerTitle.value = `预测依据 · ${row.targetDate}`
   forecastAnalysisDrawerText.value = row.comprehensiveAnalysis || row.analysis
   forecastAnalysisDrawerMeta.value = [
     `预测日期：${row.targetDate}`,
-    `预测重量：${row.predictedWeight.toFixed(2)} 吨`,
+    `预计发货量：${row.predictedWeight.toFixed(2)} 吨`,
     row.shipProbability ? `发货概率：${row.shipProbability}` : '',
-    row.confidenceLevel ? `置信度：${row.confidenceLevel}` : '',
-    row.expectedShipDate ? `预计发货：${row.expectedShipDate}` : '',
+    row.confidenceLevel ? `预测置信度：${row.confidenceLevel}` : '',
+    row.expectedShipDate ? `预计发货时间：${row.expectedShipDate}` : '',
     row.regionalManager ? `大区经理：${row.regionalManager}` : '',
     row.productVariety ? `品类：${row.productVariety}` : '',
     row.smelter ? `冶炼厂：${row.smelter}` : '',
   ].filter(Boolean)
   const sections: Array<{ title: string; content: string }> = []
-  if (row.historyAnalysis) sections.push({ title: '历史数据分析', content: row.historyAnalysis })
-  if (row.priceAnalysis) sections.push({ title: '价格因素分析', content: row.priceAnalysis })
-  if (row.trendAnalysis) sections.push({ title: '趋势分析', content: row.trendAnalysis })
-  if (row.riskAnalysis) sections.push({ title: '风险评估', content: row.riskAnalysis })
-  if (row.recommendationAnalysis) sections.push({ title: '建议', content: row.recommendationAnalysis })
+  if (row.historyAnalysis) sections.push({ title: '历史发货规律分析', content: row.historyAnalysis })
+  if (row.priceSensitivityAnalysis) sections.push({ title: '价格敏感度分析', content: row.priceSensitivityAnalysis })
+  if (row.priceCompetitivenessAnalysis) sections.push({ title: '目标冶炼厂价格竞争力分析', content: row.priceCompetitivenessAnalysis })
+  if (row.holidayAnalysis) sections.push({ title: '节假日影响', content: row.holidayAnalysis })
+  if (row.weatherAnalysis) sections.push({ title: '天气物流影响', content: row.weatherAnalysis })
   forecastAnalysisDrawerSections.value = sections
   forecastAnalysisDrawerVisible.value = true
 }
@@ -5147,6 +5153,10 @@ function closeForecastAnalysisDrawer() {
   forecastAnalysisDrawerVisible.value = false
 }
 
+/**
+ * 将后端返回的原始预测明细行解析为 ForecastDetailRow
+ * 兼容 v1（snake_case）和 v2（camelCase）字段名
+ */
 function parseForecastDetailRow(row: Record<string, unknown>): ForecastDetailRow | null {
   const targetDate = pickStr(row, ['target_date', 'targetDate', '预测日期', 'date'])
   if (!targetDate) return null
@@ -5154,7 +5164,7 @@ function parseForecastDetailRow(row: Record<string, unknown>): ForecastDetailRow
   const comprehensiveAnalysis = pickStr(row, ['comprehensive_analysis', 'comprehensiveAnalysis']) || analysis || ''
   return {
     targetDate,
-    predictedWeight: pickNumber(row, ['predicted_weight', 'predictedWeight', 'expected_shipment', 'expectedShipment', '预测重量', 'weight']) ?? 0,
+    predictedWeight: pickNumber(row, ['expected_shipment', 'expectedShipment', 'predicted_weight', 'predictedWeight', '预测重量', 'weight']) ?? 0,
     analysis,
     regionalManager: pickStr(row, ['regional_manager', 'regionalManager', '大区经理', '经理']),
     productVariety: pickStr(row, ['product_variety', 'productVariety', '品类', '品种', '产品品种']),
@@ -5165,10 +5175,10 @@ function parseForecastDetailRow(row: Record<string, unknown>): ForecastDetailRow
     mainFactors: pickStr(row, ['main_factors', 'mainFactors']) || analysis || '',
     comprehensiveAnalysis,
     historyAnalysis: pickStr(row, ['history_analysis', 'historyAnalysis']),
-    priceAnalysis: pickStr(row, ['price_analysis', 'priceAnalysis']),
-    trendAnalysis: pickStr(row, ['trend_analysis', 'trendAnalysis']),
-    riskAnalysis: pickStr(row, ['risk_analysis', 'riskAnalysis']),
-    recommendationAnalysis: pickStr(row, ['recommendation_analysis', 'recommendationAnalysis']),
+    priceSensitivityAnalysis: pickStr(row, ['price_sensitivity_analysis', 'priceSensitivityAnalysis']),
+    priceCompetitivenessAnalysis: pickStr(row, ['price_competitiveness_analysis', 'priceCompetitivenessAnalysis']),
+    holidayAnalysis: pickStr(row, ['holiday_analysis', 'holidayAnalysis']),
+    weatherAnalysis: pickStr(row, ['weather_analysis', 'weatherAnalysis']),
   }
 }
 
@@ -5504,12 +5514,43 @@ watch([forecastModalDates, forecastModalValues, forecastSectionCollapsed], () =>
   }
 })
 
+/** 异步触发 v2 智能预测，返回 batch_id */
+async function triggerPredictAsync(warehouseName: string): Promise<string> {
+  const body = {
+    items: [
+      {
+        warehouse: warehouseName,
+        horizonDays: 15,
+      },
+    ],
+  }
+  const response = await axios.post(ApiPaths.predictAsync, body)
+  const data = response.data as { batch_id?: string }
+  if (!data.batch_id) throw new Error('触发预测失败：未返回 batch_id')
+  return data.batch_id
+}
+
+/** 轮询 /predict/results 等待异步预测结果落库 */
+async function waitForPredictResult(warehouseName: string, timeoutMs = 60_000): Promise<Record<string, unknown>[]> {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const results = await fetchForecastDetailPaged([warehouseName])
+    if (results.length > 0) return results
+    await new Promise((resolve) => setTimeout(resolve, 2000))
+  }
+  throw new Error('预测超时：后端未能在规定时间内完成计算，请稍后重试')
+}
+
 async function runForecastForWarehouse(warehouse: MapPoint) {
   forecastLoading.value = true
   forecastError.value = ''
   try {
     const whTitle = warehouse.title.trim()
-    const rawItems = await fetchForecastDetailPaged([whTitle])
+    // 1. 先触发异步预测
+    const batchId = await triggerPredictAsync(whTitle)
+    console.log('[预测] 已触发异步预测，batch_id:', batchId)
+    // 2. 轮询等待结果落库
+    const rawItems = await waitForPredictResult(whTitle)
     const itemsFiltered = rawItems.filter((row) => {
       const w = pickStr(row, ['warehouse', '仓库', 'warehouse_name', '仓库名'])
       if (!w) return true
@@ -5519,9 +5560,9 @@ async function runForecastForWarehouse(warehouse: MapPoint) {
 
     const byDate = new Map<string, number>()
     for (const row of working) {
-      const d = pickStr(row, ['target_date', '预测日期', 'date'])
+      const d = pickStr(row, ['target_date', 'targetDate', '预测日期', 'date'])
       if (!d) continue
-      const w = pickNumber(row, ['predicted_weight', '预测重量', 'weight']) ?? 0
+      const w = pickNumber(row, ['expected_shipment', 'expectedShipment', 'predicted_weight', 'predictedWeight', '预测重量', 'weight']) ?? 0
       byDate.set(d, (byDate.get(d) || 0) + w)
     }
     const sorted = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0], 'zh-CN'))

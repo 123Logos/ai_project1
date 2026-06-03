@@ -518,6 +518,12 @@ const varietyInputRef = ref<HTMLInputElement>()
 const allVarietyOptions = ref<string[]>([])
 const filteredVarietyOptions = ref<string[]>([])
 
+/** 品类显示名 → 全部别名列表（查询时使用全部名称） */
+const varietyNameToAllNames = ref<Map<string, string[]>>(new Map())
+
+/** 与电子地图/比价系统一致的 10 个固定回收品类 */
+const FIXED_CATEGORY_IDS: readonly number[] = [6, 4, 15, 11, 16, 2, 5, 17, 12, 3]
+
 // 标签预览常量
 const MULTI_PREVIEW_TAG_COUNT = 1
 
@@ -840,9 +846,23 @@ const fetchOptions = async () => {
     allManagerOptions.value = dims.regional_managers
     allSmelterOptions.value = dims.smelters
     allWarehouseOptions.value = dims.warehouses
-    // 品类去重并排序
-    const uniqueVarieties = [...new Set(categories.map((c) => c.name).filter((n) => n !== ''))]
-    allVarietyOptions.value = uniqueVarieties.sort((a, b) => a.localeCompare(b, 'zh-CN'))
+
+    // 解析品类：每个品类的品类名用"、"分隔，第一个作为显示名，全部用于查询
+    const nameMap = new Map<string, string[]>()
+    const idToFirstName = new Map<number, string>()
+    for (const cat of categories) {
+      const allNames = cat.name.split('、').map(s => s.trim()).filter(s => s !== '')
+      if (allNames.length > 0) {
+        idToFirstName.set(cat.id, allNames[0])
+        nameMap.set(allNames[0], allNames)
+      }
+    }
+    varietyNameToAllNames.value = nameMap
+
+    // 仅保留固定 10 个品类，按固定 id 顺序排列，显示第一个名称
+    allVarietyOptions.value = FIXED_CATEGORY_IDS
+      .map((id) => idToFirstName.get(id) ?? '')
+      .filter((n) => n !== '')
 
     filteredManagerOptions.value = [...allManagerOptions.value]
     filteredSmelterOptions.value = [...allSmelterOptions.value]
@@ -876,7 +896,17 @@ const fetchData = async () => {
       baseParams.warehouses = selectedWarehouses.value
     }
     if (selectedVarieties.value.length > 0) {
-      baseParams.product_varieties = selectedVarieties.value
+      // 查询时使用每个品类的所有别名
+      const allVarietyNames: string[] = []
+      for (const name of selectedVarieties.value) {
+        const allNames = varietyNameToAllNames.value.get(name)
+        if (allNames) {
+          allVarietyNames.push(...allNames)
+        } else {
+          allVarietyNames.push(name)
+        }
+      }
+      baseParams.product_varieties = [...new Set(allVarietyNames)]
     }
 
     const allItems: HistoryRecord[] = []

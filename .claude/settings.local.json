@@ -11,7 +11,21 @@
       "Bash(node -e ' *)",
       "Bash(grep -o '<div[^>]*freight-filter-warehouse[^\"]*\"[^>]*>.\\\\{0,500\\\\}')",
       "Bash(npx vue-tsc *)",
-      "Bash(npx vite *)"
+      "Bash(npx vite *)",
+      "Bash(npm run *)",
+      "Bash(curl -s -X POST http://localhost:5173/predict -H 'Content-Type: application/json' -H 'Accept: application/json, text/plain, */*' -d '{\"warehouse\":\"莱阳嘉兴畜达商贸有限公司\",\"page\":1,\"page_size\":500}')",
+      "Bash(findstr 5173)",
+      "Bash(echo \"PID: $!\")",
+      "Read(//tmp/**)",
+      "Bash(curl -s -G --data-urlencode \"warehouse=莱阳嘉兴畜达商贸有限公司\" --data-urlencode \"page=1\" --data-urlencode \"page_size=200\" \"http://localhost:5174/predict/results\")",
+      "Bash(curl -s \"http://localhost:5174/forecast/dimension-options\")",
+      "Bash(curl -s \"http://localhost:5174/predict/dimension-options\")",
+      "Bash(curl -s -G --data-urlencode \"warehouse=三河市浩宇荣晟环保科技有限公司\" --data-urlencode \"page=1\" --data-urlencode \"page_size=200\" \"http://localhost:5174/predict/results\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(curl -s -G --data-urlencode \"warehouse=唐山红硕再生资源有限公司\" --data-urlencode \"page=1\" --data-urlencode \"page_size=5\" \"http://localhost:5174/predict/results\")",
+      "Bash(curl -s \"http://localhost:5174/src/pages/PurchaseQuantity.vue\")",
+      "Bash(curl -s \"http://localhost:5174/\")",
+      "Bash(curl -s -G --data-urlencode \"warehouse=唐山市俊城环保科技有限公司\" --data-urlencode \"page=1\" --data-urlencode \"page_size=200\" \"http://localhost:5174/predict/results\")"
     ]
   }
 }

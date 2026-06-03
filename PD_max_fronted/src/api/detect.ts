@@ -1544,6 +1544,8 @@ export interface FeedbackEntry {
   image_url?: string | null
   roi_url?: string | null
   can_confirm?: boolean
+  /** 人工标注提交的时间，格式 "YYYY-MM-DD HH:MM:SS"，未标注为 null */
+  feedback_marked_at?: string | null
 }
 
 export interface FeedbackListResult {

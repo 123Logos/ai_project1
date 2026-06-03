@@ -17,7 +17,10 @@ export const ApiPaths = {
   forecastExport: '/forecast/export',
   /** 预测模块前缀；子路径示例：/predict/operation-audit、/predict/async、/predict/results、batches/{id} 等由后端挂载 */
   predict: '/predict',
-  predictComprehensive: '/predict/comprehensive',
+  /** 已落库预测结果查询（GET） */
+  predictResults: '/predict/results',
+  /** 异步触发智能预测（POST），返回 { batch_id } */
+  predictAsync: '/predict/async',
   /** 已落库预测结果中的维度（pd_ip_prediction_results） */
   predictDimensionOptions: '/predict/dimension-options',
 } as const

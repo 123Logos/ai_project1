@@ -298,6 +298,28 @@ export async function fetchTlCategories(): Promise<TlCategoryRow[]> {
     .filter((x) => !Number.isNaN(x.id) && x.name !== '')
 }
 
+/** 品类映射（GET /tl/get_category_mapping）；取每个品类的品类名称[0] 作为主名称 */
+export async function fetchCategoryMapping(): Promise<TlCategoryRow[]> {
+  const raw = await tlGetJson('/tl/get_category_mapping')
+  if (raw != null && typeof raw === 'object' && !Array.isArray(raw)) {
+    const o = raw as { code?: number; message?: string }
+    if (o.code != null && o.code !== 200) {
+      const msg = o.message ? String(o.message) : `code ${o.code}`
+      throw new Error(`获取品类映射失败：${msg}`)
+    }
+  }
+  const list = unwrapList(raw)
+  return list
+    .map((row) => {
+      const id = row['品类id'] ?? row['category_id'] ?? row['id']
+      const rawNames = row['品类名称']
+      const firstName = Array.isArray(rawNames) && rawNames.length > 0 ? String(rawNames[0]).trim() : ''
+      const nid = id != null && id !== '' ? Number(id) : NaN
+      return { id: nid, name: firstName }
+    })
+    .filter((x) => !Number.isNaN(x.id) && x.name !== '')
+}
+
 export async function fetchForecastDetail(
   params: Record<string, string | number | Array<string | number>>,
 ): Promise<Record<string, unknown>[]> {
