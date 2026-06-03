@@ -1742,10 +1742,10 @@ function buildForecastFilterParams(): Record<string, any> {
     if (f.startDate) params.date_from = f.startDate
     if (f.endDate) params.date_to = f.endDate
     if (detailSelectedWarehouses.value.length > 0) {
-      params.warehouses = detailSelectedWarehouses.value
+      params.warehouse = detailSelectedWarehouses.value[0]
     }
     if (detailSelectedSmelters.value.length > 0) {
-      params.smelters = detailSelectedSmelters.value
+      params.smelter = detailSelectedSmelters.value[0]
     }
     if (detailSelectedVarieties.value.length > 0) {
       // 查询时使用每个品类的所有别名
@@ -1758,7 +1758,7 @@ function buildForecastFilterParams(): Record<string, any> {
           allVarietyNames.push(name)
         }
       }
-      params.product_varieties = [...new Set(allVarietyNames)]
+      params.product_variety = [...new Set(allVarietyNames)][0]
     }
     return params
   }
@@ -1767,20 +1767,20 @@ function buildForecastFilterParams(): Record<string, any> {
     if (f.startDate) params.date_from = f.startDate
     if (f.endDate) params.date_to = f.endDate
     if (forecastMgrSelectedManagers.value.length > 0) {
-      params.regional_managers = forecastMgrSelectedManagers.value
+      params.regional_manager = forecastMgrSelectedManagers.value[0]
     }
     if (forecastMgrSelectedSmelters.value.length > 0) {
-      params.smelters = forecastMgrSelectedSmelters.value
+      params.smelter = forecastMgrSelectedSmelters.value[0]
     }
   } else {
     const f = forecastWhFilters.value
     if (f.startDate) params.date_from = f.startDate
     if (f.endDate) params.date_to = f.endDate
     if (forecastWhSelectedWarehouses.value) {
-      params.warehouses = [forecastWhSelectedWarehouses.value]
+      params.warehouse = forecastWhSelectedWarehouses.value
     }
     if (forecastWhSelectedSmelters.value.length > 0) {
-      params.smelters = forecastWhSelectedSmelters.value
+      params.smelter = forecastWhSelectedSmelters.value[0]
     }
   }
   return params

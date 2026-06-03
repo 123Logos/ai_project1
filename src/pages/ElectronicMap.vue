@@ -5591,15 +5591,11 @@ async function triggerPredictSync(warehouse: MapPoint): Promise<Record<string, u
   }
   // 使用用户选择的品种（未选则用选项第一个，即送货量最大）
   const productVariety = forecastSelectedVariety.value || forecastVarietyOptions.value[0]?.value || '废铅酸电池'
-  // 尝试从数据中提取冶炼厂，默认不传（由后端从历史自动推断）
-  const smelter = pickStr(warehouse.raw, ['smelter', 'smelter_name', '冶炼厂', '冶炼厂名称']) || null
   const body = {
     items: [
       {
         warehouse: whTitle,
         product_variety: productVariety,
-        ...(smelter && { smelter }),
-        horizonDays: 15,
       },
     ],
   }

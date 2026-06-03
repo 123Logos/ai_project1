@@ -104,8 +104,8 @@ export async function triggerPrediction(params: TriggerPredictionParams): Promis
   const item: Record<string, unknown> = {
     warehouse: params.warehouse,
   }
-  if (params.productVariety) item.productVariety = params.productVariety
-  if (params.startDate) item.predictionStartDate = params.startDate
+  if (params.productVariety) item.product_variety = params.productVariety
+  if (params.startDate) item.prediction_start_date = params.startDate
 
   await axios.post(ApiPaths.predict, { items: [item] }, { timeout: 300000 })
 }
