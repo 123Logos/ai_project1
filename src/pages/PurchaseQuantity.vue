@@ -664,7 +664,7 @@ import axios from 'axios'
 import { ApiPaths } from '../api/paths'
 import { FORECAST_DETAILS_FETCH_PAGE_SIZE } from '../api/fetchLimits'
 import { fetchForecastDimensionOptions } from '../api/dimensionOptions'
-import { fetchTlCategories } from '../api/tlApi'
+import { fetchCategoryMapping } from '../api/tlApi'
 import {
   fetchForecastChart,
   normalizeForecastDetailList,
@@ -980,6 +980,9 @@ const allWarehouseOptions = ref<string[]>([])
 const allManagerOptions = ref<string[]>([])
 const allSmelterOptions = ref<string[]>([])
 const allProductVarietyOptions = ref<string[]>([])
+
+/** 与电子地图/比价系统一致的 10 个固定回收品类 */
+const FIXED_CATEGORY_IDS: readonly number[] = [6, 4, 15, 11, 16, 2, 5, 17, 12, 3]
 
 const MULTI_PREVIEW_TAG_COUNT = 1
 const DEFAULT_SMELTER = '河南金利金铅集团有限公司'
@@ -1364,19 +1367,21 @@ function refreshAllFilterOptionLists() {
   filterDetailVarietyOptions()
 }
 
-// ==================== 获取下拉选项（PRD 规则预测：/forecast/dimension-options + /tl/get_categories） ====================
+// ==================== 获取下拉选项（PRD 规则预测：/forecast/dimension-options + /tl/get_category_mapping） ====================
 async function fetchOptions() {
   try {
     const [dims, categories] = await Promise.all([
       fetchForecastDimensionOptions(),
-      fetchTlCategories().catch(() => []),
+      fetchCategoryMapping().catch(() => []),
     ])
     allWarehouseOptions.value = dims.warehouses
     allManagerOptions.value = dims.regional_managers
     allSmelterOptions.value = dims.smelters
-    // 品类去重并排序
-    const uniqueVarieties = [...new Set(categories.map((c) => c.name).filter((n) => n !== ''))]
-    allProductVarietyOptions.value = uniqueVarieties.sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    // 仅保留固定 10 个品类，按固定 id 顺序排列
+    const idToName = new Map(categories.map((c) => [c.id, c.name]))
+    allProductVarietyOptions.value = FIXED_CATEGORY_IDS
+      .map((id) => idToName.get(id) ?? '')
+      .filter((n) => n !== '')
 
     refreshAllFilterOptionLists()
   } catch (error) {
@@ -1404,16 +1409,17 @@ function mergeSmelterOptionsFromForecastItems(items: ForecastDetailItem[]) {
   filterDetailSmelterOptions()
 }
 
-/** 从预测明细 items 中合并品类到下拉 */
+/** 从预测明细 items 中合并品类到下拉（仅保留固定 10 品种范围内的值） */
 function mergeVarietyOptionsFromForecastItems(items: ForecastDetailItem[]) {
-  const merged = new Set<string>(allProductVarietyOptions.value)
+  const allowed = new Set(allProductVarietyOptions.value)
+  const merged = new Set(allProductVarietyOptions.value)
   for (const d of items) {
     const v = d.product_variety
     if (v == null) continue
     const t = String(v).trim()
-    if (t !== '' && t !== '—') merged.add(t)
+    if (t !== '' && t !== '—' && allowed.has(t)) merged.add(t)
   }
-  allProductVarietyOptions.value = [...merged].sort((a, b) => a.localeCompare(b, 'zh-CN'))
+  allProductVarietyOptions.value = [...merged]
   filterDetailVarietyOptions()
 }
 

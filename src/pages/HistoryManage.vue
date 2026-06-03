@@ -412,7 +412,7 @@ import * as XLSX from 'xlsx'
 import { ApiPaths } from '@/api/paths'
 import { DELIVERY_HISTORY_FETCH_PAGE_SIZE } from '@/api/fetchLimits'
 import { fetchDeliveryHistoryDimensionOptions } from '@/api/dimensionOptions'
-import { fetchTlCategories } from '@/api/tlApi'
+import { fetchCategoryMapping } from '@/api/tlApi'
 
 // ==================== 类型定义 ====================
 interface HistoryRecord {
@@ -517,6 +517,9 @@ const varietyDropdownVisible = ref(false)
 const varietyInputRef = ref<HTMLInputElement>()
 const allVarietyOptions = ref<string[]>([])
 const filteredVarietyOptions = ref<string[]>([])
+
+/** 与电子地图/比价系统一致的 10 个固定回收品类 */
+const FIXED_CATEGORY_IDS: readonly number[] = [6, 4, 15, 11, 16, 2, 5, 17, 12, 3]
 
 // 标签预览常量
 const MULTI_PREVIEW_TAG_COUNT = 1
@@ -835,14 +838,16 @@ const fetchOptions = async () => {
   try {
     const [dims, categories] = await Promise.all([
       fetchDeliveryHistoryDimensionOptions(),
-      fetchTlCategories().catch(() => []),
+      fetchCategoryMapping().catch(() => []),
     ])
     allManagerOptions.value = dims.regional_managers
     allSmelterOptions.value = dims.smelters
     allWarehouseOptions.value = dims.warehouses
-    // 品类去重并排序
-    const uniqueVarieties = [...new Set(categories.map((c) => c.name).filter((n) => n !== ''))]
-    allVarietyOptions.value = uniqueVarieties.sort((a, b) => a.localeCompare(b, 'zh-CN'))
+    // 仅保留固定 10 个品类，按固定 id 顺序排列
+    const idToName = new Map(categories.map((c) => [c.id, c.name]))
+    allVarietyOptions.value = FIXED_CATEGORY_IDS
+      .map((id) => idToName.get(id) ?? '')
+      .filter((n) => n !== '')
 
     filteredManagerOptions.value = [...allManagerOptions.value]
     filteredSmelterOptions.value = [...allSmelterOptions.value]
