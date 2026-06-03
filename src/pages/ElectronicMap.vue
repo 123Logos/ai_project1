@@ -8581,7 +8581,7 @@ onBeforeUnmount(() => {
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-stock-block .emap-wh-hover-freight-scroll,
 .leaflet-popup-content .emap-wh-stock-block .emap-wh-hover-freight-scroll {
-  min-height: 60px;
+  min-height: 0;
 }
 
 .leaflet-tooltip.emap-marker-hover-tip .emap-wh-hover-freight-item,
