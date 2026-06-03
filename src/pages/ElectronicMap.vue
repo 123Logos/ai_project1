@@ -5515,11 +5515,15 @@ watch([forecastModalDates, forecastModalValues, forecastSectionCollapsed], () =>
 })
 
 /** 异步触发 v2 智能预测，返回 batch_id */
-async function triggerPredictAsync(warehouseName: string): Promise<string> {
+async function triggerPredictAsync(warehouse: MapPoint): Promise<string> {
+  const whTitle = warehouse.title.trim()
+  // 从 warehouse.raw 中尝试提取品类，取不到则用默认值
+  const productVariety = pickStr(warehouse.raw, ['product_variety', 'productVariety', '品类', '品种', '产品品种']) || '废铅酸电池'
   const body = {
     items: [
       {
-        warehouse: warehouseName,
+        warehouse: whTitle,
+        product_variety: productVariety,
         horizonDays: 15,
       },
     ],
@@ -5547,7 +5551,7 @@ async function runForecastForWarehouse(warehouse: MapPoint) {
   try {
     const whTitle = warehouse.title.trim()
     // 1. 先触发异步预测
-    const batchId = await triggerPredictAsync(whTitle)
+    const batchId = await triggerPredictAsync(warehouse)
     console.log('[预测] 已触发异步预测，batch_id:', batchId)
     // 2. 轮询等待结果落库
     const rawItems = await waitForPredictResult(whTitle)
