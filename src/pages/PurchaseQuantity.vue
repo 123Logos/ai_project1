@@ -661,11 +661,8 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, type Ref } from 'vue'
-import axios from 'axios'
-import { ApiPaths } from '../api/paths'
-import { FORECAST_DETAILS_FETCH_PAGE_SIZE } from '../api/fetchLimits'
-import { fetchForecastDimensionOptions } from '../api/dimensionOptions'
-import { fetchTlCategories } from '../api/tlApi'
+import { fetchPredictDimensionOptions } from '../api/dimensionOptions'
+import { fetchCategoryMapping } from '../api/tlApi'
 import {
   fetchAllPredictResults,
   aggregateChartFromResults,
@@ -1360,12 +1357,12 @@ function refreshAllFilterOptionLists() {
   filterDetailVarietyOptions()
 }
 
-// ==================== 获取下拉选项（PRD 规则预测：/forecast/dimension-options + /tl/get_categories） ====================
+// ==================== 获取下拉选项（智能预测 v2：/predict/dimension-options + /tl/get_category_mapping） ====================
 async function fetchOptions() {
   try {
     const [dims, categories] = await Promise.all([
-      fetchForecastDimensionOptions(),
-      fetchTlCategories().catch(() => []),
+      fetchPredictDimensionOptions(),
+      fetchCategoryMapping().catch(() => []),
     ])
     allWarehouseOptions.value = dims.warehouses
     allManagerOptions.value = dims.regional_managers
@@ -1397,35 +1394,6 @@ async function fetchOptions() {
     allProductVarietyOptions.value = []
     refreshAllFilterOptionLists()
   }
-}
-
-/** 从「送货量预测/明细」返回的 items 合并冶炼厂到下拉（去重、中文排序） */
-function mergeSmelterOptionsFromForecastItems(items: ForecastDetailItem[]) {
-  const merged = new Set<string>(allSmelterOptions.value)
-  for (const d of items) {
-    const s = d.smelter
-    if (s == null) continue
-    const t = String(s).trim()
-    if (t !== '') merged.add(t)
-  }
-  allSmelterOptions.value = [...merged].sort((a, b) => a.localeCompare(b, 'zh-CN'))
-  filterMgrSmelterOptions()
-  filterWhSmelterOptions()
-  filterDetailSmelterOptions()
-}
-
-/** 从预测明细 items 中合并品类到下拉（仅保留固定 10 品种范围内的值） */
-function mergeVarietyOptionsFromForecastItems(items: ForecastDetailItem[]) {
-  const allowed = new Set(allProductVarietyOptions.value)
-  const merged = new Set(allProductVarietyOptions.value)
-  for (const d of items) {
-    const v = d.product_variety
-    if (v == null) continue
-    const t = String(v).trim()
-    if (t !== '' && t !== '—' && allowed.has(t)) merged.add(t)
-  }
-  allProductVarietyOptions.value = [...merged]
-  filterDetailVarietyOptions()
 }
 
 // ---------- 按大区经理：大区经理 ----------
