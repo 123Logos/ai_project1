@@ -337,7 +337,7 @@
         <div class="pagination">
           <button @click="warehouseCurrentPage--" :disabled="warehouseCurrentPage === 1">上一页</button>
           <span
-            >第 {{ warehouseCurrentPage }} / {{ warehouseTotalPages }} 页（每页 {{ pivotGroupsPerPage }} 个仓库；同仓库仅展示最新送货日对应的大区经理，多冶炼厂分行）</span
+            >第 {{ warehouseCurrentPage }} / {{ warehouseTotalPages }} 页（每页 {{ pivotGroupsPerPage }} 个仓库）</span
           >
           <button @click="warehouseCurrentPage++" :disabled="warehouseCurrentPage === warehouseTotalPages">下一页</button>
         </div>

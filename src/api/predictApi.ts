@@ -84,6 +84,32 @@ export function normalizePredictResultList(items: unknown[]): PredictResultRow[]
   return out
 }
 
+// ─── Trigger Prediction ──────────────────────────────────
+
+/** 触发预测的请求参数 */
+export interface TriggerPredictionParams {
+  warehouse: string
+  productVariety?: string
+  smelter?: string
+  startDate?: string
+  endDate?: string
+}
+
+/**
+ * 调用 POST /predict 触发 AI 预测。
+ * 后端会自动从数据库加载历史数据、冶炼厂价格、SMM 铅价。
+ * 预测结果自动写入 pd_ip_prediction_results 表。
+ */
+export async function triggerPrediction(params: TriggerPredictionParams): Promise<void> {
+  const item: Record<string, unknown> = {
+    warehouse: params.warehouse,
+  }
+  if (params.productVariety) item.product_variety = params.productVariety
+  if (params.startDate) item.prediction_start_date = params.startDate
+
+  await axios.post(ApiPaths.predict, { items: [item] }, { timeout: 300000 })
+}
+
 // ─── Fetch ───────────────────────────────────────────────
 
 /** 筛选参数：与 buildForecastFilterParams() 输出一致 */
