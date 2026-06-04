@@ -661,7 +661,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, type Ref } from 'vue'
-import { fetchPredictDimensionOptions } from '../api/dimensionOptions'
+import { fetchDeliveryHistoryDimensionOptions } from '../api/dimensionOptions'
 import { fetchCategoryMapping } from '../api/tlApi'
 import {
   fetchAllPredictResults,
@@ -1353,7 +1353,7 @@ function refreshAllFilterOptionLists() {
 async function fetchOptions() {
   try {
     const [dims, categories] = await Promise.all([
-      fetchPredictDimensionOptions(),
+      fetchDeliveryHistoryDimensionOptions(),
       fetchCategoryMapping().catch(() => []),
     ])
     allWarehouseOptions.value = dims.warehouses
@@ -1810,7 +1810,7 @@ function smelterKey(s: string | null | undefined) {
 
 /** 从 v2 明细行重建透视表（客户端聚合 expectedShipment） */
 function rebuildForecastPivotFromResults(rows: PredictResultRow[]) {
-  const dates = [...new Set(rows.map((r) => r.targetDate))].sort().reverse()
+  const dates = [...new Set(rows.map((r) => r.targetDate))].sort()
   forecastDateColumns.value = dates
 
   const cellFor = (dateMap: Map<string, number>, date: string): ForecastPivotCell => {

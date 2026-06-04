@@ -801,7 +801,7 @@ async function queryManagerData() {
     const items = await fetchAllDeliveryHistoryItems(baseParams)
 
     // 获取所有日期
-    const dates = [...new Set(items.map(item => item.delivery_date))].sort().reverse()
+    const dates = [...new Set(items.map(item => item.delivery_date))].sort()
     managerDateColumns.value = dates
     
     // 按大区经理+冶炼厂分组汇总重量，并收集该组下所有原始记录主键 id
@@ -1147,7 +1147,7 @@ async function queryWarehouseData() {
     const items = await fetchAllDeliveryHistoryItems(baseParams)
 
     // 获取所有日期
-    const dates = [...new Set(items.map(item => item.delivery_date))].sort().reverse()
+    const dates = [...new Set(items.map(item => item.delivery_date))].sort()
     warehouseDateColumns.value = dates
 
     const latestRmByWarehouse = buildLatestRegionalManagerByWarehouse(
