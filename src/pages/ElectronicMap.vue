@@ -2411,6 +2411,8 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
   const phone = pickStr(raw, ['电话', '手机', '联系电话', 'mobile', 'tel'])
   const haz = pickNumber(raw, ['危废经营许可数量', 'hazard_license_count', '危废许可数量'])
   const monthly = pickNumber(raw, ['月均收货', 'monthly_avg_receipt', '月均采购'])
+  const monthlyDelivery = pickNumber(raw, ['当月发货量'])
+  const yearlyDelivery = pickNumber(raw, ['年度累计发货量'])
   const stockText = formatWarehouseCurrentStock(raw)
   const stocksByCategory = pickWarehouseStockByCategory(raw)
   const stockBlock = warehouseStockBlockHtml(stocksByCategory)
@@ -2421,6 +2423,13 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
     monthly === null
       ? '—'
       : `${Number.isInteger(monthly) ? monthly.toLocaleString('zh-CN') : monthly.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} 吨`
+  /** 发货统计字段：仅普通合作库房 / 垂直库房 / 战略库房显示 */
+  const showDeliveryStats =
+    typeName === '普通合作库房' || typeName === '垂直库房' || typeName === '战略库房'
+  const formatDeliveryValue = (val: number | null): string => {
+    const n = val ?? 0
+    return `${n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 吨`
+  }
   const receiptBlock = warehouseReceiptPriceBlockHtml(receiptPrices)
   const freightBlock = warehouseSmelterFreightBlockHtml(smelterFreights)
   const tipRow = (label: string, value: string) =>
@@ -2432,6 +2441,12 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
       label,
     )}</span><span class="emap-wh-hover-v">${escapeHtml(value)}</span></div>`
   const dual = (a: string, b: string) => `<div class="emap-wh-hover-dual">${a}${b}</div>`
+  const deliveryStatsRow = showDeliveryStats
+    ? dual(
+        metric('当月发货量', formatDeliveryValue(monthlyDelivery)),
+        metric('年度累计发货量', formatDeliveryValue(yearlyDelivery)),
+      )
+    : ''
   return `<div class="emap-wh-hover-tip"><div class="emap-wh-hover-inner">${tipRow('库房名称', name)}${tipRow(
     '库房类型',
     typeName,
@@ -2441,7 +2456,7 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
   )}${dual(metric('联系人', contact || '—'), metric('电话', phone || '—'))}${tipRow(
     '危废经营许可数量',
     hazText,
-  )}${tipRow('月均收货', monthlyText)}${tipRow('当前库存（汇总）', stockText)}${stockBlock}${receiptBlock}${freightBlock}</div></div>`
+  )}${tipRow('月均收货', monthlyText)}${deliveryStatsRow}${tipRow('当前库存（汇总）', stockText)}${stockBlock}${receiptBlock}${freightBlock}</div></div>`
 }
 
 function smelterPopupHtml(p: MapPoint): string {

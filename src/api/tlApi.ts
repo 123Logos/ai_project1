@@ -479,11 +479,13 @@ export async function putTlReplaceWarehouseLinksOutbound(
  * 修改源库房→对标库房边上的阶梯价差；阶梯价差传 null 表示清空。
  */
 export async function putTlUpdateWarehouseLinkTier(payload: {
+  关联id: number
   源库房id: number
   对标库房id: number
   阶梯价差: string | null
 }): Promise<unknown> {
   const raw = await tlPutJson('/tl/update_warehouse_link_tier', {
+    关联id: payload.关联id,
     源库房id: payload.源库房id,
     对标库房id: payload.对标库房id,
     阶梯价差: payload.阶梯价差,
@@ -581,6 +583,23 @@ export async function fetchTlWarehouseLinksList(
     rows: parsed.rows,
     total: parsed.total ?? parsed.rows.length,
   }
+}
+
+/**
+ * 一次性拉取全部库房关联列表（分页拉齐）。
+ * 用于客户端按源库房分组分页，避免同一源库房的多条记录被拆到两页。
+ */
+export async function fetchTlWarehouseLinksListAll(
+  params: Omit<TlWarehouseLinksListParams, 'page' | 'size'> = {},
+): Promise<{ rows: Record<string, unknown>[]; total: number }> {
+  const q = buildQueryString({
+    warehouse_id: params.warehouse_id,
+    from_warehouse_id: params.from_warehouse_id,
+    to_warehouse_id: params.to_warehouse_id,
+  })
+  const path = `/tl/get_warehouse_links_list${q ? `?${q}` : ''}`
+  const rows = await fetchTlListAll(path, '库房关联列表')
+  return { rows, total: rows.length }
 }
 
 /**
