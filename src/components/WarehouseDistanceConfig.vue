@@ -95,7 +95,7 @@
                         :disabled="busy || grp.rows.length === 0"
                         @click="openEditTierModalFromGroup(grp)"
                       >
-                        编辑差价
+                        编辑阶梯价差
                       </button>
                       <button
                         type="button"
@@ -236,7 +236,7 @@
               input-id="wdc-dlg-pick-tier"
               :model-value="editingRow?.toId ?? 0"
               :options="dialogEditBoundOptions"
-              placeholder="搜索要编辑差价的对标库房"
+              placeholder="搜索要编辑阶梯价差的对标库房"
               @update:model-value="onModalGroupTargetChange"
             />
           </div>
@@ -289,7 +289,7 @@ import { warehouseMatchesQuery } from '@/utils/warehouseFuzzyMatch'
 import {
   deleteTlUnbindWarehouseLink,
   fetchTlCalculateDistance,
-  fetchTlWarehouseLinksList,
+  fetchTlWarehouseLinksListAll,
   fetchTlWarehousesAll,
   fetchTlRealtimeSpreadList,
   postTlBatchBindWarehouseLinks,
@@ -300,6 +300,8 @@ import {
 type WarehouseOption = { id: number; name: string }
 /** 阶梯价差：接口可为 null；非纯数字时保留 tierPriceEditSeed 供展示与编辑 */
 type LinkRow = {
+  /** 后端关联id，编辑阶梯价差时需要 */
+  linkId: number
   fromId: number
   toId: number
   fromName: string
@@ -325,11 +327,44 @@ const filterToId = ref(0)
 const listRows = ref<LinkRow[]>([])
 const listPage = ref(1)
 const listSize = ref(50)
-const listTotal = ref(0)
-const listTotalPages = computed(() => Math.max(1, Math.ceil(listTotal.value / listSize.value)))
+/** 按源库房分组后，每组（源库房 + 全部对标库房）作为整体，计算分页 */
+const groupedAllPages = computed((): LinkRow[][] => {
+  const sorted = [...listRows.value].sort((a, b) => {
+    if (a.fromId !== b.fromId) return a.fromId - b.fromId
+    const byName = String(a.toName).localeCompare(b.toName, 'zh-CN')
+    if (byName !== 0) return byName
+    return a.toId - b.toId
+  })
+  // 按源库房分组
+  const groups: LinkRow[][] = []
+  let i = 0
+  while (i < sorted.length) {
+    const fromId = sorted[i].fromId
+    let j = i + 1
+    while (j < sorted.length && sorted[j].fromId === fromId) j++
+    groups.push(sorted.slice(i, j))
+    i = j
+  }
+  // 分页：每个源库房组不拆分
+  const pages: LinkRow[][] = []
+  let page: LinkRow[] = []
+  for (const grp of groups) {
+    if (page.length > 0 && page.length + grp.length > listSize.value) {
+      pages.push(page)
+      page = []
+    }
+    page.push(...grp)
+  }
+  if (page.length > 0) pages.push(page)
+  return pages.length > 0 ? pages : [[]]
+})
+const listTotal = computed(() => listRows.value.length)
+const listTotalPages = computed(() => groupedAllPages.value.length)
+/** 当前页的行（保证同一源库房的记录不拆页） */
+const pageRows = computed(() => groupedAllPages.value[listPage.value - 1] ?? [])
 
 const groupedTableRows = computed((): LinkRowGroup[] => {
-  const rows = [...listRows.value].sort((a, b) => {
+  const rows = [...pageRows.value].sort((a, b) => {
     if (a.fromId !== b.fromId) return a.fromId - b.fromId
     const byName = String(a.toName).localeCompare(String(b.toName), 'zh-CN')
     if (byName !== 0) return byName
@@ -375,7 +410,7 @@ const opTargetToIdByFromId = ref<Record<number, number>>({})
 const dialogTitle = computed(() => {
   if (dialogMode.value === 'add') return '新增绑定'
   if (dialogMode.value === 'edit') return '修改绑定'
-  if (dialogMode.value === 'edit-tier') return '编辑差价'
+  if (dialogMode.value === 'edit-tier') return '编辑阶梯价差'
   return '删除绑定'
 })
 
@@ -733,7 +768,9 @@ function toLinkRow(row: Record<string, unknown>): LinkRow {
 
   const { num: tierPriceDiff, seed: tierPriceEditSeed } = parseTierFields(row)
 
-  return { fromId, toId, fromName, toName, tierPriceDiff, tierPriceEditSeed, realTimeDiff: null }
+  const linkId = pickNum(row, ['关联id', 'link_id', 'id'])
+
+  return { linkId, fromId, toId, fromName, toName, tierPriceDiff, tierPriceEditSeed, realTimeDiff: null }
 }
 
 async function loadWarehouses() {
@@ -755,17 +792,16 @@ async function loadWarehouses() {
 
 async function fetchListPage(page: number) {
   console.trace('[fetchListPage] called, page=' + page)
-  const r = await fetchTlWarehouseLinksList({
-    page,
-    size: listSize.value,
+  const r = await fetchTlWarehouseLinksListAll({
     from_warehouse_id: filterFromId.value > 0 ? filterFromId.value : undefined,
     to_warehouse_id: filterToId.value > 0 ? filterToId.value : undefined,
   })
   mergeWarehouseCoordsFromLinkRows(r.rows)
   listRows.value = r.rows.map(toLinkRow)
-  listTotal.value = r.total
-  listPage.value = page
-  await Promise.all([loadDistancesForRows(listRows.value), loadRealtimeSpreads()])
+  // 确保 page 在有效范围内
+  const maxPage = groupedAllPages.value.length
+  listPage.value = page > maxPage ? maxPage : page
+  await Promise.all([loadDistancesForRows(pageRows.value), loadRealtimeSpreads()])
 }
 
 async function loadRealtimeSpreads() {
@@ -916,6 +952,7 @@ async function submitDialog() {
     const key = editingRowKey.value
     await runAction(async () => {
       await putTlUpdateWarehouseLinkTier({
+        关联id: row.linkId,
         源库房id: row.fromId,
         对标库房id: row.toId,
         阶梯价差: raw === '' ? null : raw,
