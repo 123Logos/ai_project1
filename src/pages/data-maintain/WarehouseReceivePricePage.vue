@@ -66,7 +66,7 @@
       <div class="dmp-toolbar">
         <select v-model="warehouseNameFilter" class="form-select dmp-search">
           <option value="">全部库房</option>
-          <option v-for="w in warehouses" :key="w.id" :value="w.name">{{ w.name }}</option>
+          <option v-for="w in warehouses" :key="w" :value="w">{{ w }}</option>
         </select>
         <select v-model="categoryIdFilter" class="form-select dmp-search">
           <option value="">全部品种</option>
@@ -112,7 +112,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
-import { fetchTlCategories, fetchTlWarehousesAll } from '@/api/tlApi'
+import { fetchTlCategories } from '@/api/tlApi'
+import { fetchDeliveryHistoryDimensionOptions } from '@/api/dimensionOptions'
 import {
   fetchWarehouseReceivePriceList,
   importWarehouseReceivePriceExcel,
@@ -139,7 +140,7 @@ const previewColumns = ref<string[]>([])
 const previewRows = ref<Record<string, string>[]>([])
 const previewTotal = ref(0)
 
-const warehouses = ref<Array<{ id: number; name: string }>>([])
+const warehouses = ref<string[]>([])
 const warehouseNameFilter = ref('')
 const categoryIdFilter = ref('')
 const listRows = ref<WarehouseReceivePriceRow[]>([])
@@ -268,34 +269,10 @@ watch([warehouseNameFilter, categoryIdFilter], () => {
   page.value = 1
 })
 
-function pickStr(r: Record<string, unknown>, keys: string[]): string {
-  for (const k of keys) {
-    const v = r[k]
-    if (typeof v === 'string' && v.trim()) return v.trim()
-  }
-  return ''
-}
-
-function pickNum(r: Record<string, unknown>, keys: string[]): number {
-  for (const k of keys) {
-    const v = r[k]
-    if (v != null) {
-      const n = Number(v)
-      if (Number.isFinite(n) && n > 0) return n
-    }
-  }
-  return 0
-}
-
 async function loadWarehouses() {
   try {
-    const rows = await fetchTlWarehousesAll()
-    warehouses.value = rows
-      .map((r) => ({
-        id: pickNum(r, ['仓库id', '库房id', 'warehouse_id', 'id']),
-        name: pickStr(r, ['仓库名', 'warehouse_name', 'name']) || `库房#${pickNum(r, ['仓库id', '库房id', 'warehouse_id', 'id'])}`,
-      }))
-      .filter((w) => w.id > 0)
+    const dims = await fetchDeliveryHistoryDimensionOptions()
+    warehouses.value = dims.warehouses
   } catch {
     warehouses.value = []
   }

@@ -46,7 +46,7 @@
     <div class="card">
       <div class="filter-row">
         <div class="filter-item">
-          <label>定价日期 <span class="date-hint">(最多15天)</span></label>
+          <label>定价日期</label>
           <div class="date-range">
             <input v-model="filters.dateFrom" type="date" class="filter-input" />
             <span>至</span>

@@ -6,7 +6,7 @@
           <p v-if="latest" class="summary-meta">
             <span>最新报价日期：{{ latest.date }}</span>
           </p>
-          <p v-else-if="!latestLoading && selectedSmelterNames.length > 0" class="summary-meta text-muted">所选冶炼厂暂无报价</p>
+
           <p v-else-if="selectedSmelterNames.length === 0" class="summary-meta text-muted">请先在筛选区选择冶炼厂</p>
         </div>
         <button type="button" class="btn btn-secondary" @click="emit('navigateToQuote')">前往维护</button>
@@ -431,7 +431,7 @@ const latestError = ref('')
 const filters = ref({ dateFrom: '', dateTo: '' })
 const chartLoading = ref(false)
 const chartError = ref('')
-const chartCanvasRef = ref<HTMLIFrameElement | null>(null)
+const chartCanvasRef = ref<HTMLCanvasElement | null>(null)
 
 interface ChartSeriesItem {
   name: string
@@ -561,11 +561,6 @@ function resolveSmelterIds(): number[] {
     .filter((id) => id > 0)
 }
 
-function resolveCategoryIds(): number[] {
-  return selectedCategoryNames.value
-    .map((name) => categoryCache.find((c) => c.name === name)?.id ?? 0)
-    .filter((id) => id > 0)
-}
 
 async function fetchAllQuotes(extra: {
   start_date?: string
@@ -619,21 +614,6 @@ function buildChartSeriesFromData(allData: TlQuoteDetailRow[]): ChartSeriesItem[
   }))
 }
 
-async function loadLatest() {
-  latestLoading.value = true
-  latestError.value = ''
-  try {
-    const rows = await fetchAllQuotes({})
-    const sorted = [...rows].sort((a, b) => b.date.localeCompare(a.date))
-    latest.value = sorted[0] ?? null
-  } catch (e) {
-    latestError.value = e instanceof Error ? e.message : '请稍后重试'
-    latest.value = null
-  } finally {
-    latestLoading.value = false
-  }
-}
-
 async function loadChart() {
   chartLoading.value = true
   chartError.value = ''
@@ -667,10 +647,6 @@ async function loadList() {
   } finally {
     listLoading.value = false
   }
-}
-
-async function reloadAll() {
-  await Promise.all([loadLatest(), loadChart(), loadList()])
 }
 
 async function handleQuery() {

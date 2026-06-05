@@ -11,6 +11,7 @@
           >
             按仓库
           </div>
+          <!--
           <div
             class="menu-item"
             :class="{ active: forecastActiveTab === 'manager' }"
@@ -25,6 +26,7 @@
           >
             预测明细
           </div>
+          -->
         </div>
         <button class="btn btn-secondary" @click="exportCsv" :disabled="loading">导出CSV</button>
       </div>
@@ -169,22 +171,16 @@
             <div class="multi-select-container">
               <div
                 class="selected-tags"
-                :class="multiSelectTagsClass(forecastWhSelectedWarehouses)"
                 @click="focusWhWarehouseInput"
               >
-                <span v-for="item in whWarehousesTagsPreview" :key="item" class="tag tag-shrink" :title="item">{{ item }}</span>
-                <button v-for="item in whWarehousesTagsPreview" :key="'rm-' + item" type="button" class="tag-remove" @click.stop="removeWhWarehouse(item)">×</button>
-                <span
-                  v-if="whWarehousesTagsMore > 0"
-                  class="tag tag-more tag-shrink"
-                  :title="'还有：' + whWarehousesTagsRest.join('、')"
-                >+{{ whWarehousesTagsMore }}</span>
+                <span v-if="forecastWhSelectedWarehouses" class="tag tag-shrink tag-warehouse" :title="forecastWhSelectedWarehouses">{{ forecastWhSelectedWarehouses }}</span>
+                <button v-if="forecastWhSelectedWarehouses" type="button" class="tag-remove" @click.stop="removeWhWarehouse(forecastWhSelectedWarehouses)">×</button>
                 <input
                   ref="whWarehouseInputRef"
                   v-model="whWarehouseSearchText"
                   type="text"
                   class="multi-input"
-                  :placeholder="multiSelectPlaceholder(forecastWhSelectedWarehouses)"
+                  :placeholder="forecastWhSelectedWarehouses || '请选择仓库'"
                   @input="onWhWarehouseSearchInput"
                   @focus="onWhWarehouseFocus"
                   @blur="closeWhWarehouseDropdown"
@@ -196,7 +192,7 @@
                   v-for="item in filteredWhWarehouseOptions"
                   :key="item"
                   class="dropdown-item"
-                  :class="{ 'dropdown-item--selected': forecastWhSelectedWarehouses.includes(item) }"
+                  :class="{ 'dropdown-item--selected': forecastWhSelectedWarehouses === item }"
                   @mousedown.prevent="onWhWarehouseDropdownPick(item)"
                 >
                   {{ item }}
@@ -661,11 +657,12 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch, type Ref } from 'vue'
-import { fetchPredictDimensionOptions } from '../api/dimensionOptions'
+import { fetchDeliveryHistoryDimensionOptions } from '../api/dimensionOptions'
 import { fetchCategoryMapping } from '../api/tlApi'
 import {
   fetchAllPredictResults,
   aggregateChartFromResults,
+  triggerPrediction,
   type PredictResultRow,
 } from '../api/predictApi'
 import ForecastBasisPanel from '../components/ForecastBasisPanel.vue'
@@ -723,15 +720,15 @@ const chartBasisPlaceholder = computed(() => {
   if (!forecastQueried.value) {
     return '请先选择筛选条件并点击「查询」。'
   }
-  if (chartDates.value.length > 0 && !chartSummaryText.value.trim()) {
-    return '暂无汇总预测依据'
+  if (chartDates.value.length === 0 || !chartSummaryText.value.trim()) {
+    return '正在预测中...'
   }
   return '暂无预测依据'
 })
 
 const chartEmptyHint = computed(() =>
   forecastQueried.value
-    ? '暂无趋势数据，请调整筛选条件后重新查询。'
+    ? '正在根据预测结果绘制图表中...'
     : '请先完成筛选条件并点击「查询」获取预测数据。',
 )
 
@@ -752,7 +749,7 @@ function getForecastFilterValidationError(): string | null {
     return null
   }
   const missing: string[] = []
-  if (forecastWhSelectedWarehouses.value.length === 0) missing.push('仓库')
+  if (!forecastWhSelectedWarehouses.value) missing.push('仓库')
   if (forecastWhSelectedSmelters.value.length === 0) missing.push('冶炼厂')
   if (missing.length > 0) return `请先选择${missing.join('、')}后再查询`
   const f = forecastWhFilters.value
@@ -922,7 +919,7 @@ const filteredMgrSmelterOptions = ref<string[]>([])
 
 /** 按仓库：送货日期、仓库、大区经理、冶炼厂 */
 const forecastWhFilters = ref({ startDate: '', endDate: '' })
-const forecastWhSelectedWarehouses = ref<string[]>([])
+const forecastWhSelectedWarehouses = ref<string>('')
 const whWarehouseSearchText = ref('')
 const whWarehouseDropdownVisible = ref(false)
 const whWarehouseInputRef = ref<HTMLInputElement>()
@@ -998,12 +995,6 @@ const mgrSmeltersTagsMore = computed(() =>
   Math.max(0, forecastMgrSelectedSmelters.value.length - MULTI_PREVIEW_TAG_COUNT)
 )
 const mgrSmeltersTagsRest = computed(() => forecastMgrSelectedSmelters.value.slice(MULTI_PREVIEW_TAG_COUNT))
-
-const whWarehousesTagsPreview = computed(() => forecastWhSelectedWarehouses.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
-const whWarehousesTagsMore = computed(() =>
-  Math.max(0, forecastWhSelectedWarehouses.value.length - MULTI_PREVIEW_TAG_COUNT)
-)
-const whWarehousesTagsRest = computed(() => forecastWhSelectedWarehouses.value.slice(MULTI_PREVIEW_TAG_COUNT))
 
 const whSmeltersTagsPreview = computed(() => forecastWhSelectedSmelters.value.slice(0, MULTI_PREVIEW_TAG_COUNT))
 const whSmeltersTagsMore = computed(() =>
@@ -1353,7 +1344,7 @@ function refreshAllFilterOptionLists() {
 async function fetchOptions() {
   try {
     const [dims, categories] = await Promise.all([
-      fetchPredictDimensionOptions(),
+      fetchDeliveryHistoryDimensionOptions(),
       fetchCategoryMapping().catch(() => []),
     ])
     allWarehouseOptions.value = dims.warehouses
@@ -1507,18 +1498,18 @@ function onWhWarehouseSearchInput() {
 }
 
 const addWhWarehouse = (item: string) => {
-  if (!forecastWhSelectedWarehouses.value.includes(item)) forecastWhSelectedWarehouses.value.push(item)
+  forecastWhSelectedWarehouses.value = item
   whWarehouseSearchText.value = ''
   filterWhWarehouseOptions()
 }
 
-const removeWhWarehouse = (item: string) => {
-  forecastWhSelectedWarehouses.value = forecastWhSelectedWarehouses.value.filter((i) => i !== item)
+const removeWhWarehouse = (_item: string) => {
+  forecastWhSelectedWarehouses.value = ''
   filterWhWarehouseOptions()
 }
 
 function onWhWarehouseDropdownPick(item: string) {
-  if (forecastWhSelectedWarehouses.value.includes(item)) removeWhWarehouse(item)
+  if (forecastWhSelectedWarehouses.value === item) removeWhWarehouse(item)
   else addWhWarehouse(item)
 }
 
@@ -1753,10 +1744,10 @@ function buildForecastFilterParams(): Record<string, any> {
     if (f.startDate) params.date_from = f.startDate
     if (f.endDate) params.date_to = f.endDate
     if (detailSelectedWarehouses.value.length > 0) {
-      params.warehouses = detailSelectedWarehouses.value
+      params.warehouse = detailSelectedWarehouses.value[0]
     }
     if (detailSelectedSmelters.value.length > 0) {
-      params.smelters = detailSelectedSmelters.value
+      params.smelter = detailSelectedSmelters.value[0]
     }
     if (detailSelectedVarieties.value.length > 0) {
       // 查询时使用每个品类的所有别名
@@ -1769,7 +1760,7 @@ function buildForecastFilterParams(): Record<string, any> {
           allVarietyNames.push(name)
         }
       }
-      params.product_varieties = [...new Set(allVarietyNames)]
+      params.product_variety = [...new Set(allVarietyNames)][0]
     }
     return params
   }
@@ -1778,20 +1769,20 @@ function buildForecastFilterParams(): Record<string, any> {
     if (f.startDate) params.date_from = f.startDate
     if (f.endDate) params.date_to = f.endDate
     if (forecastMgrSelectedManagers.value.length > 0) {
-      params.regional_managers = forecastMgrSelectedManagers.value
+      params.regional_manager = forecastMgrSelectedManagers.value[0]
     }
     if (forecastMgrSelectedSmelters.value.length > 0) {
-      params.smelters = forecastMgrSelectedSmelters.value
+      params.smelter = forecastMgrSelectedSmelters.value[0]
     }
   } else {
     const f = forecastWhFilters.value
     if (f.startDate) params.date_from = f.startDate
     if (f.endDate) params.date_to = f.endDate
-    if (forecastWhSelectedWarehouses.value.length > 0) {
-      params.warehouses = forecastWhSelectedWarehouses.value
+    if (forecastWhSelectedWarehouses.value) {
+      params.warehouse = forecastWhSelectedWarehouses.value
     }
     if (forecastWhSelectedSmelters.value.length > 0) {
-      params.smelters = forecastWhSelectedSmelters.value
+      params.smelter = forecastWhSelectedSmelters.value[0]
     }
   }
   return params
@@ -1810,7 +1801,7 @@ function smelterKey(s: string | null | undefined) {
 
 /** 从 v2 明细行重建透视表（客户端聚合 expectedShipment） */
 function rebuildForecastPivotFromResults(rows: PredictResultRow[]) {
-  const dates = [...new Set(rows.map((r) => r.targetDate))].sort().reverse()
+  const dates = [...new Set(rows.map((r) => r.targetDate))].sort()
   forecastDateColumns.value = dates
 
   const cellFor = (dateMap: Map<string, number>, date: string): ForecastPivotCell => {
@@ -1881,6 +1872,22 @@ async function fetchDetailData() {
   const base = buildForecastFilterParams()
 
   try {
+    // 按仓库标签页：自动触发预测（后端从 DB 加载数据）
+    if (forecastActiveTab.value === 'warehouse' && forecastWhSelectedWarehouses.value) {
+      const warehouse = forecastWhSelectedWarehouses.value
+      const smelter = forecastWhSelectedSmelters.value.length > 0 ? forecastWhSelectedSmelters.value[0] : undefined
+      try {
+        await triggerPrediction({
+          warehouse,
+          smelter,
+          startDate: forecastWhFilters.value.startDate,
+          endDate: forecastWhFilters.value.endDate,
+        })
+      } catch (triggerErr) {
+        console.warn('触发预测失败，尝试读取已有结果:', triggerErr)
+      }
+    }
+
     const rows = await fetchAllPredictResults(base)
     detailRows.value = rows
 
@@ -1928,6 +1935,9 @@ async function handleQuery() {
     return
   }
   forecastQueried.value = true
+  chartSummaryText.value = ''
+  chartDates.value = []
+  chartTotalByDate.value = []
   await fetchDetailData()
 }
 
@@ -1947,7 +1957,7 @@ function handleReset() {
     mgrManagerSearchText.value = ''
     mgrSmelterSearchText.value = ''
   } else if (forecastActiveTab.value === 'warehouse') {
-    forecastWhSelectedWarehouses.value = []
+    forecastWhSelectedWarehouses.value = ''
     forecastWhSelectedSmelters.value = []
     whWarehouseSearchText.value = ''
     whSmelterSearchText.value = ''
@@ -2702,6 +2712,10 @@ onMounted(async () => {
 
 .tag-shrink {
   flex-shrink: 0;
+}
+
+.tag-warehouse {
+  max-width: none;
 }
 
 .tag-more {
