@@ -3767,10 +3767,11 @@ async function loadReceiptPriceList() {
         i.set(`page`, String(rcpPg.page));
         i.set(`page_size`, String(rcpPg.pageSize));
         ws && ws.value && ws.value.trim() && i.set(`keyword`, ws.value.trim());
-        cf && cf.value && i.set(`category_id`, cf.value);
+        cf && cf.value && i.set(`keyword`, cf.value);
         df && df.value && i.set(`date_from`, df.value);
         dt && dt.value && i.set(`date_to`, dt.value);
         var a = z(await Api.request(`GET`, `/tl/warehouse_receipt_prices?` + i.toString())),
+
             o = a.list || [];
         rcpPg.total = a.total || 0, e.innerHTML = ``, o.length || D(e, 4, `暂无收货价格数据`), o.forEach(function(t) {
             var n = v(t, [`id`, `price_id`]),
