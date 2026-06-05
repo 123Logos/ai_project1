@@ -402,6 +402,33 @@ interface ApiResponse {
   page_size: number
 }
 
+function decimalWeightToInt(value: string, precision = 4): bigint {
+  const normalized = String(value || '').trim()
+  const regex = /^([+-]?)(\d*)(?:\.(\d*))?$/
+  const match = normalized.match(regex)
+  if (!match) return 0n
+
+  const sign = match[1] === '-' ? -1n : 1n
+  const intPart = match[2] || '0'
+  let fracPart = match[3] || ''
+  if (fracPart.length > precision) {
+    fracPart = fracPart.slice(0, precision)
+  }
+  fracPart = fracPart.padEnd(precision, '0')
+
+  return sign * BigInt(intPart + fracPart)
+}
+
+function formatDecimalWeight(value: bigint, precision = 4): string {
+  const sign = value < 0n ? '-' : ''
+  const absValue = value < 0n ? -value : value
+  const scale = 10n ** BigInt(precision)
+  const integerPart = absValue / scale
+  const fractionPart = absValue % scale
+  const fractionText = fractionPart.toString().padStart(precision, '0')
+  return `${sign}${integerPart.toString()}.${fractionText}`
+}
+
 async function refreshDeliveryHistoryDimensionFilters() {
   try {
     const dims = await fetchDeliveryHistoryDimensionOptions()
@@ -805,7 +832,7 @@ async function queryManagerData() {
     managerDateColumns.value = dates
     
     // 按大区经理+冶炼厂分组汇总重量，并收集该组下所有原始记录主键 id
-    const groupMap = new Map<string, { dateMap: Map<string, number>; recordIds: number[] }>()
+    const groupMap = new Map<string, { dateMap: Map<string, bigint>; recordIds: number[] }>()
     items.forEach(item => {
       const smelter = item.smelter || '未知'
       const key = `${item.regional_manager}|${smelter}`
@@ -814,8 +841,8 @@ async function queryManagerData() {
       }
       const g = groupMap.get(key)!
       g.recordIds.push(item.id)
-      const currentWeight = g.dateMap.get(item.delivery_date) || 0
-      g.dateMap.set(item.delivery_date, currentWeight + parseFloat(item.weight))
+      const currentWeight = g.dateMap.get(item.delivery_date) || 0n
+      g.dateMap.set(item.delivery_date, currentWeight + decimalWeightToInt(item.weight))
     })
     
     // 生成表格行
@@ -825,7 +852,7 @@ async function queryManagerData() {
       const cells = dates.map(date => {
         const weight = g.dateMap.get(date)
         return {
-          text: weight !== undefined ? weight.toString() : '—',
+          text: weight !== undefined ? formatDecimalWeight(weight) : '—',
           isPlaceholder: weight === undefined
         }
       })
@@ -1159,7 +1186,7 @@ async function queryWarehouseData() {
     )
 
     // 按仓库+大区经理（取最新关联）+冶炼厂分组汇总
-    const groupMap = new Map<string, { dateMap: Map<string, number>; recordIds: number[] }>()
+    const groupMap = new Map<string, { dateMap: Map<string, bigint>; recordIds: number[] }>()
     items.forEach(item => {
       const smelter = item.smelter || '未知'
       const rm = resolveRegionalManagerForWarehouse(
@@ -1173,8 +1200,8 @@ async function queryWarehouseData() {
       }
       const g = groupMap.get(key)!
       g.recordIds.push(item.id)
-      const currentWeight = g.dateMap.get(item.delivery_date) || 0
-      g.dateMap.set(item.delivery_date, currentWeight + parseFloat(item.weight))
+      const currentWeight = g.dateMap.get(item.delivery_date) || 0n
+      g.dateMap.set(item.delivery_date, currentWeight + decimalWeightToInt(item.weight))
     })
     
     // 生成表格行
@@ -1184,7 +1211,7 @@ async function queryWarehouseData() {
       const cells = dates.map(date => {
         const weight = g.dateMap.get(date)
         return {
-          text: weight !== undefined ? weight.toString() : '—',
+          text: weight !== undefined ? formatDecimalWeight(weight) : '—',
           isPlaceholder: weight === undefined
         }
       })
