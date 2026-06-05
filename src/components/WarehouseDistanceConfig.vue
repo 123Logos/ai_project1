@@ -988,6 +988,7 @@ async function submitDialog() {
       const fromName = warehouseDisplayName(warehouseNameById(src))
       for (const tid of newIds) {
         listRows.value.push({
+          linkId: 0,
           fromId: src,
           toId: tid,
           fromName,
@@ -997,7 +998,6 @@ async function submitDialog() {
           realTimeDiff: null,
         })
       }
-      listTotal.value += newIds.length
       closeDialog()
     }
     return
