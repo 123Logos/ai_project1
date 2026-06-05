@@ -1322,7 +1322,7 @@ function formatTrendValue(v: number | undefined): string {
 const forecastSummaryText = computed(() => {
   const rows = forecastDetailRows.value
   if (rows.length === 0) return ''
-  return rows[0].comprehensiveAnalysis || ''
+  return rows.find((r) => (r.comprehensiveAnalysis || '').trim())?.comprehensiveAnalysis || ''
 })
 
 const forecastBasisPlaceholder = computed(() => {

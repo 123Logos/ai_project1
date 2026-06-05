@@ -1896,8 +1896,8 @@ async function fetchDetailData() {
     chartDates.value = chart.dates
     chartTotalByDate.value = chart.totalByDate
 
-    // 汇总预测依据（从第一条记录的综合分析提取）
-    chartSummaryText.value = rows.length > 0 ? (rows[0].comprehensiveAnalysis || '') : ''
+    // 汇总预测依据（取首条有综合分析的行，避免首行恰好缺少分析字段）
+    chartSummaryText.value = rows.find((r) => (r.comprehensiveAnalysis || '').trim())?.comprehensiveAnalysis || ''
 
     await nextTick()
     drawSummaryChart()
