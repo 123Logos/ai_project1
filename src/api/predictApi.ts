@@ -74,14 +74,16 @@ export function normalizePredictResultRow(raw: unknown): PredictResultRow | null
   }
 }
 
-/** 批量解析 */
+/** 批量解析，按 (targetDate, warehouse, productVariety, smelter) 去重，保留最后出现的行 */
 export function normalizePredictResultList(items: unknown[]): PredictResultRow[] {
-  const out: PredictResultRow[] = []
+  const dedup = new Map<string, PredictResultRow>()
   for (const raw of items) {
     const row = normalizePredictResultRow(raw)
-    if (row) out.push(row)
+    if (!row) continue
+    const key = `${row.targetDate}|${row.warehouse}|${row.productVariety}|${row.smelter ?? ''}`
+    dedup.set(key, row)
   }
-  return out
+  return [...dedup.values()]
 }
 
 // ─── Trigger Prediction ──────────────────────────────────
@@ -126,7 +128,8 @@ export async function fetchAllPredictResults(
   const rawItems: unknown[] = []
   let page = 1
   while (page <= 200) {
-    const params: Record<string, unknown> = { ...base, page, page_size }
+    // _t 防止浏览器/代理缓存 GET 响应，避免取到 comprehensiveAnalysis 尚未落库的历史数据
+    const params: Record<string, unknown> = { ...base, page, page_size, _t: Date.now() }
     const response = await axios.get(ApiPaths.predictResults, { params })
     const data = response.data as { items?: unknown[]; total?: number }
     const items = data.items ?? []
@@ -143,13 +146,15 @@ export async function fetchAllPredictResults(
 
 /**
  * 客户端图表聚合：从 v2 明细行按 targetDate 分组求和 expectedShipment。
+ * 仅保留今天及以后日期，避免预测图表出现历史日期。
  * 替代旧的 /forecast/chart 接口。
  */
 export function aggregateChartFromResults(rows: PredictResultRow[]): PredictChartAggregate {
+  const today = new Date().toISOString().slice(0, 10)
   const byDate = new Map<string, number>()
   for (const row of rows) {
     const d = row.targetDate
-    if (!d) continue
+    if (!d || d < today) continue
     byDate.set(d, (byDate.get(d) || 0) + row.expectedShipment)
   }
   const sorted = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0], 'zh-CN'))

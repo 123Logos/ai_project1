@@ -1,5 +1,5 @@
 <template>
-  <section class="forecast-basis-card" aria-label="预测依据">
+  <section class="forecast-basis-card" :class="{ 'forecast-basis-card--dark': dark }" aria-label="预测依据">
     <div class="forecast-basis-head">
       <span class="forecast-basis-title">预测依据</span>
       <button
@@ -25,11 +25,13 @@ const props = withDefaults(
     summary?: string | null
     placeholder?: string
     collapsible?: boolean
+    dark?: boolean
   }>(),
   {
     summary: null,
     placeholder: '暂无预测依据',
     collapsible: false,
+    dark: false,
   },
 )
 
@@ -92,5 +94,30 @@ const displayText = computed(() => {
   color: #334155;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+/* 暗色主题：电子地图预测面板 */
+.forecast-basis-card--dark {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgb(12, 27, 50);
+  box-shadow: none;
+}
+
+.forecast-basis-card--dark .forecast-basis-title {
+  color: #60a5fa;
+}
+
+.forecast-basis-card--dark .forecast-basis-text {
+  color: #cbd5e1;
+}
+
+.forecast-basis-card--dark .forecast-basis-toggle {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.12);
+  color: #94a3b8;
+}
+
+.forecast-basis-card--dark .forecast-basis-toggle:hover {
+  background: rgba(255, 255, 255, 0.12);
 }
 </style>

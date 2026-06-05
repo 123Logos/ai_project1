@@ -2,6 +2,7 @@
   <div ref="rootRef" class="wsp">
     <input
       :id="inputId"
+      ref="inputRef"
       :value="inputValue"
       type="search"
       class="wsp-input"
@@ -42,7 +43,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { allOptionMatchesQuery, warehouseMatchesQuery, type WarehouseMatchOption } from '@/utils/warehouseFuzzyMatch'
 
 const props = withDefaults(
@@ -69,6 +70,7 @@ const props = withDefaults(
 const emit = defineEmits<{ 'update:modelValue': [number] }>()
 
 const rootRef = ref<HTMLElement | null>(null)
+const inputRef = ref<HTMLInputElement | null>(null)
 const open = ref(false)
 const focused = ref(false)
 const searchText = ref('')
@@ -106,27 +108,30 @@ function syncSearchFromModel() {
 function onFocus() {
   focused.value = true
   open.value = true
-  searchText.value = ''
+  // 聚焦时选中全部文本，方便用户直接输入替换或按 Delete/Backspace 清空
+  searchText.value = displayText.value
+  nextTick(() => {
+    inputRef.value?.select()
+  })
 }
 
 function onBlur() {
   focused.value = false
   window.setTimeout(() => {
     open.value = false
-    syncSearchFromModel()
+    // 用户清空了输入内容 → 清除选中值
+    if (searchText.value === '') {
+      if (props.modelValue !== 0) emit('update:modelValue', 0)
+      searchText.value = displayText.value
+    } else {
+      syncSearchFromModel()
+    }
   }, 120)
 }
 
 function onInput(e: Event) {
   const val = (e.target as HTMLInputElement).value
   searchText.value = val
-  // 浏览器原生 × 按钮清空输入框时：清除选中值，打开下拉列表
-  if (val === '') {
-    if (props.modelValue !== 0) emit('update:modelValue', 0)
-    focused.value = true
-    open.value = true
-    return
-  }
   open.value = true
 }
 

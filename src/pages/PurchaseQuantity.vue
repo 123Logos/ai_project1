@@ -11,6 +11,7 @@
           >
             按仓库
           </div>
+          <!--
           <div
             class="menu-item"
             :class="{ active: forecastActiveTab === 'manager' }"
@@ -25,6 +26,7 @@
           >
             预测明细
           </div>
+          -->
         </div>
         <button class="btn btn-secondary" @click="exportCsv" :disabled="loading">导出CSV</button>
       </div>
@@ -171,7 +173,7 @@
                 class="selected-tags"
                 @click="focusWhWarehouseInput"
               >
-                <span v-if="forecastWhSelectedWarehouses" class="tag tag-shrink" :title="forecastWhSelectedWarehouses">{{ forecastWhSelectedWarehouses }}</span>
+                <span v-if="forecastWhSelectedWarehouses" class="tag tag-shrink tag-warehouse" :title="forecastWhSelectedWarehouses">{{ forecastWhSelectedWarehouses }}</span>
                 <button v-if="forecastWhSelectedWarehouses" type="button" class="tag-remove" @click.stop="removeWhWarehouse(forecastWhSelectedWarehouses)">×</button>
                 <input
                   ref="whWarehouseInputRef"
@@ -718,15 +720,15 @@ const chartBasisPlaceholder = computed(() => {
   if (!forecastQueried.value) {
     return '请先选择筛选条件并点击「查询」。'
   }
-  if (chartDates.value.length > 0 && !chartSummaryText.value.trim()) {
-    return '暂无汇总预测依据'
+  if (chartDates.value.length === 0 || !chartSummaryText.value.trim()) {
+    return '正在预测中...'
   }
   return '暂无预测依据'
 })
 
 const chartEmptyHint = computed(() =>
   forecastQueried.value
-    ? '暂无趋势数据，请调整筛选条件后重新查询。'
+    ? '正在根据预测结果绘制图表中...'
     : '请先完成筛选条件并点击「查询」获取预测数据。',
 )
 
@@ -1894,8 +1896,8 @@ async function fetchDetailData() {
     chartDates.value = chart.dates
     chartTotalByDate.value = chart.totalByDate
 
-    // 汇总预测依据（从第一条记录的综合分析提取）
-    chartSummaryText.value = rows.length > 0 ? (rows[0].comprehensiveAnalysis || '') : ''
+    // 汇总预测依据（取首条有综合分析的行，避免首行恰好缺少分析字段）
+    chartSummaryText.value = rows.find((r) => (r.comprehensiveAnalysis || '').trim())?.comprehensiveAnalysis || ''
 
     await nextTick()
     drawSummaryChart()
@@ -1933,6 +1935,9 @@ async function handleQuery() {
     return
   }
   forecastQueried.value = true
+  chartSummaryText.value = ''
+  chartDates.value = []
+  chartTotalByDate.value = []
   await fetchDetailData()
 }
 
@@ -2707,6 +2712,10 @@ onMounted(async () => {
 
 .tag-shrink {
   flex-shrink: 0;
+}
+
+.tag-warehouse {
+  max-width: none;
 }
 
 .tag-more {

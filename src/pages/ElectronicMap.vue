@@ -739,23 +739,26 @@
             </div>
           </div>
           <p v-if="forecastError" class="emap-side-error mb-2">{{ forecastError }}</p>
+          <ForecastBasisPanel :summary="forecastSummaryText" :placeholder="forecastBasisPlaceholder" dark />
           <div class="emap-fc-chart-wrap">
             <p v-if="forecastLoading" class="emap-fc-chart-empty text-muted mb-0">预测中，请稍候…</p>
-            <canvas
-              v-else-if="forecastModalDates.length"
-              ref="forecastTrendCanvasRef"
-              @mousemove="onTrendChartMouseMove"
-              @mouseleave="onTrendChartMouseLeave"
-            ></canvas>
-            <div
-              v-if="trendHoverIndex >= 0"
-              class="emap-chart-tooltip"
-              :style="trendTooltipStyle"
-            >
-              <div class="emap-chart-tooltip-date">{{ forecastModalDates[trendHoverIndex] }}</div>
-              <div class="emap-chart-tooltip-price">{{ formatTrendValue(forecastModalValues[trendHoverIndex]) }} 吨</div>
-            </div>
-            <p v-else class="emap-fc-chart-empty text-muted mb-0">当前库房暂无可用预测明细。</p>
+            <template v-else-if="forecastModalDates.length">
+              <canvas
+                ref="forecastTrendCanvasRef"
+                @mousemove="onTrendChartMouseMove"
+                @mouseleave="onTrendChartMouseLeave"
+              ></canvas>
+              <div
+                v-if="trendHoverIndex >= 0"
+                class="emap-chart-tooltip"
+                :style="trendTooltipStyle"
+              >
+                <div class="emap-chart-tooltip-date">{{ forecastModalDates[trendHoverIndex] }}</div>
+                <div class="emap-chart-tooltip-price">{{ formatTrendValue(forecastModalValues[trendHoverIndex]) }} 吨</div>
+              </div>
+            </template>
+            <p v-else-if="forecastQueried" class="emap-fc-chart-empty text-muted mb-0">正在根据预测结果绘制图表中...</p>
+            <p v-else class="emap-fc-chart-empty text-muted mb-0">请选择库房后点击"重新预测"获取预测数据。</p>
           </div>
           <div v-if="forecastModalMeta" class="emap-fc-chart-meta">
             <p><strong>仓库：</strong>{{ forecastModalMeta.warehouse }}</p>
@@ -955,7 +958,8 @@ import shadowUrl from 'leaflet/dist/images/marker-shadow.png'
 import axios from 'axios'
 import { ApiPaths } from '../api/paths'
 import PredictionAnalysisDrawer from '../components/PredictionAnalysisDrawer.vue'
-import { pickAnalysisText } from '@/utils/apiFieldPick'
+import ForecastBasisPanel from '../components/ForecastBasisPanel.vue'
+import { triggerPrediction, fetchAllPredictResults, aggregateChartFromResults, type PredictResultRow } from '../api/predictApi'
 import { warehouseDisplayName } from '@/utils/warehouseDisplayName'
 import {
   fetchTlCalculateDistance,
@@ -1283,6 +1287,7 @@ const forecastModalMeta = ref<ForecastChartMeta | null>(null)
 const forecastModalDates = ref<string[]>([])
 const forecastModalValues = ref<number[]>([])
 const forecastDetailRows = ref<ForecastDetailRow[]>([])
+const forecastQueried = ref(false)
 const forecastAnalysisDrawerVisible = ref(false)
 const forecastAnalysisDrawerTitle = ref('预测依据详情')
 const forecastAnalysisDrawerText = ref<string | null>(null)
@@ -1313,6 +1318,23 @@ function formatTrendValue(v: number | undefined): string {
   if (v === undefined || !Number.isFinite(v)) return '0.00'
   return v.toFixed(2)
 }
+
+const forecastSummaryText = computed(() => {
+  const rows = forecastDetailRows.value
+  if (rows.length === 0) return ''
+  return rows.find((r) => (r.comprehensiveAnalysis || '').trim())?.comprehensiveAnalysis || ''
+})
+
+const forecastBasisPlaceholder = computed(() => {
+  if (!forecastQueried.value) {
+    return '请选择库房后点击「重新预测」获取预测数据。'
+  }
+  if (forecastModalDates.value.length === 0 || !forecastSummaryText.value.trim()) {
+    return '正在预测中...'
+  }
+  return '暂无预测依据'
+})
+
 const enableCoordPick = ref(false)
 const enableAutoZoomOnPointClick = ref(false)
 /** false: 仅前3条；true: 展示全部（第4条起细灰线） */
@@ -2389,6 +2411,8 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
   const phone = pickStr(raw, ['电话', '手机', '联系电话', 'mobile', 'tel'])
   const haz = pickNumber(raw, ['危废经营许可数量', 'hazard_license_count', '危废许可数量'])
   const monthly = pickNumber(raw, ['月均收货', 'monthly_avg_receipt', '月均采购'])
+  const monthlyDelivery = pickNumber(raw, ['当月发货量'])
+  const yearlyDelivery = pickNumber(raw, ['年度累计发货量'])
   const stockText = formatWarehouseCurrentStock(raw)
   const stocksByCategory = pickWarehouseStockByCategory(raw)
   const stockBlock = warehouseStockBlockHtml(stocksByCategory)
@@ -2399,6 +2423,13 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
     monthly === null
       ? '—'
       : `${Number.isInteger(monthly) ? monthly.toLocaleString('zh-CN') : monthly.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} 吨`
+  /** 发货统计字段：仅普通合作库房 / 垂直库房 / 战略库房显示 */
+  const showDeliveryStats =
+    typeName === '普通合作库房' || typeName === '垂直库房' || typeName === '战略库房'
+  const formatDeliveryValue = (val: number | null): string => {
+    const n = val ?? 0
+    return `${n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} 吨`
+  }
   const receiptBlock = warehouseReceiptPriceBlockHtml(receiptPrices)
   const freightBlock = warehouseSmelterFreightBlockHtml(smelterFreights)
   const tipRow = (label: string, value: string) =>
@@ -2410,6 +2441,12 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
       label,
     )}</span><span class="emap-wh-hover-v">${escapeHtml(value)}</span></div>`
   const dual = (a: string, b: string) => `<div class="emap-wh-hover-dual">${a}${b}</div>`
+  const deliveryStatsRow = showDeliveryStats
+    ? dual(
+        metric('当月发货量', formatDeliveryValue(monthlyDelivery)),
+        metric('年度累计发货量', formatDeliveryValue(yearlyDelivery)),
+      )
+    : ''
   return `<div class="emap-wh-hover-tip"><div class="emap-wh-hover-inner">${tipRow('库房名称', name)}${tipRow(
     '库房类型',
     typeName,
@@ -2419,7 +2456,7 @@ function warehouseHoverTooltipHtml(p: MapPoint): string {
   )}${dual(metric('联系人', contact || '—'), metric('电话', phone || '—'))}${tipRow(
     '危废经营许可数量',
     hazText,
-  )}${tipRow('月均收货', monthlyText)}${tipRow('当前库存（汇总）', stockText)}${stockBlock}${receiptBlock}${freightBlock}</div></div>`
+  )}${tipRow('月均收货', monthlyText)}${deliveryStatsRow}${tipRow('当前库存（汇总）', stockText)}${stockBlock}${receiptBlock}${freightBlock}</div></div>`
 }
 
 function smelterPopupHtml(p: MapPoint): string {
@@ -5119,6 +5156,7 @@ function resetForecastData() {
   forecastModalDates.value = []
   forecastModalValues.value = []
   forecastDetailRows.value = []
+  forecastQueried.value = false
 }
 
 function formatForecastDetailDate(iso: string): string {
@@ -5165,38 +5203,26 @@ function closeForecastAnalysisDrawer() {
   forecastAnalysisDrawerVisible.value = false
 }
 
-/**
- * 将后端返回的原始预测明细行解析为 ForecastDetailRow
- * 兼容 v1（snake_case）和 v2（camelCase）字段名
- */
-function parseForecastDetailRow(row: Record<string, unknown>): ForecastDetailRow | null {
-  const targetDate = pickStr(row, ['target_date', 'targetDate', '预测日期', 'date'])
-  if (!targetDate) return null
-  const analysis = pickAnalysisText(row)
-  const comprehensiveAnalysis = pickStr(row, ['comprehensive_analysis', 'comprehensiveAnalysis']) || analysis || ''
+/** 将 predictApi 的 PredictResultRow 转为本地 ForecastDetailRow */
+function toForecastDetailRow(r: PredictResultRow): ForecastDetailRow {
   return {
-    targetDate,
-    predictedWeight: pickNumber(row, ['expected_shipment', 'expectedShipment', 'predicted_weight', 'predictedWeight', '预测重量', 'weight']) ?? 0,
-    analysis,
-    regionalManager: pickStr(row, ['regional_manager', 'regionalManager', '大区经理', '经理']),
-    productVariety: pickStr(row, ['product_variety', 'productVariety', '品类', '品种', '产品品种']),
-    smelter: pickStrOrNull(row, ['smelter', '冶炼厂', 'smelter_name', '冶炼厂名']),
-    shipProbability: pickStr(row, ['ship_probability', 'shipProbability']),
-    expectedShipDate: pickStrOrNull(row, ['expected_ship_date', 'expectedShipDate']),
-    confidenceLevel: pickStr(row, ['confidence_level', 'confidenceLevel']),
-    mainFactors: pickStr(row, ['main_factors', 'mainFactors']) || analysis || '',
-    comprehensiveAnalysis,
-    historyAnalysis: pickStr(row, ['history_analysis', 'historyAnalysis']),
-    priceSensitivityAnalysis: pickStr(row, ['price_sensitivity_analysis', 'priceSensitivityAnalysis']),
-    priceCompetitivenessAnalysis: pickStr(row, ['price_competitiveness_analysis', 'priceCompetitivenessAnalysis']),
-    holidayAnalysis: pickStr(row, ['holiday_analysis', 'holidayAnalysis']),
-    weatherAnalysis: pickStr(row, ['weather_analysis', 'weatherAnalysis']),
+    targetDate: r.targetDate,
+    predictedWeight: r.expectedShipment,
+    analysis: r.analysis,
+    regionalManager: r.regionalManager,
+    productVariety: r.productVariety,
+    smelter: r.smelter,
+    shipProbability: r.shipProbability,
+    expectedShipDate: r.expectedShipDate,
+    confidenceLevel: r.confidenceLevel,
+    mainFactors: r.mainFactors,
+    comprehensiveAnalysis: r.comprehensiveAnalysis,
+    historyAnalysis: r.historyAnalysis,
+    priceSensitivityAnalysis: r.priceSensitivityAnalysis,
+    priceCompetitivenessAnalysis: r.priceCompetitivenessAnalysis,
+    holidayAnalysis: r.holidayAnalysis,
+    weatherAnalysis: r.weatherAnalysis,
   }
-}
-
-function pickStrOrNull(row: Record<string, unknown>, keys: string[]): string | null {
-  const s = pickStr(row, keys)
-  return s || null
 }
 
 const comparisonSummary = computed(() => {
@@ -5575,7 +5601,8 @@ function onForecastVarietyChange() {
 }
 
 /** 同步触发 v2 智能预测，直接返回预测结果 */
-async function triggerPredictSync(warehouse: MapPoint): Promise<Record<string, unknown>[]> {
+/** 触发预测并获取已落库结果（复用 predictApi 共享管线） */
+async function triggerPredictSync(warehouse: MapPoint): Promise<PredictResultRow[]> {
   const whTitle = warehouse.title.trim()
   // 确保品种选项已加载（避免 watch 竞态：首次点击时 watch 尚未完成）
   if (!forecastVarietyOptions.value.length) {
@@ -5589,61 +5616,34 @@ async function triggerPredictSync(warehouse: MapPoint): Promise<Record<string, u
       console.warn('[预测] 获取品种选项失败，使用默认值', e)
     }
   }
-  // 使用用户选择的品种（未选则用选项第一个，即送货量最大）
   const productVariety = forecastSelectedVariety.value || forecastVarietyOptions.value[0]?.value || '废铅酸电池'
-  const body = {
-    items: [
-      {
-        warehouse: whTitle,
-        product_variety: productVariety,
-      },
-    ],
-  }
-  console.log('[预测] 请求体:', JSON.stringify(body))
-  const response = await axios.post(ApiPaths.predict, body)
-  console.log('[预测] 响应:', JSON.stringify(response.data))
-  const results = response.data as Record<string, unknown>[]
-  if (!results || !results.length) {
-    throw new Error('同步预测未返回结果')
-  }
-  // 响应结构: [{ warehouse, productVariety, items: [...] }]
-  // 展平所有 items
-  const allItems: Record<string, unknown>[] = []
-  for (const group of results) {
-    const items = group.items as Record<string, unknown>[] | undefined
-    if (items) {
-      // 为每条 item 附加外层字段（warehouse, productVariety, smelter 等）
-      const { items: _, ...meta } = group
-      for (const item of items) {
-        allItems.push({ ...meta, ...item })
-      }
-    }
-  }
-  return allItems
+
+  // Step 1: 触发预测
+  console.log('[预测] 触发预测:', whTitle, productVariety)
+  await triggerPrediction({ warehouse: whTitle, productVariety })
+
+  // Step 2: 拉取已落库的预测结果
+  const rows = await fetchAllPredictResults({ warehouse: whTitle })
+  console.log('[预测] 获取结果:', rows.length, '条')
+  return rows
 }
 
 async function runForecastForWarehouse(warehouse: MapPoint) {
   forecastLoading.value = true
   forecastError.value = ''
+  forecastQueried.value = true
   try {
     const whTitle = warehouse.title.trim()
-    // 同步预测：直接返回结果，无需轮询
-    const working = await triggerPredictSync(warehouse)
+    const rows = await triggerPredictSync(warehouse)
 
-    const byDate = new Map<string, number>()
-    for (const row of working) {
-      const d = pickStr(row, ['target_date', 'targetDate', '预测日期', 'date'])
-      if (!d) continue
-      const w = pickNumber(row, ['expected_shipment', 'expectedShipment', 'predicted_weight', 'predictedWeight', '预测重量', 'weight']) ?? 0
-      byDate.set(d, (byDate.get(d) || 0) + w)
-    }
-    const sorted = [...byDate.entries()].sort((a, b) => a[0].localeCompare(b[0], 'zh-CN'))
-    const dates = sorted.map(([d]) => d)
-    const vals = sorted.map(([, weight]) => weight)
+    // 客户端图表聚合（复用 predictApi）
+    const chart = aggregateChartFromResults(rows)
+    forecastModalDates.value = chart.dates
+    forecastModalValues.value = chart.totalByDate
 
-    const rms = working.map((r) => pickStr(r, ['regional_manager', '大区经理', '经理']))
-    const vars = working.map((r) => pickStr(r, ['product_variety', '品类', '品种', '产品品种']))
-    const sms = working.map((r) => pickStr(r, ['smelter', '冶炼厂', 'smelter_name', '冶炼厂名']))
+    const rms = rows.map((r) => r.regionalManager)
+    const vars = rows.map((r) => r.productVariety)
+    const sms = rows.map((r) => r.smelter ?? '')
 
     forecastModalMeta.value = {
       warehouse: whTitle,
@@ -5651,11 +5651,8 @@ async function runForecastForWarehouse(warehouse: MapPoint) {
       product_variety: uniqSortedJoinZh(vars),
       smelter: uniqSortedJoinZhOptional(sms),
     }
-    forecastModalDates.value = dates
-    forecastModalValues.value = vals
-    forecastDetailRows.value = working
-      .map(parseForecastDetailRow)
-      .filter((r): r is ForecastDetailRow => r != null)
+    forecastDetailRows.value = rows
+      .map(toForecastDetailRow)
       .sort((a, b) => a.targetDate.localeCompare(b.targetDate, 'zh-CN'))
     if (comparisonModalVisible.value && !forecastSectionCollapsed.value) {
       nextTick(() => drawForecastTrendChart())
